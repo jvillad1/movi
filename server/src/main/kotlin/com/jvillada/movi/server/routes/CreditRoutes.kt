@@ -87,7 +87,6 @@ import com.jvillada.movi.shared.model.validarInteresReal
 import com.jvillada.movi.shared.model.validarTasaDelCredito
 import com.jvillada.movi.shared.model.validarLaCuotaQueCambia
 import com.jvillada.movi.shared.model.cuotaCambia
-import com.jvillada.movi.server.reminders.ultimaCuotaPagadaDe
 import com.jvillada.movi.server.reminders.pagosDeDeudaAlrededorDe
 import com.jvillada.movi.shared.model.conLaCuotaQueCambiaLimpia
 import com.jvillada.movi.shared.model.validarDebitoAutomatico
@@ -841,14 +840,19 @@ internal suspend fun creditosDe(uid: String): List<CreditSummary> {
     // última cuota pagada de un crédito de cuota que cambia; solo si hay alguno.
     val pagosDeDeuda = if (termsByAccount.values.none { it.cuotaCambia() }) emptyList()
     else dbQuery { pagosDeDeudaAlrededorDe(uid, hoy) }
+    // Revisión de la 134 (m-6): con el armado único.
+    val ultimas = com.jvillada.movi.server.reminders.ultimasCuotasPagadasEn(
+        loans.mapNotNull { acc -> termsByAccount[acc.id]?.let { it to acc.name } },
+        pagosDeDeuda,
+        periodo,
+    )
     return loans.map { acc ->
         val terms = termsByAccount[acc.id]
         val eventos = eventsByAccount[acc.id] ?: emptyList()
         summaryFor(acc, terms, eventos, rate).copy(
             cuotasPagadas = terms?.let { cuotasPagadasAlrededorDe(eventos, it, acc.name, hoy, periodo) },
             saldoFijadoEn = saldoFijadoEn(eventos),
-            ultimaCuotaPagada = terms?.takeIf { it.cuotaCambia() }
-                ?.let { ultimaCuotaPagadaDe(virtualRuleFor(it, acc.name), pagosDeDeuda, settings = periodo) },
+            ultimaCuotaPagada = ultimas[acc.id],
         )
     }
 }

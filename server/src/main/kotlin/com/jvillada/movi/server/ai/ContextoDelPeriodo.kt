@@ -22,7 +22,6 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
 import com.jvillada.movi.server.reminders.pagosDeDeudaAlrededorDe
-import com.jvillada.movi.server.reminders.ultimaCuotaPagadaDe
 import com.jvillada.movi.server.reminders.virtualRuleFor
 import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.shared.model.cuotaCambia
@@ -478,11 +477,15 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
         val filasDeCreditos = Credits.selectAll().where { Credits.userId eq uid }.toList()
         val pagosDeDeuda = if (filasDeCreditos.none { it.toCreditTerms().cuotaCambia() }) emptyList()
         else pagosDeDeudaAlrededorDe(uid, hoy)
+        // Revisión de la 134 (m-6): con el armado único.
+        val ultimas = com.jvillada.movi.server.reminders.ultimasCuotasPagadasEn(
+            filasDeCreditos.map { it.toCreditTerms().let { t -> t to (nombreDeCuenta[t.accountId] ?: t.accountId) } },
+            pagosDeDeuda,
+            ajustes,
+        )
         val creditos = filasDeCreditos.map { fila ->
             val condiciones = fila.toCreditTerms()
-            val nombre = nombreDeCuenta[fila[Credits.accountId]] ?: fila[Credits.accountId]
-            val ultima = if (!condiciones.cuotaCambia()) null
-            else ultimaCuotaPagadaDe(virtualRuleFor(condiciones, nombre), pagosDeDeuda, settings = ajustes)
+            val ultima = ultimas[condiciones.accountId]
             CreditoParaContexto(
                 accountId = fila[Credits.accountId],
                 cuenta = nombreDeCuenta[fila[Credits.accountId]] ?: fila[Credits.accountId],

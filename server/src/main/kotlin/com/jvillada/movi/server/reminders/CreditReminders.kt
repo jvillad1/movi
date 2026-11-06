@@ -105,22 +105,35 @@ fun virtualRuleFor(
 /**
  * Vuelta 134 · **la última cuota pagada de cada crédito de cuota que cambia** de [creditos] (las condiciones
  * y el nombre de su cuenta), por id de la cuenta, dentro de una transacción ya abierta: los pagos de la
- * MISMA franja que Pagos ([pagosDeDeudaAlrededorDe]) y el período del dueño. Para los que no estaban en
- * esos caminos —la página compartida, el reconocimiento de avisos— y estiman con [ultimaCuotaPagadaDe]
- * como todos. Sin ningún crédito que cambia no lee nada.
+ * MISMA franja que Pagos ([pagosDeDeudaAlrededorDe]) y el período del dueño. Sin ningún crédito que cambia
+ * no lee nada. Revisión (m-6): **el único armado** —Pagos (`loadCreditRulePairs`), Créditos, los débitos
+ * automáticos, Movi AI, la página compartida y el reconocimiento de avisos pasan por acá o por
+ * [ultimasCuotasPagadasEn]—: que la franja, el período y la regla no diverjan entre lados.
  */
 fun Transaction.ultimasCuotasPagadasDe(
     uid: String,
     creditos: List<Pair<com.jvillada.movi.shared.model.CreditTerms, String>>,
 ): Map<String, com.jvillada.movi.shared.model.CuotaPagada> {
-    val queCambian = creditos.filter { (terms, _) -> terms.cuotaCambia() }
-    if (queCambian.isEmpty()) return emptyMap()
-    val pagos = pagosDeDeudaAlrededorDe(uid, AppClock.today())
-    val settings = com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender(uid)
-    return queCambian.mapNotNull { (terms, nombre) ->
+    if (creditos.none { (terms, _) -> terms.cuotaCambia() }) return emptyMap()
+    return ultimasCuotasPagadasEn(
+        creditos,
+        pagosDeDeudaAlrededorDe(uid, AppClock.today()),
+        com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender(uid),
+    )
+}
+
+/**
+ * [ultimasCuotasPagadasDe] con los pagos de deuda ([pagos], de [pagosDeDeudaAlrededorDe]) y el período del
+ * dueño ([settings]) ya leídos, para quien los tiene a mano. Solo los créditos que cambian. Pura.
+ */
+fun ultimasCuotasPagadasEn(
+    creditos: List<Pair<com.jvillada.movi.shared.model.CreditTerms, String>>,
+    pagos: List<com.jvillada.movi.shared.model.FinancialEvent>,
+    settings: PeriodSettings,
+): Map<String, com.jvillada.movi.shared.model.CuotaPagada> =
+    creditos.filter { (terms, _) -> terms.cuotaCambia() }.mapNotNull { (terms, nombre) ->
         ultimaCuotaPagadaDe(virtualRuleFor(terms, nombre), pagos, settings = settings)?.let { terms.accountId to it }
     }.toMap()
-}
 
 /** Pares (regla virtual, lastRemindedPeriod) de todos los créditos del usuario. */
 suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String?>> = dbQuery {
@@ -129,10 +142,9 @@ suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String
         .where { Credits.userId eq userId }
         .map { row -> row.toCreditTerms() to row }
     // Vuelta 133: solo si algún crédito tiene la cuota que cambia se leen los pagos (la misma franja que
-    // todo lo demás de Pagos), para estimar su cuota con la última pagada de verdad.
-    val pagos = if (filas.none { (terms, _) -> terms.cuotaCambia() }) emptyList()
-    else pagosDeDeudaAlrededorDe(userId, AppClock.today())
-    val settings = if (pagos.isEmpty()) PeriodSettings() else com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender(userId)
+    // todo lo demás de Pagos), para estimar su cuota con la última pagada de verdad. Revisión de la 134
+    // (m-6): con el armado único.
+    val ultimas = ultimasCuotasPagadasDe(userId, filas.map { (terms, row) -> terms to row[Accounts.name] })
     filas
         // Una LIBRANZA no entra al barrido de avisos: su cuota ya se pagó sola, retenida del
         // sueldo antes de que la plata llegara a la cuenta. Recordarle al dueño que «pague» algo
@@ -143,9 +155,7 @@ suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String
         // crédito, con `POST /api/credits/{id}/payroll-deduction`.
         .filter { (terms, _) -> entraAlBarridoDeAvisos(terms) }
         .map { (terms, row) ->
-            val ultima = if (!terms.cuotaCambia()) null
-            else ultimaCuotaPagadaDe(virtualRuleFor(terms, row[Accounts.name]), pagos, settings = settings)
-            virtualRuleFor(terms, row[Accounts.name], ultima) to row[Credits.lastRemindedPeriod]
+            virtualRuleFor(terms, row[Accounts.name], ultimas[terms.accountId]) to row[Credits.lastRemindedPeriod]
         }
 }
 
