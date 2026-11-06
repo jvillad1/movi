@@ -237,6 +237,9 @@ internal var lectorDeCimd: LectorDeCimd = LectorDeCimdPorRed
 private const val VIDA_DEL_CIMD_EN_MEMORIA_MS = 10L * 60 * 1000
 private const val VIDA_DE_UNA_FALLA_EN_MEMORIA_MS = 5L * 60 * 1000
 
+/** El último documento bueno sirve, ante una falla, como mucho 7 días desde que se leyó (H5 de la cuarta revisión). */
+internal const val VIDA_MAXIMA_DEL_ULTIMO_BUENO_MS = 7L * 24 * 60 * 60 * 1000
+
 /** Lo último que se supo de cada CIMD: el último bueno (que no se borra por una falla pasajera) y una falla. */
 private data class LoQueSeSabeDelCimd(val bueno: ClienteDelConector?, val buenoEn: Long, val fallaEn: Long?)
 
@@ -308,7 +311,8 @@ internal suspend fun resolverCliente(clientId: String, ahora: Long = System.curr
     if (clientId.isBlank() || clientId.length > 500) return null
     if (clientId.startsWith("https://")) {
         if (!esClientIdCimd(clientId)) return null
-        val sabido = cimdEnMemoria[clientId]
+        // H5 · el último bueno se conserva como mucho 7 días desde que se leyó; después, una falla es falla.
+        val sabido = cimdEnMemoria[clientId]?.let { if (it.bueno != null && ahora - it.buenoEn > VIDA_MAXIMA_DEL_ULTIMO_BUENO_MS) it.copy(bueno = null) else it }
         val fallaReciente = sabido?.fallaEn != null && ahora - sabido.fallaEn < VIDA_DE_UNA_FALLA_EN_MEMORIA_MS
         if (sabido?.bueno != null && (ahora - sabido.buenoEn < VIDA_DEL_CIMD_EN_MEMORIA_MS || fallaReciente)) return sabido.bueno
         if (fallaReciente) return null

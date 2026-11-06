@@ -93,4 +93,17 @@ class LaMemoriaDelCimdTest {
         assertNotNull(resolverCliente(CIMD_DE_CLAUDE, t0 + 23 * minuto))
         assertEquals(0, lecturas)
     }
+
+    @Test
+    fun `el ultimo documento bueno se conserva como mucho 7 dias`() = runBlocking {
+        val t0 = 1_000_000L
+        val dia = 24 * 60 * minuto
+        lectorDeCimd = LectorDeCimd { bueno }
+        assertNotNull(resolverCliente(CIMD_DE_CLAUDE, t0))
+        lectorDeCimd = LectorDeCimd { LecturaDelCimd.Pasajera }
+        assertNotNull(resolverCliente(CIMD_DE_CLAUDE, t0 + 6 * dia), "a los 6 días, una falla pasajera sigue con el bueno")
+        assertNull(resolverCliente(CIMD_DE_CLAUDE, t0 + 7 * dia + minuto), "pasados 7 días, una falla es falla")
+        lectorDeCimd = LectorDeCimd { LecturaDelCimd.NoExiste }
+        assertNull(resolverCliente(CIMD_DE_CLAUDE, t0 + 8 * dia), "un 404 tampoco revive el viejo")
+    }
 }
