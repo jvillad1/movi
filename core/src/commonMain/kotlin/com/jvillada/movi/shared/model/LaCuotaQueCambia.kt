@@ -74,7 +74,18 @@ fun esCuotaQueSeComparaConLaPactada(terms: CreditTerms): Boolean = !terms.cuotaC
  * cuota (lo que salió de la cuenta, seguros incluidos), y la cuota que saldó (`"2026-10"`).
  */
 @Serializable
-data class CuotaPagada(val monto: Long, val periodo: String)
+data class CuotaPagada(
+    val monto: Long,
+    val periodo: String,
+    /**
+     * Revisión de la vuelta 134 (m-4) · lo que salió en ese período cuando cubrió más de una cuota (un giro que
+     * pagó dos atrasadas): [monto] es la cuota (lo pagado entre las cuotas), esto lo que de verdad salió.
+     * `null` con una sola cuota (lo de siempre).
+     */
+    val pagadoEnElPeriodo: Long? = null,
+    /** Cuántas cuotas cubrió el período, cuando fueron más de una; `null` con una. */
+    val cuotasEnElPeriodo: Int? = null,
+)
 
 /**
  * Lo que viaja con la cuota de un crédito de cuota que cambia, en la regla sintética de Pagos

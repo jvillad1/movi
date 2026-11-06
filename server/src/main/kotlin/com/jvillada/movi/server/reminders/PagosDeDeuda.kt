@@ -387,11 +387,30 @@ fun ultimaCuotaPagadaDe(
     // período») que entran a ESTE crédito como cuota caen en el mismo período, porque tienen la misma fecha.
     // Dos partes de un mismo pago hacia el mismo crédito solo existen si el giro saldó dos cuotas (una
     // cuota pagada en partes son dos pagos, en dos momentos: esos sí suman, la revisión 1 de la 133).
-    // Entonces el período cubrió tantas cuotas como partes tiene el pago más repartido, y la cuota es lo
-    // pagado entre esas cuotas. Con una parte por pago (lo de siempre) se divide entre 1: no cambia nada.
-    val cuotasQueCubre = delPeriodo.groupBy { com.jvillada.movi.shared.model.claveDeLaCompra(it) }
-        .maxOf { it.value.size }.coerceAtLeast(1)
-    return com.jvillada.movi.shared.model.CuotaPagada(monto = total / cuotasQueCubre, periodo = periodo)
+    // La cuota es lo pagado entre las cuotas que cubrió el período ([cuotasQueCubreElPeriodo]). Con una
+    // parte por pago (lo de siempre) se divide entre 1: no cambia nada.
+    val cuotasQueCubre = cuotasQueCubreElPeriodo(delPeriodo)
+    return com.jvillada.movi.shared.model.CuotaPagada(
+        monto = total / cuotasQueCubre,
+        periodo = periodo,
+        // Revisión de la vuelta 134 (m-4): con más de una cuota, la ficha dice lo que salió y cuántas eran.
+        pagadoEnElPeriodo = total.takeIf { cuotasQueCubre > 1 },
+        cuotasEnElPeriodo = cuotasQueCubre.takeIf { it > 1 },
+    )
+}
+
+/**
+ * Revisión de la vuelta 134 (m-4) · **cuántas cuotas de un crédito cubren [pagos]** (las patas que entraron a
+ * él y saldan el mismo período): **cada parte de un pago repartido es una cuota** —un giro en dos partes
+ * hacia el mismo crédito saldó dos—, y **todos los pagos de una sola parte juntos son una**: una cuota
+ * pagada en dos momentos son dos pagos sueltos que suman una. Al menos 1. Antes («las partes del pago más
+ * repartido») un pago suelto de $1.262.300 más un giro de dos cuotas daba 2 cuotas por $3.786.900: unos
+ * $1.893.450 de cuota. Ahora son 3. Pura.
+ */
+internal fun cuotasQueCubreElPeriodo(pagos: List<FinancialEvent>): Int {
+    val porPago = pagos.groupBy { com.jvillada.movi.shared.model.claveDeLaCompra(it) }.values
+    val sueltas = if (porPago.any { it.size == 1 }) 1 else 0
+    return (sueltas + porPago.filter { it.size > 1 }.sumOf { it.size }).coerceAtLeast(1)
 }
 
 /** Lo mismo que [pagosDeDeudaPorPeriodo] pero en la forma que espera `dueDateFor`: solo periodos. */

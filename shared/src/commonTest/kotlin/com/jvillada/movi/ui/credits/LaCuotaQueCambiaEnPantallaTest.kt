@@ -84,4 +84,16 @@ class LaCuotaQueCambiaEnPantallaTest {
         // Con la cuota el 5 el sello coincide con el período: lo de siempre.
         assertEquals("2026-11", com.jvillada.movi.shared.model.selloDeLaCuotaDelPeriodo(5, noviembre, corte25))
     }
+
+    /** Revisión de la vuelta 134 (m-4): con un giro que pagó dos cuotas, la ficha dice lo que salió. */
+    @Test
+    fun `este mes pagaste dice lo que salio cuando fueron varias cuotas`() {
+        val variable = terms.copy(tipoDeCuota = TipoDeCuota.TASA_VARIABLE)
+        val dos = CuotaPagada(1_262_300, "2026-10", pagadoEnElPeriodo = 2_524_600, cuotasEnElPeriodo = 2)
+        assertEquals(
+            "Este mes pagaste \$2.524.600 (2 cuotas)",
+            lineasDeLaCuotaQueCambia(variable, dos, plan = null, periodoActual = PeriodoFinanciero(2026, 10))[1],
+        )
+        assertEquals("Este mes pagaste \$1.262.300", textoDeLoQuePagasteEsteMes(octubre))
+    }
 }
