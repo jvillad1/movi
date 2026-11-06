@@ -81,4 +81,30 @@ class LaCuotaQueCambiaEnPagosTest {
         val ultima = ultimaCuotaPagadaDe(virtualRuleFor(terms.copy(tipoDeCuota = TipoDeCuota.UVR), libre.name), enPartes)
         assertEquals(CuotaPagada(1_262_300, "2026-10"), ultima, "las dos partes de octubre, no solo la última")
     }
+
+    /**
+     * Vuelta 134 (N-3) · un giro repartido en dos partes que pagan las cuotas atrasadas de septiembre y
+     * octubre del mismo crédito: las dos partes llevan la misma fecha y se escribieron juntas (el mismo
+     * `createdAt`, como las escribe `escribirLasPartes`), así que caen en el mismo período. Sumarlas daba una
+     * «cuota» de $2.524.600; es una cuota de $1.262.300 pagada dos veces.
+     */
+    @Test
+    fun `un giro que paga dos cuotas atrasadas del mismo credito no duplica la estimacion`() {
+        val dia = LocalDate.of(2026, 10, 20)
+        val escritas = 1_793_000_000_000L
+        val giro = (pago(dia, 1_262_300, "parte1") + pago(dia, 1_262_300, "parte2")).map { it.copy(createdAt = escritas) }
+        val uvr = terms.copy(tipoDeCuota = TipoDeCuota.UVR)
+        val ultima = ultimaCuotaPagadaDe(virtualRuleFor(uvr, libre.name), pago(LocalDate.of(2026, 9, 5), 1_240_000, "sep") + giro)
+        assertEquals(CuotaPagada(1_262_300, "2026-10"), ultima, "dos partes del mismo pago son dos cuotas, no una del doble")
+
+        // Lo mismo con las partes de un movimiento dividido (`repartoDe`), aunque no compartan el instante.
+        val dividido = pago(dia, 1_262_300, "d1").map { it.copy(repartoDe = "ev_original") } +
+            pago(dia, 1_262_300, "d2").map { it.copy(repartoDe = "ev_original", createdAt = escritas + 5) }
+        assertEquals(CuotaPagada(1_262_300, "2026-10"), ultimaCuotaPagadaDe(virtualRuleFor(uvr, libre.name), dividido))
+
+        // Y dos pagos de verdad (anotados en momentos distintos) siguen sumando: es la cuota pagada en partes.
+        val enDosPagos = pago(dia, 600_000, "a").map { it.copy(createdAt = escritas) } +
+            pago(dia, 662_300, "b").map { it.copy(createdAt = escritas + 60_000) }
+        assertEquals(CuotaPagada(1_262_300, "2026-10"), ultimaCuotaPagadaDe(virtualRuleFor(uvr, libre.name), enDosPagos))
+    }
 }

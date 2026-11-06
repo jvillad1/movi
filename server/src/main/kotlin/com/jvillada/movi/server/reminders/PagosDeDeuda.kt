@@ -380,8 +380,18 @@ fun ultimaCuotaPagadaDe(
     val (periodo, delPeriodo) = porPeriodo.maxByOrNull { it.key } ?: return null
     val salieron = delPeriodo.map { plataQueSalio(it, pagos) }
     val moneda = salieron.first().currency
-    val monto = salieron.filter { it.currency == moneda }.sumOf { it.amount }
-    return com.jvillada.movi.shared.model.CuotaPagada(monto = monto, periodo = periodo)
+    val total = salieron.filter { it.currency == moneda }.sumOf { it.amount }
+    // Vuelta 134 (N-3) · **un giro que pagó dos cuotas atrasadas no es una cuota del doble.** Las partes de
+    // un mismo pago (un aviso repartido en partes, o un movimiento dividido: comparten
+    // [com.jvillada.movi.shared.model.claveDeLaCompra], la misma regla de «una compra» de «N veces este
+    // período») que entran a ESTE crédito como cuota caen en el mismo período, porque tienen la misma fecha.
+    // Dos partes de un mismo pago hacia el mismo crédito solo existen si el giro saldó dos cuotas (una
+    // cuota pagada en partes son dos pagos, en dos momentos: esos sí suman, la revisión 1 de la 133).
+    // Entonces el período cubrió tantas cuotas como partes tiene el pago más repartido, y la cuota es lo
+    // pagado entre esas cuotas. Con una parte por pago (lo de siempre) se divide entre 1: no cambia nada.
+    val cuotasQueCubre = delPeriodo.groupBy { com.jvillada.movi.shared.model.claveDeLaCompra(it) }
+        .maxOf { it.value.size }.coerceAtLeast(1)
+    return com.jvillada.movi.shared.model.CuotaPagada(monto = total / cuotasQueCubre, periodo = periodo)
 }
 
 /** Lo mismo que [pagosDeDeudaPorPeriodo] pero en la forma que espera `dueDateFor`: solo periodos. */
