@@ -235,6 +235,15 @@ class LasCategoriasDelNumeroDelAvisoTest {
     }
 
     @Test
+    fun `sin renombrar ni nota, el aviso trae el comercio entero con su llave`() = testApplication {
+        application { testModule() }
+        repeat(2) { movimiento("Parqueadero", merchantQr, descripcion = merchantQr, minutosAtras = 5 + it) }
+        subir(aviso("sms_1"))
+
+        assertEquals(merchantQr, leer("sms_1").merchant)
+    }
+
+    @Test
     fun `renombrado por un tercero, el siguiente aviso trae el nombre sin la nota`() = testApplication {
         application { testModule() }
         movimiento("Parqueadero", merchantQr, descripcion = "$merchantQr · parqueadero del centro", minutosAtras = 5)

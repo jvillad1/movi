@@ -190,9 +190,11 @@ fun huellaDelIdentificador(id: IdentificadorDelDestino): String? = when (id.tipo
  */
 fun nombreSinLaNota(merchant: String?, descripcion: String): String {
     if (!merchant.isNullOrEmpty() && descripcion.startsWith(merchant + SEPARADOR_DE_LA_NOTA)) return merchant
+    if (descripcion.trim() == merchant?.trim()) return descripcion
     val partes = descripcion.split(SEPARADOR_DE_LA_NOTA)
     if (partes.size < 2) return descripcion
-    for (k in 1 until partes.size) {
+    // De lo más corto a lo más largo, incluida la descripción entera: «Pago QR · llave 0099» sin nota es un nombre.
+    for (k in 1..partes.size) {
         val cabeza = partes.take(k).joinToString(SEPARADOR_DE_LA_NOTA)
         val huella = huellaDeUnMovimiento(cabeza)
         if (huella != null && laHuellaEsUnNumero(huella)) return cabeza

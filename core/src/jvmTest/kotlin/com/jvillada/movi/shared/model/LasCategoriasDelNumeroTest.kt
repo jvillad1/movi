@@ -130,6 +130,12 @@ class LasCategoriasDelNumeroTest {
     }
 
     @Test
+    fun `nombreSinLaNota deja entero el comercio sin renombrar ni nota`() {
+        assertEquals(llave, nombreSinLaNota(llave, llave))
+        assertEquals(llave, nombreSinLaNota(null, llave))
+    }
+
+    @Test
     fun `entraEnElLote cuenta las categorias que se ofrecen, no las crudas`() {
         val base = ParsedSms(1.0, "x", TransactionType.EXPENSE, "A")
         val conUnaInterna = listOf(CategoriaDelNumero("Parqueadero", 2), CategoriaDelNumero("Descuento de nómina", 1))
