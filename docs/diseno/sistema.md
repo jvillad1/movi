@@ -5544,7 +5544,6 @@ Una pantalla de información sobre plata de terceros (`ui/seguros/TusSegurosScre
 - **Lo que no se dice**: precios de seguros ajenos, aseguradoras como oferta, «te conviene». Una línea
   `apoyo` al final: «Movi no vende seguros ni te asesora para comprarlos.»
 
-
 ## Vuelta 133 · Las categorías del número y la nota
 
 Cuando un mismo número (llave o cuenta) se ha anotado con varias categorías, Movi no adivina: las pone
