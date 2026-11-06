@@ -7,6 +7,10 @@ import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.time.epochMillisToAppDate
 import com.jvillada.movi.shared.model.CUOTA_DEL_AVISO_SIN_CREDITO
+import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CUOTAS_FUERA_DE_RANGO
+import com.jvillada.movi.shared.model.cuotasValidas
+import com.jvillada.movi.shared.model.llevaCuotas
 import com.jvillada.movi.shared.model.esCategoriaDeCuota
 import com.jvillada.movi.shared.model.AvisosDelMismoPago
 import com.jvillada.movi.shared.model.ConfirmarElMismoPago
@@ -280,11 +284,15 @@ internal fun movimientoDelAviso(uid: String, pedido: FinancialEvent, ahora: Long
     if (epochMillisToAppDate(evento.timestamp).year !in 2000..2100) {
         return Validado.Mal(HttpStatusCode.BadRequest, "Esa fecha no es de este siglo.")
     }
-    val cuentaEsSuya = Accounts.selectAll()
+    val cuenta = Accounts.selectAll()
         .where { (Accounts.id eq evento.accountId) and (Accounts.userId eq uid) }
-        .count() > 0
-    if (!cuentaEsSuya) return Validado.Mal(HttpStatusCode.NotFound, "Account not found")
-    return Validado.Bien(evento)
+        .firstOrNull() ?: return Validado.Mal(HttpStatusCode.NotFound, "Account not found")
+    // Vuelta 133 · **las cuotas de una compra con tarjeta, al confirmar el aviso** («¿A cuántas cuotas?»
+    // en la tarjeta de Por revisar y en Revisar aviso). Con las reglas de `POST /api/events`: fuera de
+    // 1..72 es un 400; en algo que no es un gasto de una tarjeta se ignoran. Sin la clave, como siempre.
+    evento.cuotas?.let { if (!cuotasValidas(it)) return Validado.Mal(HttpStatusCode.BadRequest, CUOTAS_FUERA_DE_RANGO) }
+    val tipo = runCatching { AccountType.valueOf(cuenta[Accounts.type]) }.getOrNull()
+    return Validado.Bien(if (llevaCuotas(evento, tipo)) evento else evento.copy(cuotas = null))
 }
 
 /** La misma fila que escribe `POST /api/events`. */
@@ -307,5 +315,7 @@ internal fun insertarMovimiento(uid: String, event: FinancialEvent) {
         it[createdAt] = event.createdAt
         it[Events.noSeRepite] = event.noSeRepite
         it[Events.lastEditedAt] = event.lastEditedAt
+        // Vuelta 133: a cuántas cuotas fue la compra con tarjeta, si el aviso lo dijo (ver [movimientoDelAviso]).
+        it[Events.cuotas] = event.cuotas
     }
 }
