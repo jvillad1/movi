@@ -70,6 +70,19 @@ class LoQueMoviSabeDelPagoTest {
         assertNull(loQueMoviSabeDelPago(pago("Banco de Occidente", CUOTA_CATEGORY, monto = 1.0), cuentas + dos.last().cuenta, dos, emptyList(), emptyList()).deudaSugeridaId)
     }
 
+    /** Vuelta 134 (M-8): la cuota de un crédito que cambia es una estimación; se reconoce de cerca, no al peso. */
+    @Test
+    fun `una cuota que cambia desempata de cerca y una fija sigue exacta`() {
+        val otro = cuenta("vehiculo2", "Otro carro", AccountType.LOAN)
+        val dos = listOf(
+            DeudaDelDueno(vehiculo, banco = "Banco de Occidente", cuota = 4_178_163, cuotaEstimada = true),
+            DeudaDelDueno(otro, banco = "Banco de Occidente", cuota = 900_000),
+        )
+        assertEquals("vehiculo", loQueMoviSabeDelPago(pago("Banco de Occidente", CUOTA_CATEGORY, monto = 4_050_000.0), cuentas + otro, dos, emptyList(), emptyList()).deudaSugeridaId)
+        assertEquals("vehiculo2", loQueMoviSabeDelPago(pago("Banco de Occidente", CUOTA_CATEGORY, monto = 900_000.0), cuentas + otro, dos, emptyList(), emptyList()).deudaSugeridaId)
+        assertNull(loQueMoviSabeDelPago(pago("Banco de Occidente", CUOTA_CATEGORY, monto = 910_000.0), cuentas + otro, dos, emptyList(), emptyList()).deudaSugeridaId)
+    }
+
     @Test
     fun `una cuota que paga otro no se propone`() {
         val ajena = listOf(DeudaDelDueno(vehiculo, banco = "Banco de Occidente", cuota = 4_178_163, noLaPagaEl = true))

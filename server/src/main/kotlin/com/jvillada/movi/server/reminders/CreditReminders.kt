@@ -17,6 +17,7 @@ import com.jvillada.movi.shared.model.cuotaCambia
 import com.jvillada.movi.shared.model.cuotaDeEsteMes
 import com.jvillada.movi.server.time.AppClock
 import org.jetbrains.exposed.sql.JoinType
+import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
 
@@ -100,6 +101,26 @@ fun virtualRuleFor(
         // de las reglas reales lee ese campo y una sintética no tiene por qué pasar por ahí.
         seDebitaSolo = true.takeIf { !terms.debitoAutomaticoDesde.isNullOrBlank() },
     )
+
+/**
+ * Vuelta 134 · **la última cuota pagada de cada crédito de cuota que cambia** de [creditos] (las condiciones
+ * y el nombre de su cuenta), por id de la cuenta, dentro de una transacción ya abierta: los pagos de la
+ * MISMA franja que Pagos ([pagosDeDeudaAlrededorDe]) y el período del dueño. Para los que no estaban en
+ * esos caminos —la página compartida, el reconocimiento de avisos— y estiman con [ultimaCuotaPagadaDe]
+ * como todos. Sin ningún crédito que cambia no lee nada.
+ */
+fun Transaction.ultimasCuotasPagadasDe(
+    uid: String,
+    creditos: List<Pair<com.jvillada.movi.shared.model.CreditTerms, String>>,
+): Map<String, com.jvillada.movi.shared.model.CuotaPagada> {
+    val queCambian = creditos.filter { (terms, _) -> terms.cuotaCambia() }
+    if (queCambian.isEmpty()) return emptyMap()
+    val pagos = pagosDeDeudaAlrededorDe(uid, AppClock.today())
+    val settings = com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender(uid)
+    return queCambian.mapNotNull { (terms, nombre) ->
+        ultimaCuotaPagadaDe(virtualRuleFor(terms, nombre), pagos, settings = settings)?.let { terms.accountId to it }
+    }.toMap()
+}
 
 /** Pares (regla virtual, lastRemindedPeriod) de todos los créditos del usuario. */
 suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String?>> = dbQuery {
