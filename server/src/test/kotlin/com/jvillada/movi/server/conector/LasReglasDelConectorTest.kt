@@ -45,17 +45,25 @@ class LasReglasDelConectorTest {
     }
 
     @Test
-    fun `un client_id CIMD es una URL https de Claude con camino`() {
+    fun `un client_id CIMD es exactamente uno de los de Claude`() {
         assertTrue(esClientIdCimd("https://claude.ai/oauth/mcp-oauth-client-metadata"))
-        assertTrue(esClientIdCimd("https://claude.com/oauth/x"))
-        assertFalse(esClientIdCimd("https://claude.ai"))
-        assertFalse(esClientIdCimd("https://claude.ai/"))
-        assertFalse(esClientIdCimd("http://claude.ai/oauth/x"))
-        assertFalse(esClientIdCimd("https://claude.ai/oauth/../x"))
-        assertFalse(esClientIdCimd("https://claude.ai/oauth/x#y"))
-        assertFalse(esClientIdCimd("https://claude.ai:22/oauth/x"), "solo el 443")
-        assertFalse(esClientIdCimd("https://evil.example/oauth/x"), "nunca un host cualquiera")
-        assertFalse(esClientIdCimd("https://claude.ai.evil.example/oauth/x"))
+        assertTrue(esClientIdCimd("https://claude.ai/oauth/claude-code-client-metadata"))
+        // N3 · ni otra ruta del mismo host: nunca se le pide a claude.ai una URL inventada.
+        assertFalse(esClientIdCimd("https://claude.ai/oauth/x"))
+        assertFalse(esClientIdCimd("https://claude.com/oauth/x"))
+        assertFalse(esClientIdCimd("https://claude.ai/oauth/mcp-oauth-client-metadata/"))
+        assertFalse(esClientIdCimd("https://claude.ai/oauth/mcp-oauth-client-metadata?x=1"))
+        assertFalse(esClientIdCimd("http://claude.ai/oauth/mcp-oauth-client-metadata"))
+        assertFalse(esClientIdCimd("https://evil.example/oauth/x"))
+    }
+
+    @Test
+    fun `el client_id tiene que tener forma antes de tocar un balde`() {
+        assertTrue(clientIdConForma("https://claude.ai/oauth/mcp-oauth-client-metadata"))
+        assertTrue(clientIdConForma(idDelClienteDcr(listOf("https://claude.ai/api/mcp/auth_callback"))))
+        assertFalse(clientIdConForma("mvc_cli_xyz"))
+        assertFalse(clientIdConForma("https://claude.ai/oauth/otro"))
+        assertFalse(clientIdConForma("x".repeat(300)))
     }
 
     @Test

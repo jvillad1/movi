@@ -15,7 +15,6 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -74,14 +73,14 @@ class ElLectorDeCimdTest {
     @Test
     fun `un cuerpo que gotea se corta al tope`() = runBlocking {
         val antes = System.currentTimeMillis()
-        assertNull(bajarConTope(cliente, url("/gotea"), topeMs = 1_000, maxBytes = MAX_BYTES_DEL_CIMD))
+        assertEquals(LecturaDelCimd.Pasajera, bajarConTope(cliente, url("/gotea"), topeMs = 1_000, maxBytes = MAX_BYTES_DEL_CIMD))
         val tardo = System.currentTimeMillis() - antes
         assertTrue(tardo < 2_500, "tardó $tardo ms (el tope era 1 s)")
     }
 
     @Test
     fun `un cuerpo de mas de 16 KB no se acepta`() = runBlocking {
-        assertNull(bajarConTope(cliente, url("/grande"), topeMs = 3_000, maxBytes = MAX_BYTES_DEL_CIMD))
+        assertEquals(LecturaDelCimd.NoExiste, bajarConTope(cliente, url("/grande"), topeMs = 3_000, maxBytes = MAX_BYTES_DEL_CIMD))
     }
 
     @Test
@@ -94,7 +93,7 @@ class ElLectorDeCimdTest {
             val listo = withContext(Dispatchers.IO) { "listo" }
             assertEquals("listo", listo)
             assertTrue(System.currentTimeMillis() - antes < 500, "Dispatchers.IO esperó")
-            assertTrue(lentas.awaitAll().all { it == null })
+            assertTrue(lentas.awaitAll().all { it == LecturaDelCimd.Pasajera })
         }
     }
 }

@@ -263,6 +263,7 @@ class ConectorOAuthTest {
     @Test
     fun `un CIMD que dice otro client_id, con secreto o con un retorno que no es de Claude se rechaza`() = testApplication {
         with(c) { montar() }
+        cimdDePrueba = setOf("https://claude.ai/oauth/falso", "https://claude.ai/oauth/con-secreto", "https://claude.ai/oauth/raro", "https://claude.ai/oauth/ajeno")
         val falso = "https://claude.ai/oauth/falso"
         c.documentos[falso] = """{"client_id":"https://otro.example/x","redirect_uris":["$RETORNO_DE_CLAUDE"]}"""
         assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = falso)).status)
@@ -286,30 +287,30 @@ class ConectorOAuthTest {
     fun `un CIMD de un host que no es de Claude no se descarga nunca`() = testApplication {
         with(c) { montar() }
         val pedidos = mutableListOf<String>()
-        lectorDeCimd = LectorDeCimd { url -> pedidos += url; c.documentos[url] }
+        lectorDeCimd = LectorDeCimd { url -> pedidos += url; c.documentos[url]?.let { LecturaDelCimd.Documento(it) } ?: LecturaDelCimd.NoExiste }
         val ajeno = "https://evil.example/cimd"
         c.documentos[ajeno] = """{"client_id":"$ajeno","client_name":"Claude","redirect_uris":["$RETORNO_DE_CLAUDE"]}"""
         assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = ajeno)).status)
         assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = "https://claude.ai.evil.example/x")).status)
         assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = "https://claude.ai:8443/oauth/x")).status)
+        // N3 · ni una ruta inventada de claude.ai.
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = "https://claude.ai/oauth/inventada-123")).status)
         assertTrue(pedidos.isEmpty(), "no se bajó nada: $pedidos")
     }
 
     @Test
-    fun `un CIMD que no contesta no cuelga la autorizacion, y la falla se recuerda`() = testApplication {
+    fun `un CIMD que no contesta no cuelga la autorizacion, y una falla pasajera no se recuerda`() = testApplication {
         with(c) { montar() }
         var lecturas = 0
-        lectorDeCimd = LectorDeCimd { lecturas++; kotlinx.coroutines.delay(10 * 60_000L); null }
-        val lento = "https://claude.ai/oauth/lento"
+        lectorDeCimd = LectorDeCimd { lecturas++; kotlinx.coroutines.delay(10 * 60_000L); LecturaDelCimd.Pasajera }
         val antes = System.currentTimeMillis()
-        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = lento)).status)
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar()).status)
         val tardo = System.currentTimeMillis() - antes
         assertTrue(tardo in TOPE_DEL_CIMD_MS until TOPE_DEL_CIMD_MS + 2_000, "contestó en $tardo ms")
-        // La segunda vez contesta de la memoria, sin volver a bajar nada.
-        val antes2 = System.currentTimeMillis()
-        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = lento)).status)
-        assertTrue(System.currentTimeMillis() - antes2 < 1_000)
-        assertEquals(1, lecturas)
+        // Un tropiezo no se guarda como falla: al volver claude.ai, la conexión sigue.
+        lectorDeCimd = LectorDeCimd { lecturas++; LecturaDelCimd.Documento(c.documentos.getValue(it)) }
+        assertEquals(HttpStatusCode.OK, client.get(c.urlDeAutorizar()).status)
+        assertEquals(2, lecturas)
     }
 
     @Test

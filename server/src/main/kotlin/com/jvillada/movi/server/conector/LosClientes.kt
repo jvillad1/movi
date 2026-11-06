@@ -3,11 +3,10 @@ package com.jvillada.movi.server.conector
 import com.jvillada.movi.server.db.ClientesDelConector
 import com.jvillada.movi.server.db.dbQuery
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -31,13 +30,14 @@ import java.util.concurrent.Flow
 /**
  * # Vuelta 135 · Quién pide permiso: los clientes del conector
  *
- * **El conector es solo para Claude** (revisión de seguridad de la vuelta 135, C1 e I1). Claude se presenta de
- * dos maneras, y Movi acepta las dos, pero solo si el cliente es de Claude:
+ * **El conector es solo para Claude** (revisiones de seguridad de la vuelta 135). Claude se presenta de dos
+ * maneras, y Movi acepta las dos, pero solo si el cliente es de Claude:
  *
- * - **CIMD** (Client ID Metadata Document): el `client_id` es una URL https **en `claude.ai` o `claude.com`**
- *   ([HOSTS_DE_CIMD], más los de `CONECTOR_HOSTS_DE_CIMD`), que se baja y dice a qué direcciones se le puede
- *   devolver el código. Nunca se descarga nada de un host cualquiera.
- * - **DCR** (RFC 7591): el cliente se registra en `POST /oauth/register` y recibe un `client_id` nuestro.
+ * - **CIMD** (Client ID Metadata Document): el `client_id` es **exactamente** una de las URL de [CIMD_DE_CLAUDE]
+ *   (más las de `CONECTOR_CIMD_PERMITIDOS`), que se baja y dice a qué direcciones se le puede devolver el código.
+ *   Ni otra URL del mismo host (N3 de la re-revisión): nunca se le pide a claude.ai una ruta inventada.
+ * - **DCR** (RFC 7591): el cliente se registra en `POST /oauth/register` y recibe un `client_id` nuestro, que sale
+ *   de sus retornos (ver [idDelClienteDcr]).
  *
  * En los dos casos las únicas direcciones de retorno que valen son las de Claude: [RETORNOS_DE_CLAUDE] (la web,
  * el escritorio y el teléfono) y un loopback `http://localhost|127.0.0.1:<puerto>/callback` (Claude Code). Así el
@@ -53,8 +53,16 @@ internal data class ClienteDelConector(
     val esCimd: Boolean,
 )
 
-/** Los hosts cuyos documentos CIMD se aceptan. `CONECTOR_HOSTS_DE_CIMD` (separados por comas) agrega otros. */
-internal val HOSTS_DE_CIMD: Set<String> = setOf("claude.ai", "claude.com")
+/**
+ * **Los CIMD de Claude**, exactos. Comprobados el 6-nov-2026 con el `HttpClient` de Java: los dos contestan 200
+ * con su JSON (sin desafío de Cloudflare). El de Claude Code lo nombra la doc de conectores
+ * (claude.com/docs/connectors/building/authentication); el de la web, el escritorio y el teléfono es el que esa
+ * doc llama «el Client ID Metadata Document que Anthropic hospeda», y declara `https://claude.ai/api/mcp/auth_callback`.
+ */
+internal val CIMD_DE_CLAUDE: List<String> = listOf(
+    "https://claude.ai/oauth/mcp-oauth-client-metadata",
+    "https://claude.ai/oauth/claude-code-client-metadata",
+)
 
 /**
  * **Las direcciones de retorno de Claude** que no son loopback. La documentación de conectores de Claude da una
@@ -69,18 +77,34 @@ internal const val CAMINO_DEL_LOOPBACK = "/callback"
 /** Lo más largo que puede ser un retorno, pedido o declarado. Las de Claude pesan menos de 50. */
 internal const val LARGO_MAXIMO_DEL_RETORNO = 300
 
-internal val hostsDeCimdPermitidos: Set<String> by lazy {
-    HOSTS_DE_CIMD + System.getenv("CONECTOR_HOSTS_DE_CIMD").orEmpty()
-        .split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+/** Los CIMD aceptados: los de Claude y los de `CONECTOR_CIMD_PERMITIDOS` (URL exactas, https, separadas por comas). */
+private val cimdDelEntorno: Set<String> by lazy {
+    (CIMD_DE_CLAUDE + System.getenv("CONECTOR_CIMD_PERMITIDOS").orEmpty().split(',').map { it.trim() })
+        .filter { it.startsWith("https://") && it.length <= 500 }
+        .toSet()
+}
+
+/** Para las pruebas: URL de CIMD de más (para probar la validación del documento sin tocar la lista de Claude). */
+@Volatile
+internal var cimdDePrueba: Set<String> = emptySet()
+
+internal val cimdPermitidos: Set<String> get() = cimdDelEntorno + cimdDePrueba
+
+/** Lo que pasó al leer un CIMD. Solo [NoExiste] se recuerda como falla; una [Pasajera] no borra el último bueno. */
+sealed interface LecturaDelCimd {
+    data class Documento(val texto: String) : LecturaDelCimd
+    /** 404/410, o un cuerpo que no se acepta (demasiado grande): la URL no sirve. */
+    data object NoExiste : LecturaDelCimd
+    /** Timeout, red caída, un 5xx, un 429: se vuelve a intentar la próxima vez. */
+    data object Pasajera : LecturaDelCimd
 }
 
 /**
  * **Lee el documento de un cliente CIMD.** Inyectable para las pruebas: ninguna toca la red (como
- * `LectorDeCorreosRecibidos`). `null` = no se pudo leer (no existe, demasiado grande, host privado). El tope de
- * tiempo no depende del lector: lo pone [resolverCliente] alrededor de la llamada.
+ * `LectorDeCorreosRecibidos`). El tope de tiempo no depende del lector: lo pone [resolverCliente] alrededor.
  */
 fun interface LectorDeCimd {
-    suspend fun leer(url: String): String?
+    suspend fun leer(url: String): LecturaDelCimd
 }
 
 /** Lo más que se acepta de un documento CIMD. Uno de verdad pesa menos de 1 KB. */
@@ -90,13 +114,12 @@ internal const val MAX_BYTES_DEL_CIMD = 16 * 1024
 internal const val TOPE_DEL_CIMD_MS = 5_000L
 
 /**
- * **Los hilos del lector de CIMD**: cuatro, propios. Nunca `Dispatchers.IO`, que es de donde vive `dbQuery`: un
- * documento que llega de a un byte por minuto no puede dejar al resto del server sin base.
+ * **Los hilos del lector de CIMD**: cuatro, propios, como ejecutor del `HttpClient` y para el DNS. Nunca
+ * `Dispatchers.IO`, que es de donde vive `dbQuery`.
  */
 private val hilosDelCimd = Executors.newFixedThreadPool(4) { r ->
     Thread(r, "movi-cimd").apply { isDaemon = true }
 }
-internal val dispatcherDelCimd: CoroutineDispatcher = hilosDelCimd.asCoroutineDispatcher()
 
 /**
  * El lector de verdad:
@@ -104,9 +127,8 @@ internal val dispatcherDelCimd: CoroutineDispatcher = hilosDelCimd.asCoroutineDi
  * - **Asíncrono y con tope de todo**: `sendAsync` no bloquea ningún hilo mientras espera, y [bajarConTope] corta
  *   la operación entera (cabeceras y cuerpo) a los [TOPE_DEL_CIMD_MS]. `HttpRequest.timeout` solo cubre hasta las
  *   cabeceras: con él solo, un cuerpo que gotea dejaba un hilo bloqueado horas (C1 de la revisión).
- * - **Solo https al puerto 443 y nunca un host privado**. El host ya es uno de [hostsDeCimdPermitidos]; además se
- *   resuelve y se rechaza si alguna dirección es privada. Queda la ventana del DNS entre la resolución y la
- *   conexión, mitigada por https con validación del certificado.
+ * - **Solo las URL de [cimdPermitidos]**, por https al 443, y nunca un host privado (se resuelve en los hilos
+ *   propios y se rechaza si alguna dirección es privada).
  * - **Sin redirecciones** y con [MAX_BYTES_DEL_CIMD] de tope: el cuerpo se lee por partes y se corta al pasarse.
  */
 internal object LectorDeCimdPorRed : LectorDeCimd {
@@ -116,14 +138,14 @@ internal object LectorDeCimdPorRed : LectorDeCimd {
         .executor(hilosDelCimd)
         .build()
 
-    override suspend fun leer(url: String): String? {
-        val uri = runCatching { URI(url) }.getOrNull() ?: return null
-        if (uri.scheme != "https" || (uri.port != -1 && uri.port != 443)) return null
-        if (uri.host?.lowercase() !in hostsDeCimdPermitidos) return null
-        // La resolución del DNS corre en los hilos propios y se espera sin bloquear: si el DNS no contesta, el
-        // tope de `resolverCliente` corta la espera (el hilo queda ocupado, pero es uno de cuatro, no de la base).
+    override suspend fun leer(url: String): LecturaDelCimd {
+        if (url !in cimdPermitidos) return LecturaDelCimd.NoExiste
+        val uri = runCatching { URI(url) }.getOrNull() ?: return LecturaDelCimd.NoExiste
+        if (uri.scheme != "https" || (uri.port != -1 && uri.port != 443)) return LecturaDelCimd.NoExiste
+        // El DNS corre en los hilos propios y se espera sin bloquear: si no contesta, el tope de `resolverCliente`
+        // corta la espera (el hilo queda ocupado, pero es uno de cuatro, no de la base).
         val publico = CompletableFuture.supplyAsync({ hostEsPublico(uri.host) }, hilosDelCimd).await()
-        if (!publico) return null
+        if (!publico) return LecturaDelCimd.Pasajera
         return bajarConTope(cliente, uri, TOPE_DEL_CIMD_MS, MAX_BYTES_DEL_CIMD)
     }
 
@@ -149,40 +171,44 @@ internal object LectorDeCimdPorRed : LectorDeCimd {
 }
 
 /**
- * **Baja [uri] con un tope de tiempo para todo y un tope de tamaño para el cuerpo.** `null` si no llega a tiempo,
- * no es 200 o pesa más de [maxBytes]. Al vencer cancela el pedido. No bloquea hilos: el cuerpo llega por partes a
- * un suscriptor que corta al pasarse.
+ * **Baja [uri] con un tope de tiempo para todo y un tope de tamaño para el cuerpo.** 200 con un cuerpo que cabe →
+ * [LecturaDelCimd.Documento]; 404/410 o un cuerpo de más → [LecturaDelCimd.NoExiste]; lo demás (otro estado, el
+ * tope, la red) → [LecturaDelCimd.Pasajera]. Al vencer cancela el pedido. No bloquea hilos.
  */
-internal suspend fun bajarConTope(cliente: HttpClient, uri: URI, topeMs: Long, maxBytes: Int): String? {
+internal suspend fun bajarConTope(cliente: HttpClient, uri: URI, topeMs: Long, maxBytes: Int): LecturaDelCimd {
     val pedido = HttpRequest.newBuilder(uri)
         .timeout(Duration.ofMillis(topeMs))
         .header("Accept", "application/json")
         .GET()
         .build()
-    val manejador = HttpResponse.BodyHandler<String?> { info ->
-        if (info.statusCode() != 200) HttpResponse.BodySubscribers.replacing<String?>(null) else CuerpoConTope(maxBytes)
+    val manejador = HttpResponse.BodyHandler<LecturaDelCimd> { info ->
+        when (info.statusCode()) {
+            200 -> CuerpoConTope(maxBytes)
+            404, 410 -> HttpResponse.BodySubscribers.replacing<LecturaDelCimd>(LecturaDelCimd.NoExiste)
+            else -> HttpResponse.BodySubscribers.replacing<LecturaDelCimd>(LecturaDelCimd.Pasajera)
+        }
     }
     val futuro = cliente.sendAsync(pedido, manejador)
     return try {
         withTimeout(topeMs) { futuro.await() }.body()
     } catch (_: TimeoutCancellationException) {
         futuro.cancel(true)
-        null
+        LecturaDelCimd.Pasajera
     } catch (e: kotlinx.coroutines.CancellationException) {
         futuro.cancel(true)
         throw e
     } catch (_: Exception) {
-        null
+        LecturaDelCimd.Pasajera
     }
 }
 
-/** El cuerpo, por partes, cortado al pasar de [maxBytes] (devuelve `null`). */
-private class CuerpoConTope(private val maxBytes: Int) : HttpResponse.BodySubscriber<String?> {
-    private val resultado = CompletableFuture<String?>()
+/** El cuerpo, por partes, cortado al pasar de [maxBytes] ([LecturaDelCimd.NoExiste]). */
+private class CuerpoConTope(private val maxBytes: Int) : HttpResponse.BodySubscriber<LecturaDelCimd> {
+    private val resultado = CompletableFuture<LecturaDelCimd>()
     private val partes = java.io.ByteArrayOutputStream()
     private var suscripcion: Flow.Subscription? = null
 
-    override fun getBody(): CompletionStage<String?> = resultado
+    override fun getBody(): CompletionStage<LecturaDelCimd> = resultado
     override fun onSubscribe(subscription: Flow.Subscription) {
         suscripcion = subscription
         subscription.request(Long.MAX_VALUE)
@@ -193,26 +219,27 @@ private class CuerpoConTope(private val maxBytes: Int) : HttpResponse.BodySubscr
             partes.write(bytes)
             if (partes.size() > maxBytes) {
                 suscripcion?.cancel()
-                resultado.complete(null)
+                resultado.complete(LecturaDelCimd.NoExiste)
                 return
             }
         }
     }
-    override fun onError(throwable: Throwable) { resultado.complete(null) }
-    override fun onComplete() { resultado.complete(partes.toByteArray().decodeToString()) }
+    override fun onError(throwable: Throwable) { resultado.complete(LecturaDelCimd.Pasajera) }
+    override fun onComplete() { resultado.complete(LecturaDelCimd.Documento(partes.toByteArray().decodeToString())) }
 }
 
 /** El lector que usan las rutas; las pruebas lo cambian por uno que no toca la red. */
 @Volatile
 internal var lectorDeCimd: LectorDeCimd = LectorDeCimdPorRed
 
-/** Un documento bueno se recuerda 10 minutos; una falla, 5 (así repetir un `client_id` malo no vuelve a bajar nada). */
+/** Un documento bueno se vuelve a pedir a los 10 minutos; un documento que no sirve se recuerda 5. */
 private const val VIDA_DEL_CIMD_EN_MEMORIA_MS = 10L * 60 * 1000
 private const val VIDA_DE_UNA_FALLA_EN_MEMORIA_MS = 5L * 60 * 1000
-private const val MAX_CIMD_EN_MEMORIA = 500
 
-/** `null` como valor = una falla recordada. */
-private val cimdEnMemoria = ConcurrentHashMap<String, Pair<Long, ClienteDelConector?>>()
+/** Lo último que se supo de cada CIMD: el último bueno (que no se borra por una falla pasajera) y una falla. */
+private data class LoQueSeSabeDelCimd(val bueno: ClienteDelConector?, val buenoEn: Long, val fallaEn: Long?)
+
+private val cimdEnMemoria = ConcurrentHashMap<String, LoQueSeSabeDelCimd>()
 
 /** Una sola lectura a la vez por `client_id`: los que llegan mientras tanto esperan la misma. */
 private val cimdEnCurso = ConcurrentHashMap<String, CompletableDeferred<ClienteDelConector?>>()
@@ -224,47 +251,86 @@ internal fun olvidarLosCimdEnMemoria() {
 
 private val jsonDelCimd = Json { ignoreUnknownKeys = true }
 
-/**
- * ¿Es un `client_id` CIMD que Movi acepta? https al puerto 443, en uno de [hostsDeCimdPermitidos], con camino
- * (la spec lo exige), sin fragmento, sin usuario, sin `.`/`..` y de un largo razonable.
- */
-internal fun esClientIdCimd(clientId: String): Boolean {
-    if (clientId.length > 500 || !clientId.startsWith("https://")) return false
-    val uri = runCatching { URI(clientId) }.getOrNull() ?: return false
-    val camino = uri.rawPath.orEmpty()
-    return uri.host?.lowercase() in hostsDeCimdPermitidos && (uri.port == -1 || uri.port == 443) &&
-        uri.rawFragment == null && uri.rawUserInfo == null &&
-        camino.length > 1 && camino.split('/').none { it == "." || it == ".." }
-}
+/** ¿Es un `client_id` CIMD que Movi acepta? Exactamente una de [cimdPermitidos]. */
+internal fun esClientIdCimd(clientId: String): Boolean = clientId in cimdPermitidos
+
+/** La forma de un `client_id` de DCR: `mvc_cli_` + 32 hex (ver [idDelClienteDcr]). */
+private val FORMA_DEL_ID_DCR = Regex("^mvc_cli_[0-9a-f]{32}$")
 
 /**
- * **El cliente de [clientId]**, o `null` si no existe o no sirve. Un `client_id` https es CIMD (solo de Claude);
- * lo demás se busca entre los registrados por DCR. La lectura del CIMD tiene tope de [TOPE_DEL_CIMD_MS] pase lo
- * que pase con el lector, se hace una sola vez a la vez por `client_id`, y su resultado (bueno o malo) se recuerda.
+ * ¿Tiene [clientId] la forma de un cliente nuestro? Un CIMD aceptado o un id de DCR. Lo que no la tiene se contesta
+ * `invalid_client` **antes** de tocar cualquier balde del limitador (N1 de la re-revisión).
+ */
+internal fun clientIdConForma(clientId: String): Boolean = esClientIdCimd(clientId) || FORMA_DEL_ID_DCR.matches(clientId)
+
+/**
+ * **El `client_id` de un registro DCR**, derivado de sus retornos (N2 de la re-revisión): el loopback sin puerto,
+ * sin repetidos y en orden. Como los retornos solo pueden ser los de Claude, hay a lo sumo siete conjuntos
+ * posibles, y registrar dos veces lo mismo da el mismo cliente. Compartirlo entre usuarios es lo que ya pasa con el
+ * CIMD: lo que ata cada conexión es PKCE y la concesión.
+ */
+internal fun idDelClienteDcr(retornosNormalizados: List<String>): String =
+    "mvc_cli_" + java.security.MessageDigest.getInstance("SHA-256")
+        .digest(retornosNormalizados.joinToString("\n").toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
+        .take(32)
+
+/** Un retorno declarado, sin el puerto si es un loopback (el puerto se ignora igual al compararlo). */
+internal fun retornoNormalizado(uri: String): String =
+    if (esRetornoLoopback(uri)) URI(uri).let { "http://${it.host.lowercase()}$CAMINO_DEL_LOOPBACK" } else uri
+
+/**
+ * **El cliente de [clientId]**, o `null` si no existe o no sirve. Un CIMD de [cimdPermitidos] se baja (con el tope
+ * de [TOPE_DEL_CIMD_MS] pase lo que pase con el lector, una sola lectura a la vez); lo demás se busca entre los
+ * registrados por DCR.
+ *
+ * Lo que se recuerda (N3 de la re-revisión): un documento bueno, 10 minutos, y después se pide de nuevo; si en ese
+ * pedido hay una **falla pasajera**, se sigue usando el último bueno. Solo un documento que no sirve (o un 404) se
+ * recuerda como falla, 5 minutos. Una cancelación de quien pide se relanza **sin guardar nada**, y los que
+ * esperaban reciben el resultado en el `finally`.
  */
 internal suspend fun resolverCliente(clientId: String, ahora: Long = System.currentTimeMillis()): ClienteDelConector? {
     if (clientId.isBlank() || clientId.length > 500) return null
     if (clientId.startsWith("https://")) {
         if (!esClientIdCimd(clientId)) return null
-        cimdEnMemoria[clientId]?.let { (cuando, cliente) ->
-            val vida = if (cliente != null) VIDA_DEL_CIMD_EN_MEMORIA_MS else VIDA_DE_UNA_FALLA_EN_MEMORIA_MS
-            if (ahora - cuando < vida) return cliente
-        }
+        val sabido = cimdEnMemoria[clientId]
+        if (sabido?.bueno != null && ahora - sabido.buenoEn < VIDA_DEL_CIMD_EN_MEMORIA_MS) return sabido.bueno
+        if (sabido?.fallaEn != null && ahora - sabido.fallaEn < VIDA_DE_UNA_FALLA_EN_MEMORIA_MS) return null
         val nuevo = CompletableDeferred<ClienteDelConector?>()
         val enCurso = cimdEnCurso.putIfAbsent(clientId, nuevo)
-        if (enCurso != null) return runCatching { withTimeout(TOPE_DEL_CIMD_MS) { enCurso.await() } }.getOrNull()
-        val cliente = try {
-            val documento = runCatching { withTimeout(TOPE_DEL_CIMD_MS) { lectorDeCimd.leer(clientId) } }.getOrNull()
-            documento?.let { clienteDelDocumentoCimd(clientId, it) }
+        if (enCurso != null) return withTimeoutOrNull(TOPE_DEL_CIMD_MS) { enCurso.await() } ?: sabido?.bueno
+        var resultado: ClienteDelConector? = sabido?.bueno
+        try {
+            val lectura = withTimeoutOrNull(TOPE_DEL_CIMD_MS) {
+                try {
+                    lectorDeCimd.leer(clientId)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    LecturaDelCimd.Pasajera
+                }
+            } ?: LecturaDelCimd.Pasajera
+            when (lectura) {
+                is LecturaDelCimd.Documento -> {
+                    val cliente = clienteDelDocumentoCimd(clientId, lectura.texto)
+                    cimdEnMemoria[clientId] = if (cliente != null) LoQueSeSabeDelCimd(cliente, ahora, null)
+                    else LoQueSeSabeDelCimd(null, 0L, ahora)
+                    resultado = cliente
+                }
+                LecturaDelCimd.NoExiste -> {
+                    cimdEnMemoria[clientId] = LoQueSeSabeDelCimd(null, 0L, ahora)
+                    resultado = null
+                }
+                // El último bueno sigue (si hay); no se anota nada nuevo.
+                LecturaDelCimd.Pasajera -> Unit
+            }
+            return resultado
         } finally {
             cimdEnCurso.remove(clientId, nuevo)
+            nuevo.complete(resultado)
         }
-        // Un tope para que una lluvia de `client_id` distintos no llene la memoria.
-        if (cimdEnMemoria.size >= MAX_CIMD_EN_MEMORIA) cimdEnMemoria.clear()
-        cimdEnMemoria[clientId] = ahora to cliente
-        nuevo.complete(cliente)
-        return cliente
     }
+    if (!clientIdConForma(clientId)) return null
     return dbQuery {
         ClientesDelConector.selectAll().where { ClientesDelConector.id eq clientId }.firstOrNull()?.let { fila ->
             ClienteDelConector(
