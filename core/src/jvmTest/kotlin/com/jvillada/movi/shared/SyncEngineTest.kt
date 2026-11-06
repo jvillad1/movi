@@ -456,6 +456,69 @@ class SyncEngineTest {
         Unit
     }
 
+    /**
+     * Revisión 2 de la vuelta 133 · **cambiar las cuotas mientras el movimiento sube no las pierde**: el
+     * `POST` sale con 12, el dueño elige 24 en el detalle mientras viaja, la fila se sella igual (las
+     * cuotas no tienen columna local) y el 24 sube por `PUT /api/events/{id}/cuotas` en la misma vuelta.
+     */
+    @Test
+    fun syncEvents_sube_las_cuotas_que_cambiaron_mientras_viajaba_el_movimiento() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = NoOpRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-nu-vuelo", "Nu", AccountType.CREDIT_CARD, 0L))
+        local.postEvent(event("ev-vuelo", "acc-nu-vuelo", TransactionType.EXPENSE, 1_200_000L).copy(cuotas = 12))
+
+        val subidos = mutableListOf<FinancialEvent>()
+        val cambios = mutableListOf<Pair<String, Int>>()
+        val remote = object : NoOpRepository() {
+            override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+                subidos += event
+                // El dueño cambia las cuotas en el detalle mientras el POST viaja.
+                com.jvillada.movi.shared.repository.CuotasPorSubir.guardar(db, testUserId, event.id, 24)
+                return event
+            }
+            override suspend fun updateEventCuotas(id: String, cuotas: Int): FinancialEvent {
+                cambios += id to cuotas
+                return subidos.single().copy(cuotas = cuotas)
+            }
+        }
+        SyncEngine(db = db, remote = remote, userId = { testUserId }).syncEvents()
+
+        assertEquals(12, subidos.single().cuotas, "el POST salió con las de la foto")
+        assertEquals(listOf("ev-vuelo" to 24), cambios, "y el valor nuevo llegó al server")
+        assertTrue(com.jvillada.movi.shared.repository.CuotasPorSubir.todas(db, testUserId).isEmpty(), "subido, se olvida")
+        Unit
+    }
+
+    /** Sin red, las cuotas de una fila ya sellada esperan a la vuelta siguiente. */
+    @Test
+    fun las_cuotas_que_quedaron_sin_red_esperan_la_vuelta_siguiente() = runBlocking {
+        val db = createDatabase("sync-test.db")
+        val local = LocalRepository(db = db, remote = NoOpRepository(), userId = { testUserId })
+        local.createAccount(Account("acc-nu-espera", "Nu", AccountType.CREDIT_CARD, 0L))
+        local.postEvent(event("ev-espera", "acc-nu-espera", TransactionType.EXPENSE, 600_000L))
+        val conRed = object : NoOpRepository() {
+            override suspend fun postEvent(event: FinancialEvent): FinancialEvent {
+                com.jvillada.movi.shared.repository.CuotasPorSubir.guardar(db, testUserId, event.id, 6)
+                return event
+            }
+            override suspend fun updateEventCuotas(id: String, cuotas: Int): FinancialEvent = throw IllegalStateException("sin red")
+        }
+        SyncEngine(db = db, remote = conRed, userId = { testUserId }).syncEvents()
+        assertEquals(mapOf("ev-espera" to 6), com.jvillada.movi.shared.repository.CuotasPorSubir.todas(db, testUserId), "sin red, se queda")
+
+        val subidas = mutableListOf<Int>()
+        SyncEngine(db = db, remote = object : NoOpRepository() {
+            override suspend fun updateEventCuotas(id: String, cuotas: Int): FinancialEvent {
+                subidas += cuotas
+                return FinancialEvent(id = id, accountId = "acc-nu-espera", type = TransactionType.EXPENSE, amount = 600_000L, category = "x", description = "x", timestamp = 0L, cuotas = cuotas)
+            }
+        }, userId = { testUserId }).syncEvents()
+        assertEquals(listOf(6), subidas)
+        assertTrue(com.jvillada.movi.shared.repository.CuotasPorSubir.todas(db, testUserId).isEmpty())
+        Unit
+    }
+
     /** Y marcarlo mientras el POST viaja no sella la fila con la marca vieja. */
     @Test
     fun syncEvents_no_sella_si_la_marca_de_no_se_repite_cambio_en_vuelo() = runBlocking {

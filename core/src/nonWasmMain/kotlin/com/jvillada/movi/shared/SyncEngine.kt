@@ -294,6 +294,37 @@ class SyncEngine(
                 logSyncFailure("syncEvents", e, id = row.id)
             }
         }
+        subirLasCuotasQueQuedaron()
+    }
+
+    /**
+     * Revisión 2 de la vuelta 133 · **las cuotas que cambiaron mientras su movimiento subía.** El `POST`
+     * sale con las cuotas de la foto; si el dueño las cambia en el detalle mientras viaja, la fila igual
+     * queda sellada (las cuotas no tienen columna local que `markSyncedIfUnchanged` pueda comparar) y el
+     * valor nuevo quedaba en [CuotasPorSubir] para siempre. Acá, cada vuelta, lo que siga esperando de
+     * una fila **ya sellada** sube por `PUT /api/events/{id}/cuotas` y se olvida si llegó. Sin red se
+     * queda para la vuelta siguiente; un rechazo (404 de un movimiento que ya no está, 400/422) se olvida,
+     * porque reintentarlo no lo arregla.
+     */
+    internal suspend fun subirLasCuotasQueQuedaron() {
+        val uid = userId()
+        val quedan = CuotasPorSubir.todas(db, uid)
+        if (quedan.isEmpty()) return
+        for ((id, cuotas) in quedan) {
+            val fila = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull() ?: continue
+            if (fila.syncedAt == null) continue // todavía no subió: va en su `POST`.
+            try {
+                remote.updateEventCuotas(id, cuotas)
+                CuotasPorSubir.olvidarSiSigueSiendo(db, uid, id, cuotas)
+            } catch (e: ApiException) {
+                logSyncFailure("subirLasCuotasQueQuedaron", e, id = id)
+                if (e.status in 400..499 && e.status != 401 && e.status != 408 && e.status != 429) {
+                    CuotasPorSubir.olvidarSiSigueSiendo(db, uid, id, cuotas)
+                }
+            } catch (e: Exception) {
+                logSyncFailure("subirLasCuotasQueQuedaron", e, id = id)
+            }
+        }
     }
 
     /**

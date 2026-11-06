@@ -42,8 +42,9 @@ internal object CuotasPorSubir {
 
     /**
      * Revisión de la vuelta 133 · ya subió **ese valor**: se olvida solo si no cambió mientras el `POST`
-     * viajaba (el detalle puede cambiar las cuotas de un movimiento pendiente). Si cambió, se queda y la
-     * próxima vuelta lo sube.
+     * viajaba (el detalle puede cambiar las cuotas de un movimiento pendiente). Si cambió, se queda y
+     * `SyncEngine.subirLasCuotasQueQuedaron` lo sube con `PUT /api/events/{id}/cuotas` en la misma vuelta
+     * (o en la siguiente, sin red).
      */
     fun olvidarSiSigueSiendo(db: MoviDatabase, uid: String, eventoId: String, subido: Int) {
         val antes = todas(db, uid)
