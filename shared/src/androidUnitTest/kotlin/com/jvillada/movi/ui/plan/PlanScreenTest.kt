@@ -6,8 +6,6 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import com.jvillada.movi.ui.components.NO_PUDIMOS_CARGAR
 import com.jvillada.movi.ui.components.TAG_AVISO_DE_LA_PANTALLA
-import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isHeading
 import com.jvillada.movi.ui.components.TAG_BARRA_DE_PESTANAS
 import com.jvillada.movi.ui.components.TAG_RAIL_DE_NAVEGACION
@@ -187,8 +185,17 @@ class PlanScreenTest {
         }
         override suspend fun getBudgets(): List<Budget> =
             if (sinPresupuestosDePrueba) emptyList() else listOf(Budget("Comida", 1_000_000L))
-        override suspend fun getEventsByDay(): List<EventDay> = emptyList()
+        override suspend fun getEventsByDay(): List<EventDay> {
+            puertaDeLosGastos?.await()
+            return gastos
+        }
+        override suspend fun getAccounts(): List<com.jvillada.movi.shared.model.Account> = cuentas
     }
+
+    /** Revisión de la 136 (M4): los movimientos del tablero llegan después (los gastos que se parecen a la cuota). */
+    private var gastos: List<EventDay> = emptyList()
+    private var puertaDeLosGastos: CompletableDeferred<Unit>? = null
+    private var cuentas: List<com.jvillada.movi.shared.model.Account> = emptyList()
 
     @Before
     fun preparar() {
@@ -324,6 +331,54 @@ class PlanScreenTest {
         assertEquals<List<Triple<String, String, String?>>>(listOf(Triple("rr_arriendo", hoy.toString().take(7), "ev_arriendo")), sellos)
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("Pagado", substring = true) }
         assertTrue(!hay("¿Ya pagaste", substring = true), "la pregunta se fue: ya está sellado")
+    }
+
+    /**
+     * Revisión de la vuelta 136 (M4): al llegar un gasto que se parece a la cuota, el botón de «Lo más urgente»
+     * pasa de «Anotar pago» a «¿Es el de $980.000?», y la tarjeta «Falta por pagar» no salta (≤ 8 dp): el botón
+     * va siempre en su propio renglón. Antes, en un `FlowRow` con el nombre, podía bajar de renglón.
+     */
+    @Test
+    fun `Falta por pagar no salta al llegar el gasto que se parece a la cuota`() {
+        val hoy = Clock.System.todayIn(TimeZone.of("America/Bogota"))
+        val credito = com.jvillada.movi.shared.model.Account("veh", "Vehículo 4083", com.jvillada.movi.shared.model.AccountType.LOAN, -40_000_000L)
+        cuentas = listOf(credito)
+        val cuota = RecurringRule(
+            id = "credit_veh", name = "Cuota Vehículo 4083", category = "Cuota de crédito",
+            amount = 980_000L, dayOfMonth = hoy.dayOfMonth, type = TransactionType.EXPENSE,
+        )
+        pagos = listOf(UpcomingPayment(rule = cuota, dueDate = hoy.toString(), daysUntil = 0, status = PaymentStatus.DUE_TODAY))
+        ocurrencias = emptyList()
+        gastos = listOf(
+            EventDay(
+                date = hoy.toString(), total = -980_000L,
+                items = listOf(
+                    FinancialEvent(
+                        id = "ev-980", accountId = "acc-banco", type = TransactionType.EXPENSE, amount = 980_000L,
+                        category = "Otros", description = "Banco de Occidente", source = EventSource.MANUAL,
+                        timestamp = Clock.System.now().toEpochMilliseconds(),
+                    ),
+                ),
+            ),
+        )
+        puertaDeLosGastos = CompletableDeferred()
+        puerta.complete(Unit)
+        montar()
+
+        fun tarjeta() = composeRule.onNodeWithTag(com.jvillada.movi.ui.recurrentes.TAG_TARJETA_FALTA_POR_PAGAR, useUnmergedTree = true)
+        fun boton() = composeRule.onNodeWithTag(com.jvillada.movi.ui.recurrentes.TAG_ACCION_DE_LO_MAS_URGENTE, useUnmergedTree = true)
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag(com.jvillada.movi.ui.recurrentes.TAG_ACCION_DE_LO_MAS_URGENTE, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(hay(com.jvillada.movi.ui.recurrentes.ETIQUETA_ANOTAR), "antes de los gastos, «Anotar pago»")
+        val antes = tarjeta().getUnclippedBoundsInRoot()
+
+        puertaDeLosGastos?.complete(Unit)
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay("¿Es el de \$980.000?") }
+        val despues = tarjeta().getUnclippedBoundsInRoot()
+        boton().assertExists()
+        val salto = abs((despues.bottom - despues.top).value - (antes.bottom - antes.top).value)
+        assertTrue(salto <= 8f, "«Falta por pagar» cambió ${salto} dp de alto al llegar los gastos; el máximo son 8")
     }
 
     /**

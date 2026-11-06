@@ -303,38 +303,32 @@ internal fun TarjetaFaltaPorPagar(
 }
 
 /**
- * Vuelta 136 · **lo más urgente, con su acción**, al pie de «Falta por pagar»: «Lo más urgente: Arriendo» a la
- * izquierda y el botón a la derecha. Con la letra grande, si no caben juntos, el botón baja.
+ * Vuelta 136 · **lo más urgente, con su acción**, al pie de «Falta por pagar»: «Lo más urgente: Arriendo» y,
+ * **siempre en su propio renglón**, el botón (revisión, M4: al llegar un gasto que se parece a la cuota el rótulo
+ * cambia de «Anotar pago» a «¿Es el de $980.000?», y en un renglón compartido el botón podía bajar: la tarjeta
+ * saltaba).
  */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun RenglonDeLoMasUrgente(urgente: LoMasUrgente) {
-    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_LO_MAS_URGENTE)) {
-        Separador(SangriaDeSeparador.Ninguna, modifier = Modifier.padding(vertical = Espacio.xs))
-        androidx.compose.foundation.layout.FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Espacio.s),
-            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) {
-            // Un renglón, «Lo más urgente: Arriendo» (el nombre en negrita): el estado ya lo dice su fila,
-            // que va primera en la lista.
-            Text(
-                textoDeLoMasUrgente(urgente.nombre),
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).align(Alignment.CenterVertically),
-            )
-            Boton(
-                urgente.boton,
-                onClick = urgente.onClick,
-                variante = if (urgente.principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
-                tamano = TamanoDeBoton.S,
-                habilitado = urgente.habilitado,
-                modifier = Modifier.align(Alignment.CenterVertically).testTag(TAG_ACCION_DE_LO_MAS_URGENTE),
-            )
-        }
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_LO_MAS_URGENTE), verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+        Separador(SangriaDeSeparador.Ninguna, modifier = Modifier.padding(top = Espacio.xs))
+        // Un renglón, «Lo más urgente: Arriendo» (el nombre en negrita): el estado ya lo dice su fila,
+        // que va primera en la lista.
+        Text(
+            textoDeLoMasUrgente(urgente.nombre),
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Boton(
+            urgente.boton,
+            onClick = urgente.onClick,
+            variante = if (urgente.principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
+            tamano = TamanoDeBoton.S,
+            habilitado = urgente.habilitado,
+            modifier = Modifier.testTag(TAG_ACCION_DE_LO_MAS_URGENTE),
+        )
     }
 }
 
