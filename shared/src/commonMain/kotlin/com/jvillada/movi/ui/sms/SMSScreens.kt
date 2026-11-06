@@ -762,7 +762,9 @@ internal fun TarjetaDeMensajeDelBanco(
     titulo: String? = null,
 ) {
     val apartado = loApartoMovi(sms)
-    var eligiendoLaCategoria by remember(sms.id) { mutableStateOf(eligeLaCategoria?.delNumero != null) }
+    // `null` = no lo tocó: abre sola cuando llega la línea del número (llega después de la primera composición).
+    var eligiendoLaCategoria by remember(sms.id) { mutableStateOf<Boolean?>(null) }
+    val abiertas = eligiendoLaCategoria ?: (eligeLaCategoria?.delNumero != null)
     val pendiente = sms.state == SMS_STATE_PENDING
     val estado = when {
         apartado -> "Apartado" to TonoDePildora.Neutra
@@ -777,7 +779,7 @@ internal fun TarjetaDeMensajeDelBanco(
     val pideLaCategoria = pendiente && !confirmable && eligeLaCategoria != null
     // Vuelta 51: «Cambiar» de un aviso entendido abre las pastillas acá mismo, como «Elegir categoría».
     val cambiaEnLaTarjeta = confirmable && eligeLaCategoria != null
-    val pastillasAbiertas = eligiendoLaCategoria && eligeLaCategoria != null && (pideLaCategoria || cambiaEnLaTarjeta)
+    val pastillasAbiertas = abiertas && eligeLaCategoria != null && (pideLaCategoria || cambiaEnLaTarjeta)
     // Vuelta de diseño 2: la cabeza se lee primero —el comercio (o lo que Movi entendió) con su
     // marca, el monto a la derecha y «banco · hora» debajo—; el texto del banco va después, apagado.
     // Sin comercio, el banco y su marca (o el ícono de los avisos). Ver [cabezaDelAviso].
@@ -809,9 +811,9 @@ internal fun TarjetaDeMensajeDelBanco(
                         // Vuelta 51: «Cambiar» abre las pastillas en la tarjeta y pasa a «Cerrar»; Revisar
                         // aviso queda en «Más cambios ›», debajo de ellas.
                         PastillaDelPago(
-                            if (eligiendoLaCategoria) CERRAR_LAS_CATEGORIAS else CAMBIAR_EN_LA_FILA,
+                            if (abiertas) CERRAR_LAS_CATEGORIAS else CAMBIAR_EN_LA_FILA,
                             habilitada = !trabajando,
-                            onClick = { eligiendoLaCategoria = !eligiendoLaCategoria },
+                            onClick = { eligiendoLaCategoria = !abiertas },
                             modifier = Modifier.testTag(TAG_CAMBIAR_EN_LA_FILA),
                         )
                     } else {
@@ -827,10 +829,10 @@ internal fun TarjetaDeMensajeDelBanco(
                     // acción —como «Cambiar» → «Cerrar» en Revisar aviso—: lo que se espera ahora es
                     // tocar una pastilla.
                     PastillaDelPago(
-                        if (eligiendoLaCategoria) CERRAR_LAS_CATEGORIAS else ELEGIR_CATEGORIA,
-                        principal = !eligiendoLaCategoria,
+                        if (abiertas) CERRAR_LAS_CATEGORIAS else ELEGIR_CATEGORIA,
+                        principal = !abiertas,
                         habilitada = !trabajando,
-                        onClick = { eligiendoLaCategoria = !eligiendoLaCategoria },
+                        onClick = { eligiendoLaCategoria = !abiertas },
                         modifier = Modifier.testTag(TAG_ELEGIR_CATEGORIA_EN_LA_FILA),
                     )
                     PastillaDelPago("Revisar", habilitada = !trabajando, onClick = onRevisar)
@@ -1219,7 +1221,7 @@ fun SMSReconcileScreen(
      * Ola L: el orden ya no es alfabético —con `take(10)`, «Hija» y «Fútbol» quedaban fuera del
      * corte— y lo que no cabe en la fila está en «Cambiar» (el selector completo, que también crea).
      */
-    val delNumero = parsed?.categoriasDelNumero.orEmpty().takeIf { it.size >= 2 }.orEmpty()
+    val delNumero = lasDelNumero(parsed?.categoriasDelNumero.orEmpty())
     val explicacionDelNumero = lineaDelNumero(delNumero, parsed?.identificadorEsLlave == true)
     val pastillasAbiertas = eligiendoCategoria ?: delNumero.isNotEmpty()
     val categoryOptions: List<String> = primeroLasDelNumero(delNumero, categoriasParaElegirEnElSms(

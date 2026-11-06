@@ -43,4 +43,19 @@ class LasCategoriasDelNumeroTest {
             listOf("Parqueadero", "Gasolina", "Comida", "Mercado"),
             primeroLasDelNumero(listOf(c("Parqueadero", 3), c("Gasolina", 2)), listOf("Comida", "Gasolina", "Mercado")),
         )
+
+    @Test
+    fun `las que ningun selector ofrece no entran ni a la linea ni a las pastillas`() {
+        val todas = listOf(c("Avance de tarjeta", 4), c("Parqueadero", 3), c("Gasolina", 2))
+        assertEquals("A esta llave le pusiste Parqueadero 3 veces y Gasolina 2", lineaDelNumero(todas, true))
+        assertEquals(listOf("Parqueadero", "Gasolina", "Comida"), primeroLasDelNumero(todas, listOf("Comida")))
+    }
+
+    @Test
+    fun `si al filtrar queda una sola no hay linea y no cambia nada`() {
+        val todas = listOf(c("Descuento de nómina", 4), c("Parqueadero", 3))
+        assertNull(lineaDelNumero(todas, true))
+        assertEquals(listOf("Comida"), primeroLasDelNumero(todas, listOf("Comida")))
+        assertEquals(emptyList(), lasDelNumero(todas))
+    }
 }

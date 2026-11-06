@@ -111,6 +111,9 @@ import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.quickadd.categoriasParaLasPastillasDeAgregar
 import com.jvillada.movi.ui.sms.EligeLaCategoria
 import com.jvillada.movi.ui.sms.categoriasDeLaTarjeta
+import com.jvillada.movi.ui.sms.lasDelNumero
+import com.jvillada.movi.ui.sms.lineaDelNumero
+import com.jvillada.movi.ui.sms.primeroLasDelNumero
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.ui.transactions.HojaDeConfirmarLosAvisos
 import com.jvillada.movi.ui.transactions.TarjetaDeAvisosDelBanco
@@ -455,8 +458,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         val leido = propuestaDelPago(propuestas, cabeza)?.leido
         val tipo = leido?.type ?: com.jvillada.movi.shared.model.TransactionType.EXPENSE
         val actual = entendimiento.anotacion?.categoria
-        val delNumero = leido?.categoriasDelNumero.orEmpty()
-        val frecuentes = com.jvillada.movi.ui.sms.primeroLasDelNumero(delNumero, categoriasDeLaTarjeta(
+        val delNumero = lasDelNumero(leido?.categoriasDelNumero.orEmpty())
+        val frecuentes = primeroLasDelNumero(delNumero, categoriasDeLaTarjeta(
             frecuentes = categoriasParaLasPastillasDeAgregar(
                 categoriaActual = elegida ?: actual.orEmpty(),
                 tipo = tipo,
@@ -467,7 +470,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
             delDueno = propuestas?.categoriasDelDueno.orEmpty(),
         ))
         return EligeLaCategoria(
-            delNumero = com.jvillada.movi.ui.sms.lineaDelNumero(delNumero, leido?.identificadorEsLlave == true),
+            delNumero = lineaDelNumero(delNumero, leido?.identificadorEsLlave == true),
             categorias = frecuentes,
             elegida = elegida,
             onElegir = { categoriasElegidasAca = categoriasElegidasAca + (cabeza.id to it) },

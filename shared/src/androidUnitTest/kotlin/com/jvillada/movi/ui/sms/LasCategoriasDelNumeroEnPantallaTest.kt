@@ -2,6 +2,12 @@ package com.jvillada.movi.ui.sms
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CompletableDeferred
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -67,18 +73,18 @@ class LasCategoriasDelNumeroEnPantallaTest {
         identificadorEsLlave = true,
     )
 
-    private fun montar(delNumero: List<CategoriaDelNumero>, escala: Float = 1.12f) {
+    private fun montar(delNumero: List<CategoriaDelNumero>, escala: Float = 1.12f, puerta: CompletableDeferred<Unit>? = null, alto: androidx.compose.ui.unit.Dp? = null) {
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getAccounts(): List<Account> = listOf(ahorros)
             override suspend fun getSms(id: String): SmsMessage = aviso
-            override suspend fun parseSms(id: String): ParsedSms = lectura(delNumero)
+            override suspend fun parseSms(id: String): ParsedSms { puerta?.await(); return lectura(delNumero) }
             override suspend fun getSmsCoincidencias(id: String): List<FinancialEvent> = emptyList()
         }
         composeRule.setContent {
             val base = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * escala)) {
                 MoviTheme {
-                    Box(Modifier.fillMaxSize()) { SMSReconcileScreen(onNavigate = {}, smsId = aviso.id) }
+                    Box(if (alto != null) Modifier.fillMaxWidth().height(alto) else Modifier.fillMaxSize()) { SMSReconcileScreen(onNavigate = {}, smsId = aviso.id) }
                 }
             }
         }
@@ -87,21 +93,25 @@ class LasCategoriasDelNumeroEnPantallaTest {
 
     private val dos = listOf(CategoriaDelNumero("Parqueadero", 3), CategoriaDelNumero("Gasolina", 2))
 
-    private fun pastillas() = composeRule.onAllNodes(
-        androidx.compose.ui.test.hasTestTag(tagDePastillaDeCategoriaDelSms("Parqueadero")) or
-            androidx.compose.ui.test.hasTestTag(tagDePastillaDeCategoriaDelSms("Gasolina")),
-    ).fetchSemanticsNodes()
+    private fun pastillasEnOrden(): List<String> {
+        fun recorrer(n: androidx.compose.ui.semantics.SemanticsNode): List<String> =
+            n.children.flatMap { c ->
+                val tag: String? = c.config.getOrNull(SemanticsProperties.TestTag)
+                (if (tag != null && tag.startsWith("sms:pastilla:")) listOf<String>(tag) else emptyList<String>()) + recorrer(c)
+            }
+        val raiz = composeRule.onAllNodes(androidx.compose.ui.test.hasTestTag(TAG_PASTILLAS_DE_CATEGORIA_DEL_SMS), useUnmergedTree = true).fetchSemanticsNodes()
+        return raiz.firstOrNull()?.let(::recorrer).orEmpty()
+    }
 
     @Test
     fun `las pastillas arrancan abiertas con las del numero primero`() {
         montar(dos)
-        val nodos = composeRule.onAllNodes(
-            androidx.compose.ui.test.hasTestTag(tagDePastillaDeCategoriaDelSms("Parqueadero")) or
-                androidx.compose.ui.test.hasTestTag(tagDePastillaDeCategoriaDelSms("Gasolina")),
-        ).fetchSemanticsNodes()
-        assertEquals(2, nodos.size, "las dos pastillas del número a la vista sin tocar «Cambiar»")
-        val orden = nodos.map { it.config[androidx.compose.ui.semantics.SemanticsProperties.TestTag] }
-        assertEquals(listOf(tagDePastillaDeCategoriaDelSms("Parqueadero"), tagDePastillaDeCategoriaDelSms("Gasolina")), orden, "las del número, en su orden y primero")
+        val pastillas = pastillasEnOrden().filterNot { it == TAG_PASTILLA_NUEVA_CATEGORIA || it == TAG_PASTILLA_TODAS_LAS_CATEGORIAS_DEL_SMS }
+        assertEquals(
+            listOf(tagDePastillaDeCategoriaDelSms("Parqueadero"), tagDePastillaDeCategoriaDelSms("Gasolina")),
+            pastillas.take(2),
+            "las del número son las dos primeras de toda la lista: $pastillas",
+        )
         assertTrue(composeRule.onAllNodesWithText("Cerrar").fetchSemanticsNodes().isNotEmpty(), "la fila dice «Cerrar»")
     }
 
@@ -137,18 +147,22 @@ class LasCategoriasDelNumeroEnPantallaTest {
         montar(listOf(CategoriaDelNumero("Parqueadero", 3)))
         assertTrue(composeRule.onAllNodesWithText("Cerrar").fetchSemanticsNodes().isEmpty(), "las pastillas siguen cerradas")
         assertTrue(composeRule.onAllNodes(androidx.compose.ui.test.hasTestTag(TAG_LINEA_DEL_NUMERO), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
-        assertTrue(pastillas().isEmpty())
+        assertTrue(pastillasEnOrden().isEmpty())
     }
 
     @Test
-    fun `nada salta despues de llegar la lectura`() {
-        montar(dos)
-        val y0 = composeRule.onNodeWithTag(TAG_LISTA_DE_REVISAR_AVISO).fetchSemanticsNode().boundsInRoot.top
-        val antes = composeRule.onAllNodesWithText("Ignorar").fetchSemanticsNodes().first().boundsInRoot.top
-        composeRule.mainClock.advanceTimeBy(500)
+    fun `nada salta al llegar la lectura`() {
+        val puerta = CompletableDeferred<Unit>()
+        // 540 dp: las pastillas quedan en la lista pero bajo el pliegue (más bajo, ni se componen y la prueba no vería el desplazamiento).
+        montar(dos, puerta = puerta, alto = 540.dp)
+        val cabeza = { composeRule.onAllNodesWithText("Bancolombia", substring = true).fetchSemanticsNodes().first().boundsInRoot.top }
+        val lista = { composeRule.onNodeWithTag(TAG_LISTA_DE_REVISAR_AVISO).fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value() }
+        val antes = cabeza()
+        assertEquals(0f, lista(), "la lista arranca arriba")
+        puerta.complete(Unit)
         composeRule.waitForIdle()
-        val despues = composeRule.onAllNodesWithText("Ignorar").fetchSemanticsNodes().first().boundsInRoot.top
+        assertEquals(0f, lista(), "la lista no se desplazó sola al llegar la lectura")
         val d = composeRule.density.density
-        assertTrue(kotlin.math.abs(despues - antes) <= 8f * d, "la barra de abajo no se mueve: $antes → $despues (y0=$y0)")
+        assertTrue(kotlin.math.abs(cabeza() - antes) <= 8f * d, "lo de arriba no se mueve: $antes → ${cabeza()}")
     }
 }
