@@ -6,6 +6,19 @@ import com.jvillada.movi.server.db.LlamadasDelConector
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.routes.accountRoutes
+import com.jvillada.movi.server.routes.cajaRoutes
+import com.jvillada.movi.server.routes.cardRoutes
+import com.jvillada.movi.server.routes.creditRoutes
+import com.jvillada.movi.shared.model.CardSummary
+import com.jvillada.movi.shared.model.CreditSummary
+import com.jvillada.movi.shared.model.GastoDelDiaADia
+import com.jvillada.movi.shared.model.cajaHastaQueTePaguen
+import com.jvillada.movi.shared.model.cuotaDeEsteMes
+import com.jvillada.movi.shared.model.mesDeLaPrimeraCuota
+import com.jvillada.movi.shared.model.mesDeLaUltimaCuota
+import com.jvillada.movi.shared.model.periodoSiguiente
+import com.jvillada.movi.shared.model.planDelCredito
+import com.jvillada.movi.shared.model.valorEnPesosDe
 import com.jvillada.movi.server.routes.dashboardRoutes
 import com.jvillada.movi.server.routes.reminderRoutes
 import com.jvillada.movi.server.time.AppClock
@@ -338,6 +351,100 @@ class ConectorMcpTest {
         val caja = with(c) { herramienta(acceso, "caja_hasta_que_te_paguen") }
         assertTrue(caja["dias"]!!.jsonArray.isNotEmpty())
         assertEquals("COP", caja["moneda"]!!.jsonPrimitive.content)
+    }
+
+    // ── M9 · créditos y caja: las cifras de la app ─────────────────────────────────────────────
+
+    private suspend fun ApplicationTestBuilder.crear(ruta: String, cuerpo: String) {
+        val res = client.post(ruta) {
+            with(c.a) { como(c.a.duenoA) }
+            contentType(ContentType.Application.Json)
+            setBody(cuerpo)
+        }
+        assertTrue(res.status.value in 200..299, "$ruta: ${res.bodyAsText()}")
+    }
+
+    @Test
+    fun `creditos dice lo que la app calcula con api credits y api cards`() = testApplication {
+        with(c) { montar { creditRoutes(); cardRoutes() } }
+        val hoy = AppClock.today()
+        crear(
+            "/api/credits",
+            """{"name":"Vehículo 4083","initialDebt":48000000,"terms":{"accountId":"","bank":"Bancolombia","principal":60000000,"rateEa":17.46,"termMonths":60,"installment":1500000,"dayOfMonth":15,"startDate":"${hoy.minusMonths(14)}"}}""",
+        )
+        crear(
+            "/api/cards",
+            """{"name":"Master Black 3684","initialDebt":2500000,"terms":{"accountId":"","bank":"Bancolombia","creditLimit":10000000,"cutoffDay":20,"paymentDay":5,"pagoMinimo":250000,"tasaEa":28.5}}""",
+        )
+        val creditosDeLaApp = c.json.decodeFromString(ListSerializer(CreditSummary.serializer()), get(c.a.duenoA, "/api/credits"))
+        val tarjetasDeLaApp = c.json.decodeFromString(ListSerializer(CardSummary.serializer()), get(c.a.duenoA, "/api/cards"))
+        val dia = kotlinx.datetime.LocalDate.parse(hoy.toString())
+
+        val (acceso, _) = with(c) { conectar() }
+        val r = with(c) { herramienta(acceso, "creditos") }
+        val credito = r["creditos"]!!.jsonArray.single().jsonObject
+        val app = creditosDeLaApp.single()
+        val plan = assertNotNull(planDelCredito(app, dia))
+        assertEquals(valorEnPesosDe(app.account), credito["debes"]!!.jsonPrimitive.long)
+        assertEquals(48_000_000L, credito["debes"]!!.jsonPrimitive.long)
+        assertEquals(cuotaDeEsteMes(app.terms!!, app.ultimaCuotaPagada), credito["cuota"]!!.jsonPrimitive.long)
+        assertEquals(plan.mesesHastaLaUltimaCuota?.toLong(), credito["cuotasQueFaltan"]?.jsonPrimitive?.longOrNull)
+        assertEquals(plan.interes, credito["interesDelMes"]!!.jsonPrimitive.long)
+        val ultima = mesDeLaUltimaCuota(assertNotNull(mesDeLaPrimeraCuota(app, dia)), plan.mesesHastaLaUltimaCuota!!)
+        assertEquals("${ultima.year}-" + ultima.month.toString().padStart(2, '0'), credito["ultimaCuota"]!!.jsonPrimitive.content)
+        assertEquals("Vehículo 4083", credito["nombre"]!!.jsonPrimitive.content)
+
+        val tarjeta = r["tarjetas"]!!.jsonArray.single().jsonObject
+        val appTarjeta = tarjetasDeLaApp.single()
+        assertEquals(appTarjeta.account.balance, tarjeta["debes"]!!.jsonPrimitive.long)
+        assertEquals(2_500_000L, tarjeta["debes"]!!.jsonPrimitive.long)
+        assertEquals(appTarjeta.available, tarjeta["disponible"]?.jsonPrimitive?.longOrNull)
+        assertEquals(250_000L, tarjeta["pagoMinimo"]!!.jsonPrimitive.long)
+        val extracto = assertNotNull(appTarjeta.extracto)
+        val suyo = tarjeta["extracto"]!!.jsonObject
+        assertEquals(extracto.facturado, suyo["facturado"]!!.jsonPrimitive.long)
+        assertEquals(extracto.fechaDePago, suyo["fechaDePago"]!!.jsonPrimitive.content)
+        assertEquals(extracto.corte, suyo["corte"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `caja hasta que te paguen dice lo que la app calcula con sus rutas`() = testApplication {
+        with(c) { montar { dashboardRoutes(); reminderRoutes(); accountRoutes(); cajaRoutes() } }
+        val hoy = AppClock.today()
+        periodoDeA(hoy)
+        val resumen = c.json.decodeFromString(DashboardSummary.serializer(), get(c.a.duenoA, "/api/dashboard/summary"))
+        val upcoming = c.json.decodeFromString(ListSerializer(UpcomingPayment.serializer()), get(c.a.duenoA, "/api/payments/upcoming"))
+        val ocurrencias = c.json.decodeFromString(ListSerializer(OccurrenceState.serializer()), get(c.a.duenoA, "/api/payments/occurrences"))
+        val cuentas = c.json.decodeFromString(ListSerializer(Account.serializer()), get(c.a.duenoA, "/api/accounts"))
+        val gasto = c.json.decodeFromString(GastoDelDiaADia.serializer(), get(c.a.duenoA, "/api/caja-proyectada/gasto-del-dia-a-dia"))
+        // `cajaDelPeriodoDe` de la app (ui/plan/CajaDelPeriodo.kt), con lo que le contestan sus rutas.
+        val ajustes = PeriodSettings()
+        val periodo = periodoDe(appDateToEpochMillis(hoy) + 12 * 3_600_000L, ajustes)
+        val p = com.jvillada.movi.shared.model.patrimonioDe(cuentas)
+        val esperada = assertNotNull(
+            cajaHastaQueTePaguen(
+                enLasCuentasHoy = p.tuPlata + p.apartado,
+                delPeriodo = checklistDelPeriodo(upcoming, ocurrencias, periodo, ajustes),
+                delSiguiente = checklistDelPeriodo(upcoming, ocurrencias, periodoSiguiente(periodo, ajustes), ajustes, conElSiguienteVencimiento = true),
+                gastoDiario = gasto.porDia,
+                hoy = hoy.toString(),
+                ultimoDiaDelPeriodo = epochMillisToAppDate(ventanaDe(periodo, ajustes).last).toString(),
+                ahorro = plataDelDisponibleDe(resumen)?.ahorroDelPeriodo ?: 0L,
+                conElPeriodoElegido = !ajustes.esMesDeCalendario,
+                apartadoFueraDe = { 0L },
+            ),
+        )
+        val (acceso, _) = with(c) { conectar() }
+        val r = with(c) { herramienta(acceso, "caja_hasta_que_te_paguen") }
+        assertEquals(esperada.tuPlataHoy, r["enLasCuentasHoy"]!!.jsonPrimitive.long)
+        assertEquals(esperada.libreHoy, r["libreHoy"]!!.jsonPrimitive.long)
+        assertEquals(esperada.dias.last().fecha, r["hasta"]!!.jsonPrimitive.content)
+        assertEquals(esperada.diaMasBajo.fecha, r["diaMasJusto"]!!.jsonObject["fecha"]!!.jsonPrimitive.content)
+        assertEquals(esperada.diaMasBajo.libre, r["diaMasJusto"]!!.jsonObject["libre"]!!.jsonPrimitive.long)
+        assertEquals(esperada.alCierre.saldo, r["alCierre"]!!.jsonObject["saldo"]!!.jsonPrimitive.long)
+        assertEquals(esperada.dias.size, r["dias"]!!.jsonArray.size)
+        // El arriendo de hoy sale en la caja.
+        assertTrue("Arriendo" in r.toString())
     }
 
     // ── Aislamiento, límite y registro ─────────────────────────────────────────────────────────
