@@ -106,6 +106,8 @@ fun Application.configureRouting() {
             cuadrePorAvisoRoutes()
             debitosAutomaticosRoutes()
             extractosPorSubirRoutes()
+            // Vuelta 132: «Tus seguros», lo que ya pagas en seguros (sin vender nada).
+            tusSegurosRoutes()
             periodosRoutes()
             cierreDelPeriodoRoutes()
             creditRoutes()

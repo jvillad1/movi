@@ -451,6 +451,22 @@ interface WalletRepository {
      */
     suspend fun getExtractosPorSubir(): List<com.jvillada.movi.shared.model.ExtractoPorSubir> = emptyList()
     /**
+     * Vuelta 132 · `GET /api/seguros`: los seguros que ya pagas, armados en cada lectura. [enLaPantalla]
+     * (`?pantalla=1`) lo pide la pantalla «Tus seguros», no la fila de Tú: deja el `SEGUROS_VISTOS` del día.
+     * Default vacío para los dobles de prueba.
+     */
+    suspend fun getSeguros(enLaPantalla: Boolean = false): com.jvillada.movi.shared.model.SegurosQuePagas =
+        com.jvillada.movi.shared.model.SegurosQuePagas()
+    /**
+     * `POST /api/seguros/si-es` o `/no-es`: «Sí, es un seguro» o «No es un seguro». Pide red. Devuelve el
+     * resultado nuevo (la pantalla no vuelve a leer); `null` en los dobles de prueba.
+     */
+    suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean): com.jvillada.movi.shared.model.SegurosQuePagas? = null
+    /** `POST /api/seguros/cada-cuanto`: «¿Cada cuánto lo pagas?» de un pago de una vez ([meses] 1 o 12). Pide red. */
+    suspend fun cadaCuantoSePagaElSeguro(clave: String, meses: Int): com.jvillada.movi.shared.model.SegurosQuePagas? = null
+    /** `POST /api/seguros/me-interesa`: «Me interesa que Movi me ayude con mis seguros». Pide red. */
+    suspend fun meInteresaLaAyudaConLosSeguros() {}
+    /**
      * `POST /api/cierre-del-periodo/actualizar` (vuelta 95): la foto del cierre de [periodo] se reemplaza
      * por el cálculo de hoy y vuelve el cierre nuevo; `null` (204) si ya no queda nada que contar; lanza
      * [com.jvillada.movi.shared.model.CierreYaNoSeActualiza] (404) si ya no es el último período cerrado.
