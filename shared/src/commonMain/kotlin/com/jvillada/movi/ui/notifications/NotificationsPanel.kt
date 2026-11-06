@@ -140,12 +140,16 @@ private fun AvisoDeLaCampana(row: NotificationRow, modifier: Modifier, onClick: 
     val (icono, tono) = iconoDelAviso(row.tipo)
     Fila(
         titulo = row.titulo,
+        // Revisión de la vuelta 134 (m-9): el título de un aviso nunca se corta, crece. Con un monto de millones y
+        // la flecha al lado, a 360 dp con la letra a ×1,456, «Cuota Libre inversión 9695 vence hoy» no cabía en
+        // dos renglones (tampoco la de una cuota fija: no era por «unos»). Lo mide `Vuelta134EnPantallaTest`.
+        lineasDelTitulo = Int.MAX_VALUE,
         subtitulo = row.subtitulo,
         lineasDelSubtitulo = row.lineasDelSubtitulo,
         inicio = { IconoEnCirculo(icono, tono = tono) },
         final = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                row.monto?.let { com.jvillada.movi.ui.components.ds.CifraEstimada(it, row.montoEstimado, moneda = row.moneda) }
+                row.monto?.let { com.jvillada.movi.ui.components.ds.CifraEstimada(it, row.montoEstimado, moneda = row.moneda, apilado = true) }
                 Chevron()
             }
         },

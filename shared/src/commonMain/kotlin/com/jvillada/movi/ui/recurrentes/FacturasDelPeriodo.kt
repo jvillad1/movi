@@ -202,9 +202,6 @@ fun lineaDelMinimo(pago: PagoDelPeriodo): String? {
 /** El tag de esa línea. */
 const val TAG_FALTA_DEL_MINIMO: String = "pagos:falta-del-minimo"
 
-/** Vuelta 133 · lo que va antes del monto de una cuota que cambia: es una estimación. */
-const val ROTULO_DE_LA_CUOTA_ESTIMADA: String = com.jvillada.movi.shared.model.UNOS
-
 /** Vuelta 133 · el tag de «La de octubre fue $Y» en la fila. */
 const val TAG_CUOTA_ANTERIOR_DE_LA_FILA: String = "pagos:cuota-anterior"
 
@@ -415,11 +412,7 @@ internal fun FilaDeFactura(
                             // Vuelta 134: con la regla única, la misma de «Próximo pago», el widget y la campana; y en
                             // un renglón que se parte: a 360 dp con la letra a ×1,456 la cifra baja entera debajo de
                             // «unos» en vez de salirse de su caja.
-                            androidx.compose.foundation.layout.FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
-                                itemVerticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(ROTULO_DE_LA_CUOTA_ESTIMADA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                            com.jvillada.movi.ui.components.ds.ConUnos(estimada = true) {
                                 MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
                             }
                         } else {

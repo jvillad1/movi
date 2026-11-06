@@ -214,14 +214,63 @@ class Vuelta134EnPantallaTest {
     }
 
     @Test
-    fun `el widget Falta por pagar dice unos solo en la fila de la cuota que cambia`() {
-        montar(letraGrande = false) {
+    fun `el widget Falta por pagar dice unos solo en la fila de la cuota que cambia, y no se corta`() {
+        montar {
             CompositionLocalProvider(LocalCargandoElInicio provides false) {
                 Column { WidgetFaltaPorPagar(inicio(vence(cuotaQueCambia), vence(cuotaFija, dias = 3)), onNavigate = {}) }
             }
         }
         val widget = conTag(TAG_WIDGET_FALTA_POR_PAGAR).single()
         assertEquals(1, conTag(TAG_UNOS_DE_LA_CIFRA).size, todoElTexto(widget))
+        // Revisión de la vuelta 134 (m-9): a 360 dp con la letra a ×1,456.
+        nadaSeCorta("el widget «Falta por pagar»", listOf(widget))
+    }
+
+    /** Revisión de la vuelta 134 (m-9): la campana con «unos», a 360 dp con la letra a ×1,456. */
+    @Test
+    fun `la campana dice unos en la cuota que cambia y no se corta`() {
+        val filas = com.jvillada.movi.ui.dashboard.notificationRows(inicio(vence(cuotaQueCambia), vence(cuotaFija)))
+        montar { com.jvillada.movi.ui.notifications.NotificationsPanel(filas, onDismiss = {}, onRowClick = {}) }
+        esperarTag("${com.jvillada.movi.ui.notifications.TAG_AVISO_DE_LA_CAMPANA}:0")
+        assertEquals(1, conTag(TAG_UNOS_DE_LA_CIFRA).size, "solo la cuota que cambia")
+        val avisos = filas.indices.flatMap { conTag("${com.jvillada.movi.ui.notifications.TAG_AVISO_DE_LA_CAMPANA}:$it") }
+        nadaSeCorta("los avisos de la campana", avisos)
+    }
+
+    /** Revisión de la vuelta 134 (m-1): «Lo que viene» y el período siguiente también dicen «unos». */
+    @Test
+    fun `lo que viene dice unos en la cuota que cambia`() {
+        val cambia = com.jvillada.movi.shared.model.PagoDelPeriodo(
+            ruleId = cuotaQueCambia.id, nombre = cuotaQueCambia.name, monto = 1_262_300, pagado = false, diasParaVencer = 9,
+            cuotaQueCambia = LaCuotaQueCambia(octubre),
+        )
+        assertEquals("unos \$1.262.300", com.jvillada.movi.ui.plan.montoDeLoQueVence(cambia).first)
+        assertEquals("\$1.262.300", com.jvillada.movi.ui.plan.montoDeLoQueVence(cambia.copy(cuotaQueCambia = null)).first)
+    }
+
+    /** Revisión de la vuelta 134 (m-3): «Lo que paga otra persona» dice la cuota de este mes, con «unos». */
+    @Test
+    fun `lo que paga otra persona dice la cuota de este mes con unos`() {
+        val delPapa = CreditSummary(
+            account = Account("hip-papa", "Hipotecario del papá", AccountType.LOAN, balance = 90_000_000L),
+            terms = CreditTerms(
+                accountId = "hip-papa", bank = "Davivienda", principal = 120_000_000L, rateEa = 12.0, termMonths = 180,
+                installment = 1_200_000L, dayOfMonth = 5, startDate = "2020-01-10", paidBy = "Papá",
+                tipoDeCuota = TipoDeCuota.UVR,
+            ),
+            paidPct = 0.3,
+            ultimaCuotaPagada = octubre,
+        )
+        Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
+            override suspend fun getEspacios(): List<com.jvillada.movi.shared.model.Espacio> = emptyList()
+            override suspend fun getCredits(): List<CreditSummary> = listOf(delPapa)
+        }
+        montar { com.jvillada.movi.ui.espacios.EspaciosScreen(onNavigate = {}) }
+        esperarTag(com.jvillada.movi.ui.espacios.TAG_LO_QUE_PAGA_OTRA_PERSONA)
+        val seccion = conTag(com.jvillada.movi.ui.espacios.TAG_LO_QUE_PAGA_OTRA_PERSONA).single()
+        assertTrue("\$1.262.300" in todoElTexto(seccion), todoElTexto(seccion))
+        assertTrue("\$1.200.000" !in todoElTexto(seccion), "nunca la pactada: " + todoElTexto(seccion))
+        assertEquals(1, conTag(TAG_UNOS_DE_LA_CIFRA).size)
     }
 
     // ── M-9 · Pagos y la ficha a 360 dp con la letra a ×1,456 ──────────────
@@ -256,6 +305,11 @@ class Vuelta134EnPantallaTest {
         )
         montar { AccountDetailScreen(onNavigate = {}, accountId = prestamo.account.id, group = prestamo.account.type.group) }
         esperarTag(TAG_CUOTA_QUE_CAMBIA)
+        // Revisión de la vuelta 134 (m-2): la cifra de la fila «Cuota» también dice «unos» (la de este período,
+        // la de noviembre, todavía no se pagó: la última fue la de octubre).
+        val cifra = conTag(com.jvillada.movi.ui.credits.TAG_CIFRA_DE_LA_CUOTA_EN_LA_FICHA).single()
+        assertTrue("unos" in todoElTexto(cifra) && "\$1.262.300" in todoElTexto(cifra), todoElTexto(cifra))
+        nadaSeCorta("la fila «Cuota» de la ficha", listOf(cifra))
         val lineas = conTag(TAG_CUOTA_QUE_CAMBIA)
         assertTrue(lineas.size >= 3, lineas.joinToString(" | ") { texto(it) })
         nadaSeCorta("las líneas de la cuota que cambia", lineas)

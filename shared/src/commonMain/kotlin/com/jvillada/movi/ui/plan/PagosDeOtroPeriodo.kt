@@ -335,7 +335,13 @@ private fun FilaDeLoQueVence(pago: PagoDelPeriodo) {
 
 /** El monto de una fila de lo que vence y su dato secundario (puro, para las pruebas). */
 internal fun montoDeLoQueVence(pago: PagoDelPeriodo): Pair<String, String?> {
-    if (!pago.montoEsSaldo) return textoDelMontoDelChecklist(pago) to null
+    // Revisión de la vuelta 134 (m-1): la cuota de un crédito que cambia, con «unos», como en la fila de Pagos.
+    if (!pago.montoEsSaldo) {
+        return com.jvillada.movi.shared.model.conUnosSiEsEstimada(
+            textoDelMontoDelChecklist(pago),
+            com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago),
+        ) to null
+    }
     val deuda = "Deuda ${textoDelMontoDelChecklist(pago)}"
     val minimo = pago.pagoMinimo ?: return textoDelMontoDelChecklist(pago) to "Falta el pago mínimo: no suma"
     return "mínimo ${formatCOP(minimo)}" to deuda

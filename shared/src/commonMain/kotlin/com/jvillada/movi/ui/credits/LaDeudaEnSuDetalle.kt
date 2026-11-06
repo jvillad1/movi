@@ -181,6 +181,9 @@ fun rememberDeudaDelDetalle(accountId: String, tipo: AccountType?, reintento: In
     return deuda
 }
 
+/** Revisión de la vuelta 134: el tag de la cifra de la fila «Cuota» de la ficha del préstamo. */
+const val TAG_CIFRA_DE_LA_CUOTA_EN_LA_FICHA: String = "credito:cifra-de-la-cuota"
+
 /**
  * **La sección de la deuda en el detalle de su cuenta**: sus condiciones y sus acciones, cada una una
  * [Fila]. Nada si la deuda todavía no llegó.
@@ -340,7 +343,14 @@ private fun LoQueDiceElPrestamo(
         lineasDelSubtitulo = 2,
         inicio = { IconoEnCirculo(Icons.Rounded.Event, tono = TonoDeIcono.Neutro) },
         // Vuelta 133: la cuota de este mes, de la misma función que Pagos y «Te quedan».
-        final = { Cifra(com.jvillada.movi.shared.model.cuotaDeEsteMes(t, credit.ultimaCuotaPagada)) },
+        // Revisión de la vuelta 134 (m-2): estimada, con «unos» (pagada la de este período, la que salió).
+        final = {
+            com.jvillada.movi.ui.components.ds.CifraEstimada(
+                com.jvillada.movi.shared.model.cuotaDeEsteMes(t, credit.ultimaCuotaPagada),
+                estimada = laCuotaDeLaFichaEsEstimada(t, credit.ultimaCuotaPagada, periodoActual, ajustes),
+                modifier = Modifier.testTag(TAG_CIFRA_DE_LA_CUOTA_EN_LA_FICHA),
+            )
+        },
     )
     BajoLaFila {
         // Vuelta 133: una cuota que cambia dice por qué, que es una estimación y cuánto fue la última.

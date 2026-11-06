@@ -286,10 +286,9 @@ const val TAG_UNOS_DE_LA_CIFRA: String = "ds-cifra:unos"
 /**
  * Vuelta 134 · **una cifra que es una estimación se dice estimada**: con [estimada], «unos» en `apoyo`
  * delante de la [Cifra] —la cuota de un crédito que cambia, con la regla única
- * `laCifraDelPagoEsEstimada`—, como la fila de Pagos (vuelta 133). Sin [estimada], la [Cifra] tal cual,
- * sin nada alrededor: un pago de siempre no cambia ni un dp.
+ * `laCifraDelPagoEsEstimada`—. Sin [estimada], la [Cifra] tal cual, sin nada alrededor: un pago de siempre
+ * no cambia ni un dp. Ver [ConUnos], que es donde se arma.
  */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun CifraEstimada(
     monto: Long,
@@ -297,13 +296,45 @@ fun CifraEstimada(
     variante: VarianteDeCifra = VarianteDeCifra.Fila,
     modifier: Modifier = Modifier,
     moneda: String = "COP",
+    /** Ver [ConUnos]: «unos» encima de la cifra, para el final de una [Fila]. */
+    apilado: Boolean = false,
 ) {
     if (!estimada) {
         Cifra(monto, variante, modifier, moneda = moneda)
         return
     }
-    // Un renglón que se parte: a 360 dp con la letra grande, al lado de un botón, «unos» y la cifra no
-    // caben juntos y la cifra baja entera al renglón de abajo (nunca se corta ni se achica de más).
+    ConUnos(estimada = true, modifier = modifier, apilado = apilado) { Cifra(monto, variante, moneda = moneda) }
+}
+
+/**
+ * Revisión de la vuelta 134 (m-5) · **el único lugar de la app donde se arma «unos» + cifra.** [cifra] es la
+ * pieza del monto que use cada lugar ([Cifra], el monto de la fila de Pagos, la cifra de «Lo que más pesa»).
+ * Con [estimada], «unos» en `apoyo` y `textoMedio` delante, en un renglón que se parte (`FlowRow`): a 360 dp
+ * con la letra a ×1,456, al lado de un botón, la cifra baja entera al renglón de abajo en vez de achicarse de
+ * más o salirse de su caja. Sin [estimada], [cifra] tal cual ([modifier] solo envuelve el renglón con «unos»).
+ * Con [apilado], «unos» va encima de la cifra, alineado al final: en el final de una [Fila] (la campana) el
+ * renglón le quitaba al título el ancho que necesita. Los textos planos usan `conUnosSiEsEstimada` (`:core`),
+ * con la misma palabra.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun ConUnos(estimada: Boolean, modifier: Modifier = Modifier, apilado: Boolean = false, cifra: @Composable () -> Unit) {
+    if (!estimada) {
+        cifra()
+        return
+    }
+    if (apilado) {
+        androidx.compose.foundation.layout.Column(modifier = modifier, horizontalAlignment = Alignment.End) {
+            Text(
+                com.jvillada.movi.shared.model.UNOS,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.testTag(TAG_UNOS_DE_LA_CIFRA),
+            )
+            cifra()
+        }
+        return
+    }
     androidx.compose.foundation.layout.FlowRow(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
@@ -315,6 +346,6 @@ fun CifraEstimada(
             color = Movi.colores.textoMedio,
             modifier = Modifier.testTag(TAG_UNOS_DE_LA_CIFRA),
         )
-        Cifra(monto, variante, moneda = moneda)
+        cifra()
     }
 }

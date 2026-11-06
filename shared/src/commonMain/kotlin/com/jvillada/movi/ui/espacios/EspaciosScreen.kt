@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.espacios
 
+import com.jvillada.movi.shared.model.cuotaCambia
 import com.jvillada.movi.data.SessionManager
 import com.jvillada.movi.ui.components.ds.AvatarDeTercero
 import com.jvillada.movi.ui.components.ds.AvatarDelDueno
@@ -924,7 +925,15 @@ private fun ColumnScope.LoQuePagaOtraPersona(creditos: List<CreditSummary>) {
                     titulo = c.account.name,
                     subtitulo = "La paga $quien · cada mes",
                     inicio = { AvatarDeTercero(quien) },
-                    final = { Cifra(c.terms?.installment ?: 0L) },
+                    // Revisión de la vuelta 134 (m-3): la cuota de este mes (la de un crédito que cambia es la
+                    // última pagada, con «unos»), la misma de Pagos y la ficha; nunca `installment` a secas.
+                    final = {
+                        val t = c.terms
+                        com.jvillada.movi.ui.components.ds.CifraEstimada(
+                            t?.let { com.jvillada.movi.shared.model.cuotaDeEsteMes(it, c.ultimaCuotaPagada) } ?: 0L,
+                            estimada = t?.cuotaCambia() == true,
+                        )
+                    },
                 )
             }
         }
