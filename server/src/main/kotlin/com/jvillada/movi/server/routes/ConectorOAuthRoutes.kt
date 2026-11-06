@@ -273,8 +273,9 @@ private suspend fun ApplicationCall.canjear() {
     // N1 · la forma del cliente antes de usarlo como clave de nada.
     if (!clientIdConForma(clientId)) return errorDeToken("invalid_client", "cliente desconocido", HttpStatusCode.Unauthorized)
     p["resource"]?.let { if (it.trimEnd('/') != ConfigDelConector.urlDelMcp) return errorDeToken("invalid_target", "el recurso es ${ConfigDelConector.urlDelMcp}") }
-    // M3 y N1 · el balde del cliente y el de la concesión cuentan SOLO pedidos con una credencial que existe y es de
-    // ese cliente: un atacante sin un código o un refresco de verdad no puede llenar el balde de Claude.
+    // N1-bis · solo el balde de la concesión, y solo con una credencial vigente de ese cliente. No hay balde por cliente:
+    // con CIMD el `client_id` es el mismo para todos los usuarios de Claude, y un balde así es un interruptor que
+    // cualquiera con su propia cuenta apaga para todos.
     if (!permitirCredencial(p["code"] ?: p["refresh_token"], clientId, "token")) {
         return errorDeToken("slow_down", "demasiados pedidos para esta conexión; espera un minuto", HttpStatusCode.TooManyRequests)
     }
@@ -309,22 +310,20 @@ private suspend fun ApplicationCall.canjear() {
 private val jsonDelRegistro = Json { ignoreUnknownKeys = true }
 
 /**
- * `/oauth/token` y `/oauth/revoke`: pedidos por minuto por IP (o `/64`), por `client_id` (compartido por todos los
- * usuarios de Claude; solo cuenta credenciales que existen) y por concesión. Elegidos, no medidos.
+ * `/oauth/token` y `/oauth/revoke`: pedidos por minuto por IP (o `/64`) y por concesión. Elegidos, no medidos. No hay
+ * balde por cliente (N1-bis): ver [permitirCredencial].
  */
 internal const val LIMITE_DE_TOKEN_POR_IP = 120
-internal const val LIMITE_DE_TOKEN_POR_CLIENTE = 1_000
 internal const val LIMITE_DE_TOKEN_POR_CONCESION = 20
 
 /**
- * Los baldes de quien trae una credencial: si [credencial] existe y es de [clientId], cuenta contra el balde del
- * cliente y el de su concesión. Una credencial que no existe no cuenta en ninguno (la para el balde por IP).
+ * El balde de la concesión de [credencial], si es una credencial vigente de [clientId] (`credencialDe`). Una que no
+ * existe, ya se rotó, se revocó o venció no cuenta en ninguno: la para el balde por IP.
  */
 private suspend fun permitirCredencial(credencial: String?, clientId: String, ruta: String): Boolean {
     val dueno = credencial?.takeIf { it.length <= 200 }?.let { dbQuery { credencialDe(it) } } ?: return true
     if (dueno.second != clientId) return true
-    return limitadorDelConector.permitir("$ruta:cliente:$clientId", LIMITE_DE_TOKEN_POR_CLIENTE, 60_000L) &&
-        limitadorDelConector.permitir("$ruta:concesion:${dueno.first}", LIMITE_DE_TOKEN_POR_CONCESION, 60_000L)
+    return limitadorDelConector.permitir("$ruta:concesion:${dueno.first}", LIMITE_DE_TOKEN_POR_CONCESION, 60_000L)
 }
 
 

@@ -2,7 +2,6 @@ package com.jvillada.movi.server.conector
 
 import com.jvillada.movi.server.conector.AndamioDelConector.Companion.CIMD_DE_CLAUDE
 import com.jvillada.movi.server.conector.AndamioDelConector.Companion.RETORNO_DE_CLAUDE
-import com.jvillada.movi.server.routes.LIMITE_DE_TOKEN_POR_CLIENTE
 import com.jvillada.movi.server.routes.LIMITE_DE_TOKEN_POR_IP
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.header
@@ -51,12 +50,12 @@ class ElLimiteDelTokenTest {
     fun `mil canjes basura con el client_id de Claude no le cierran la puerta a nadie`() = testApplication {
         with(c) { montar() }
         val (_, refresco) = with(c) { conectar(c.correoDeB, c.contrasenaDeB) }
-        val antes = limitadorDelConector.llavesQueEmpiezanCon("token:cliente:")
-        repeat(LIMITE_DE_TOKEN_POR_CLIENTE + 1) { i ->
+        val antes = limitadorDelConector.llavesQueEmpiezanCon("token:concesion:")
+        repeat(1_001) { i ->
             val res = canjeDesde("10.${i / 65_536}.${(i / 256) % 256}.${i % 256}", CIMD_DE_CLAUDE, "mvc_c_" + "a".repeat(42) + (i % 10))
             assertEquals(HttpStatusCode.BadRequest, res.status, "pedido $i")
         }
-        assertEquals(antes, limitadorDelConector.llavesQueEmpiezanCon("token:cliente:"), "lo basura no creó baldes de cliente")
+        assertEquals(antes, limitadorDelConector.llavesQueEmpiezanCon("token:concesion:"), "lo basura no creó baldes")
         val res = with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to refresco, "client_id" to CIMD_DE_CLAUDE)) }
         assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
     }
@@ -69,7 +68,7 @@ class ElLimiteDelTokenTest {
             assertEquals(HttpStatusCode.Unauthorized, res.status)
             assertEquals("invalid_client", c.json.parseToJsonElement(res.bodyAsText()).jsonObject["error"]!!.jsonPrimitive.content)
         }
-        assertEquals(0, limitadorDelConector.llavesQueEmpiezanCon("token:cliente:"))
+        assertEquals(0, limitadorDelConector.llavesQueEmpiezanCon("token:concesion:"))
         assertTrue(limitadorDelConector.llaves() <= 200, "solo los baldes por IP: ${limitadorDelConector.llaves()}")
     }
 
@@ -82,5 +81,26 @@ class ElLimiteDelTokenTest {
         }
         assertEquals(HttpStatusCode.TooManyRequests, canjeDesde("2001:db8:aa:bb:ffff::9", CIMD_DE_CLAUDE, "mvc_c_" + "c".repeat(43)).status)
         assertEquals(HttpStatusCode.BadRequest, canjeDesde("2001:db8:aa:cc::1", CIMD_DE_CLAUDE, "mvc_c_" + "c".repeat(43)).status, "otro /64")
+    }
+
+    @Test
+    fun `un refresco real ya rotado, repetido desde muchas IP, no le cierra la puerta a otra conexion del mismo cliente`() = testApplication {
+        with(c) { montar() }
+        // El atacante tiene su propia cuenta (A): conecta, refresca una vez, y se queda con el refresco ya rotado.
+        val (_, r0) = with(c) { conectar() }
+        val rotado = with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to r0, "client_id" to CIMD_DE_CLAUDE)) }
+        assertEquals(HttpStatusCode.OK, rotado.status)
+        // La víctima (B), con el mismo client_id de Claude.
+        val (_, deB) = with(c) { conectar(c.correoDeB, c.contrasenaDeB) }
+        // 1.100 pedidos con R0 desde 10 IP (110 por IP, bajo su tope de 120).
+        repeat(1_100) { i ->
+            client.submitForm(
+                "/oauth/token",
+                formParameters = parameters { append("grant_type", "refresh_token"); append("refresh_token", r0); append("client_id", CIMD_DE_CLAUDE) },
+            ) { header("X-Forwarded-For", "198.51.100.${i % 10}") }
+        }
+        val res = with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to deB, "client_id" to CIMD_DE_CLAUDE)) }
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals(0, limitadorDelConector.llavesQueEmpiezanCon("token:cliente:"), "no hay balde por cliente")
     }
 }

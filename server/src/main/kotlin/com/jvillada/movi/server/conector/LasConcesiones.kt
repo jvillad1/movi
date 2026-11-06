@@ -399,24 +399,32 @@ internal fun Transaction.revocarPorToken(token: String, clientId: String, ahora:
 }
 
 /**
- * **De qué concesión y de qué cliente es** un código, un refresco o un token de acceso (para los límites de
- * `/oauth/token` y `/oauth/revoke`), sin gastarlo. `null` = no existe.
+ * **De qué concesión y de qué cliente es una credencial VIGENTE** (para el balde por concesión de `/oauth/token` y
+ * `/oauth/revoke`), sin gastarla: un código sin usar y sin vencer, o un token sin revocar y sin vencer, de una
+ * concesión sin revocar. `null` = no existe o ya no sirve (N1-bis de la tercera revisión): un refresco ya rotado
+ * guarda su fila 30 días para detectar el reuso, y no puede servirle a nadie para gastar un balde.
  */
-internal fun Transaction.credencialDe(credencial: String): Pair<String, String>? {
+internal fun Transaction.credencialDe(credencial: String, ahora: Long = System.currentTimeMillis()): Pair<String, String>? {
     val concesionId = when {
         LasConcesiones.tieneForma(credencial, LasConcesiones.PREFIJO_CODIGO) ->
             CodigosDelConector.select(CodigosDelConector.concesionId)
-                .where { CodigosDelConector.hash eq LasConcesiones.hash(credencial) }
+                .where {
+                    (CodigosDelConector.hash eq LasConcesiones.hash(credencial)) and CodigosDelConector.usadoEn.isNull() and
+                        (CodigosDelConector.venceEn greater ahora)
+                }
                 .firstOrNull()?.get(CodigosDelConector.concesionId)
         LasConcesiones.tieneForma(credencial, LasConcesiones.PREFIJO_REFRESCO) ||
             LasConcesiones.tieneForma(credencial, LasConcesiones.PREFIJO_ACCESO) ->
             TokensDelConector.select(TokensDelConector.concesionId)
-                .where { TokensDelConector.hash eq LasConcesiones.hash(credencial) }
+                .where {
+                    (TokensDelConector.hash eq LasConcesiones.hash(credencial)) and TokensDelConector.revocadoEn.isNull() and
+                        (TokensDelConector.venceEn greater ahora)
+                }
                 .firstOrNull()?.get(TokensDelConector.concesionId)
         else -> null
     } ?: return null
     val clientId = ConcesionesDelConector.select(ConcesionesDelConector.clientId)
-        .where { ConcesionesDelConector.id eq concesionId }
+        .where { (ConcesionesDelConector.id eq concesionId) and ConcesionesDelConector.revocadaEn.isNull() }
         .firstOrNull()?.get(ConcesionesDelConector.clientId) ?: return null
     return concesionId to clientId
 }

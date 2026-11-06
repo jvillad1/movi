@@ -123,14 +123,17 @@ class ElCicloDelConectorTest {
     }
 
     @Test
-    fun `el canje se limita por concesion, no por IP`() = testApplication {
+    fun `el refresco se limita por concesion, no por IP ni por cliente`() = testApplication {
         with(c) { montar() }
-        val codigo = with(c) { codigo() }
-        assertEquals(HttpStatusCode.OK, with(c) { canjear(codigo) }.status)
-        // El mismo código otra vez: invalid_grant hasta el tope de la concesión, después 429.
-        repeat(LIMITE_DE_TOKEN_POR_CONCESION - 1) { assertEquals(HttpStatusCode.BadRequest, with(c) { canjear(codigo) }.status) }
-        assertEquals(HttpStatusCode.TooManyRequests, with(c) { canjear(codigo) }.status)
-        // Otra conexión del mismo cliente sigue (el límite del cliente es amplio).
+        var (_, refresco) = with(c) { conectar() }
+        repeat(LIMITE_DE_TOKEN_POR_CONCESION - 1) {
+            val res = with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to refresco, "client_id" to CIMD_DE_CLAUDE)) }
+            assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+            refresco = c.tokensDe(res.bodyAsText()).second
+        }
+        // El canje del código ya contó uno: el siguiente refresco pasa el tope de la concesión.
+        assertEquals(HttpStatusCode.TooManyRequests, with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to refresco, "client_id" to CIMD_DE_CLAUDE)) }.status)
+        // Otra conexión del mismo cliente sigue.
         val (otro, _) = with(c) { conectar(c.correoDeB, c.contrasenaDeB) }
         assertEquals(HttpStatusCode.OK, with(c) { mcp(otro, "ping") }.status)
     }
