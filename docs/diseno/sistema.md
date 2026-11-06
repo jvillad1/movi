@@ -5528,6 +5528,11 @@ Una pantalla de información sobre plata de terceros (`ui/seguros/TusSegurosScre
   (`entidadDeUso` = la cuenta): su toque nunca se anota por el nombre del seguro.
 - **Lo que Movi no sabe va aparte y pregunta**: «¿Son seguros?» con su conteo; cada fila lleva debajo «Sí»
   (`Secundario` S) y «No» (`Fantasma` S). Nada se suma hasta que el dueño contesta.
+- **Lo que no se sabe de una cifra se dice, no se inventa** (revisión): un pago de una vez dice «Pagado una
+  vez · $X el 25 oct» y «una vez» bajo la cifra, con «¿Cada cuánto lo pagas?» y dos `Secundario` S de igual
+  peso («Cada mes» · «Cada año»); arriba, «y $X en pagos de una vez» aparte del total. Un posible duplicado
+  pregunta «¿Es el mismo seguro de tu crédito X?» con «Es otro» · «Es el mismo». Otra moneda va en su moneda
+  y la cifra de arriba lo dice («fuera de este total»). Cada respuesta pinta el resultado que trae el server.
 - **Tocar una fila abre su prueba** en una hoja (`MarcoDeHoja` + `EncabezadoDeHoja`): los cobros como `Fila`s
   que abren la hoja de siempre del movimiento, o «Va dentro de la cuota de tu crédito» con «Ver el crédito».
   «No es un seguro» va al final, `Fantasma`.
