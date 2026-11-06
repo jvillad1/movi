@@ -102,7 +102,35 @@ class UnaSolaFilaDeFacturaTest {
         ruleId = "${CREDIT_RULE_PREFIX}acc_hip", nombre = "Cuota Hipoteca Papá (Davibank)", monto = 2_228_152, pagado = false,
         diasParaVencer = 4, vence = "2026-11-10", seCobraSola = true, categoria = "Cuota de crédito",
     )
-    private val todas = listOf(celular, vencida, porConfirmar, pagada, cuotaEstimada, abono, seCobraSola)
+    // Revisión de la 136 (M5): también la tarjeta con su extracto, la abonada con el extracto abierto (C1), la que
+    // no suma, la que va por debajo del mínimo, la que se está guardando y un ingreso.
+    private val extracto = com.jvillada.movi.shared.model.ExtractoDeLaTarjeta(
+        corte = "2026-10-20", fechaDePago = "2026-11-05", facturado = 1_292_700L, pagadoDesdeElCorte = 100_000L, minimo = 180_000L,
+    )
+    private val tarjetaConExtracto = PagoDelPeriodo(
+        ruleId = "card_nu", nombre = "Pago tarjeta Nu", monto = 1_583_000, pagado = false, diasParaVencer = 7,
+        montoEsSaldo = true, pagoMinimo = 180_000L, vence = "2026-11-05",
+    )
+    private val tarjetaAbonada = tarjetaConExtracto.copy(pagado = true, montoPagado = 100_000L, derivado = true, pagoMinimo = null)
+    private val noSuma = PagoDelPeriodo(
+        ruleId = "card_master", nombre = "Pago tarjeta Master Black 3684", monto = 2_400_000, pagado = false, diasParaVencer = 5,
+        montoEsSaldo = true, vence = "2026-11-12",
+    )
+    private val bajoElMinimo = PagoDelPeriodo(
+        ruleId = "card_amex", nombre = "Pago tarjeta AMEX", monto = 1_583_000, pagado = true, diasParaVencer = 7,
+        montoEsSaldo = true, pagoMinimo = 180_000L, montoPagado = 100_000L, pagadoEnElPeriodo = 100_000L, derivado = true,
+        eventId = "ev_amex", vence = "2026-11-05",
+    )
+    private val guardando = celular.copy(ruleId = "rr_gym", nombre = "Gimnasio")
+    private val ingreso = PagoDelPeriodo(
+        ruleId = "rr_salario", nombre = "Salario", monto = 9_000_000, pagado = false, diasParaVencer = 18,
+        vence = "2026-11-24", esIngreso = true,
+    )
+    private val todas = listOf(
+        celular, vencida, porConfirmar, pagada, cuotaEstimada, abono, seCobraSola,
+        tarjetaConExtracto, tarjetaAbonada, noSuma, bajoElMinimo, guardando, ingreso,
+    )
+    private val extractos = mapOf("nu" to extracto)
 
     // ── El alto ────────────────────────────────────────────────────────────────
 
@@ -114,8 +142,8 @@ class UnaSolaFilaDeFacturaTest {
                 MoviTheme {
                     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                         todas.forEach { pago ->
-                            val lo = loDeLaFactura(pago, emptySet(), false, emptyMap(), emptyMap(), emptyMap(), enElTotal = true)
-                            FilaDeFactura(pago = pago, estado = lo.estado, extracto = null, onAbrir = {})
+                            val lo = loDeLaFactura(pago, emptySet(), pago === guardando, emptyMap(), emptyMap(), extractos, enElTotal = true)
+                            FilaDeFactura(pago = pago, estado = lo.estado, extracto = lo.extracto, onAbrir = {})
                         }
                     }
                 }
@@ -148,9 +176,16 @@ class UnaSolaFilaDeFacturaTest {
             assertTrue(abs(alto - primero) <= 0.5f, "«${todas[i].nombre}» mide $alto dp y la primera $primero dp")
         }
         // Los estados que la captura mostraba distintos, ahora cada uno en su renglón.
-        for (estado in listOf("Vence el 22 nov", "Venció hace 3 días", "¿Es el de \$4.000.000?", "Pagado · 25 oct", "Abono planeado · el día 15", "Se cobra sola el 10")) {
+        for (estado in listOf(
+            "Vence el 22 nov", "Venció hace 3 días", "¿Es el de \$4.000.000?", "Pagado · 25 oct", "Abono planeado · el día 15",
+            "Se cobra sola el 10", "No suma: falta el mínimo", GUARDANDO_LA_FACTURA, "Llega el 24 nov",
+        )) {
             assertTrue(composeRule.onAllNodesWithText(estado, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "«$estado»")
         }
+        for (largo in listOf("Abonaste \$100.000 · faltan \$1.292.700", "Pagaste \$100.000 · faltan \$80.000")) {
+            assertTrue(composeRule.onAllNodesWithText(largo, substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "«$largo…»")
+        }
+        assertTrue(composeRule.onAllNodesWithText(com.jvillada.movi.ui.credits.ROTULO_DEL_EXTRACTO, useUnmergedTree = true).fetchSemanticsNodes().size == 1, "«extracto» solo en la que no está pagada")
         assertTrue(composeRule.onAllNodesWithTag(com.jvillada.movi.ui.components.ds.TAG_UNOS_DE_LA_CIFRA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "«unos» antes de la cuota estimada")
         // Ni botones ni «⋯» en la fila.
         for (boton in listOf(ETIQUETA_ANOTAR, ETIQUETA_SI_FUE_ESTE, ETIQUETA_QUITAR_LA_MARCA)) {

@@ -225,6 +225,15 @@ class LaCuotaParecidaEnPagosTest {
         assertEquals(1, amarillos.size, "un solo botón amarillo en Pagos")
         assertEquals(VarianteDeBoton.Principal, varianteDeLoMasUrgente(), "el de la más urgente")
         composeRule.onNode(hasTestTag(TAG_ACCION_DE_LO_MAS_URGENTE) and hasText("¿Es el de \$450.000?")).assertExists()
+
+        // Revisión de la 136 (M6): la otra cuota, la que no es la más urgente, también ofrece su gasto parecido,
+        // en su hoja: «Sí, es la cuota» amarillo (el único de la hoja) y «Anotar pago» con borde.
+        abrirLaHoja(menosUrgente.nombre)
+        composeRule.onNodeWithText("¿Es la cuota de Vehículo 4083?").assertExists()
+        assertEquals(VarianteDeBoton.Principal, varianteEnLaHoja(SI_ES_LA_CUOTA))
+        assertEquals(VarianteDeBoton.Secundario, varianteEnLaHoja(ETIQUETA_ANOTAR))
+        tocar(SI_ES_LA_CUOTA)
+        assertEquals(listOf("ev-980"), esLaCuota, "la de la otra cuota, no la de la más urgente")
     }
 
     /**
