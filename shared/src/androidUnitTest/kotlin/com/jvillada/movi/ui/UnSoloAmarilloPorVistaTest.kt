@@ -40,6 +40,7 @@ import com.jvillada.movi.ui.dashboard.DashboardData
 import com.jvillada.movi.ui.dashboard.LocalCargandoElInicio
 import com.jvillada.movi.ui.dashboard.PagoDelPeriodo
 import com.jvillada.movi.ui.recurrentes.SeccionChecklistDelPeriodo
+import com.jvillada.movi.ui.recurrentes.abrirLaFactura
 import com.jvillada.movi.ui.recurrentes.TAG_CUENTA_DE_LA_REGLA
 import com.jvillada.movi.ui.plan.FilaDeRecordatoriosSinCanal
 import com.jvillada.movi.ui.plan.TAG_FILA_DE_RECORDATORIOS
@@ -50,6 +51,8 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.semantics.SemanticsActions
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.RepositorioDePruebaDeMovimientos
@@ -262,9 +265,13 @@ class UnSoloAmarilloPorVistaTest {
                 onCargarMinimo = {},
             )
         }
+        assertEquals(1, amarillos(), "un solo amarillo en Pagos, con la fila que no suma")
+        // Vuelta 136: la píldora y «Cargar mínimo» van en la hoja de la factura, sin amarillo.
+        composeRule.abrirLaFactura("Pago tarjeta Tarjeta Nu")
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag(com.jvillada.movi.ui.recurrentes.TAG_NO_SUMA, useUnmergedTree = true).assertExists()
         composeRule.onNodeWithTag(com.jvillada.movi.ui.recurrentes.TAG_CARGAR_MINIMO, useUnmergedTree = true).assertExists()
-        assertEquals(1, amarillos(), "un solo amarillo en Pagos, con la fila que no suma")
+        assertEquals(2, amarillos(), "el de «Falta por pagar», detrás, y el «Anotar pago» de la hoja")
     }
 
     @Test
@@ -312,6 +319,50 @@ class UnSoloAmarilloPorVistaTest {
     @Config(qualifiers = "w1280dp-h3200dp-mdpi")
     fun `a 1280 tambien, por categoria, un solo amarillo`() {
         `en Pagos por categoria sigue habiendo un solo amarillo`()
+    }
+
+    /**
+     * Vuelta 136 · **la hoja de una factura tiene un solo amarillo** (o ninguno, pagada): «Anotar pago» si falta,
+     * «Sí, fue este» si Movi tiene un candidato cerca del monto. La lista de Pagos sigue con uno (el de «Falta por
+     * pagar»), y las filas no llevan ninguno.
+     */
+    @Test
+    fun `en la hoja de una factura hay un solo amarillo, y ninguno si esta pagada`() {
+        val propuesto = com.jvillada.movi.shared.model.FinancialEvent(
+            id = "ev_gym", accountId = "a1", type = TransactionType.EXPENSE, amount = 139_900L,
+            category = "Salud", description = "Gimnasio", timestamp = 1_790_000_000_000L,
+        )
+        val lista = listOf(
+            PagoDelPeriodo(ruleId = "r_carro", nombre = "Carro", monto = 9_000, pagado = false, diasParaVencer = -4, vence = "2026-09-06"),
+            PagoDelPeriodo(
+                ruleId = "r_gym", nombre = "Gimnasio", monto = 139_900, pagado = false, diasParaVencer = -1, vence = "2026-09-09",
+                periodoDelSello = "2026-09", candidatos = listOf(propuesto),
+            ),
+            PagoDelPeriodo(
+                ruleId = "r_arr", nombre = "Arriendo", monto = 1_800_000, pagado = true, diasParaVencer = -5, vence = "2026-09-05",
+                periodoDelSello = "2026-09", eventId = "ev_arr", pagadoEl = "2026-09-05", montoPagado = 1_800_000,
+            ),
+        )
+        montar {
+            SeccionChecklistDelPeriodo(
+                checklist = lista, cargando = false, pudoLeer = true, marcando = emptySet(),
+                onConfirmar = { _, _ -> }, onNoFueEste = { _, _ -> }, onAnotarMovimiento = {}, onQuitarLaMarca = {},
+                onReintentar = {}, onVerMovimiento = {},
+            )
+        }
+        assertEquals(1, amarillos(), "un solo amarillo en Pagos")
+        fun amarillosEnLaHoja(): Int {
+            fun cuenta(n: androidx.compose.ui.semantics.SemanticsNode): Int =
+                (if (n.config.getOrNull(LlevaElAmarilloKey) == true) 1 else 0) + n.children.sumOf(::cuenta)
+            return cuenta(composeRule.onNodeWithTag(com.jvillada.movi.ui.recurrentes.TAG_HOJA_DE_LA_FACTURA, useUnmergedTree = true).fetchSemanticsNode())
+        }
+        for ((nombre, esperados) in listOf("Carro" to 1, "Gimnasio" to 1, "Arriendo" to 0)) {
+            composeRule.abrirLaFactura(nombre)
+            composeRule.waitForIdle()
+            assertEquals(esperados, amarillosEnLaHoja(), "amarillos en la hoja de $nombre")
+            composeRule.onNodeWithContentDescription("Cerrar").performSemanticsAction(SemanticsActions.OnClick)
+            composeRule.waitForIdle()
+        }
     }
 
     // ── Vuelta 82 · Actividad, Por revisar y Patrimonio ──────────────────────────────────────────

@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.plan
 
+import androidx.compose.ui.test.onLast
+import com.jvillada.movi.ui.recurrentes.abrirLaFactura
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -150,14 +152,12 @@ class CuotaPagadaEnElTableroTest {
         }
     }
 
-    /** Vuelta 48: abre el «⋯» de la primera fila pagada que lo tenga (cuando aparece). */
-    /** Vuelta 51: la cuota también tiene «⋯»; este abre el del sello a mano (Gimnasio Cami). */
-    private fun abrirElMenuDeLaFila() {
+    /** Vuelta 136 (era el «⋯» de la fila, vueltas 48 y 51): abre la hoja de la factura [nombre]. */
+    private fun abrirLaHojaDe(nombre: String) {
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithContentDescription("Más opciones de Gimnasio Cami").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText(nombre, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onAllNodesWithContentDescription("Más opciones de Gimnasio Cami").onFirst()
-            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.abrirLaFactura(nombre)
         composeRule.waitForIdle()
     }
 
@@ -197,20 +197,15 @@ class CuotaPagadaEnElTableroTest {
      *
      * Vuelta 51: la cuota también lleva su «⋯», como todas las pagadas, pero con «Ver movimiento» y la
      * frase de cómo deshacerla (anulando el movimiento), nunca «Quitar la marca» ni «No fue este».
+     * Vuelta 136: todo eso vive en la hoja de la factura.
      */
     @Test
     fun `la cuota pagada no ofrece nada que la quite`() {
         montar()
         esperarTexto("Cuota Crediágil 3090")
 
-        val menus = { composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true)
-            .fetchSemanticsNodes().map { it.config[SemanticsProperties.ContentDescription].first() } }
-        composeRule.waitUntil(timeoutMillis = 5_000) { menus().size == 2 }
-        assertEquals(setOf("Más opciones de Gimnasio Cami", "Más opciones de Cuota Crediágil 3090"), menus().toSet(), "todas las pagadas tienen «⋯»")
-
-        composeRule.onAllNodesWithContentDescription("Más opciones de Cuota Crediágil 3090")
-            .onFirst().performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
+        // Vuelta 136: la hoja de la cuota pagada ofrece «Ver movimiento» y dice cómo deshacerla.
+        abrirLaHojaDe("Cuota Crediágil 3090")
         assertEquals(1, composeRule.onAllNodesWithText(ETIQUETA_VER_MOVIMIENTO, useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(1, composeRule.onAllNodesWithText(NOTA_DE_LA_CUOTA_PAGADA, useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(
@@ -229,11 +224,12 @@ class CuotaPagadaEnElTableroTest {
     @Test
     fun `el sello a mano sigue teniendo su quitar la marca`() {
         montar()
-        abrirElMenuDeLaFila()
+        abrirLaHojaDe("Gimnasio Cami")
         esperarTexto("Marcado a mano, sin movimiento")
 
+        // Vuelta 136: el tocable más adentro (el panel de la hoja también acepta toques).
         composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Quitar la marca")), useUnmergedTree = true)
-            .onFirst().performSemanticsAction(SemanticsActions.OnClick)
+            .onLast().performSemanticsAction(SemanticsActions.OnClick)
 
         composeRule.waitUntil(timeoutMillis = 5_000) { desmarcadas == 1 }
         assertEquals(1, desmarcadas)

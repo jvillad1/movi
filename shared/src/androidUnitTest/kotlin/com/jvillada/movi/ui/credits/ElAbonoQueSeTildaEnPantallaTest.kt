@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.ui.recurrentes.abrirLaFactura
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -129,11 +130,14 @@ class ElAbonoQueSeTildaEnPantallaTest {
         composeRule.waitForIdle()
 
         assertTrue(hay("Abono extra a Libre inversión 9695"))
-        assertTrue(hay("El día 15"), "un abono no «vence»")
-        assertTrue(hay(ANOTAR_ESTE_ABONO))
-        assertTrue(hay(EL_ABONO_PENDIENTE_NO_RESTA))
+        // Vuelta 136: la fila dice «Abono planeado · el día 15»; lo demás, su hoja.
+        assertTrue(hay("Abono planeado · el día 15"), "un abono no «vence»")
         assertTrue(hay(lineaDelAbonoPlaneado(500_000L)), "va aparte de lo que falta")
         assertTrue(hay("de \$1.800.000 · queda 1 de 1 pago"), "«Falta por pagar» es solo el arriendo")
+        composeRule.abrirLaFactura("Abono extra a Libre inversión 9695")
+        composeRule.waitForIdle()
+        assertTrue(hay(ANOTAR_ESTE_ABONO))
+        assertTrue(hay(EL_ABONO_PENDIENTE_NO_RESTA))
     }
 
     @Test
@@ -155,6 +159,8 @@ class ElAbonoQueSeTildaEnPantallaTest {
                 }
             }
         }
+        composeRule.waitForIdle()
+        composeRule.abrirLaFactura("Abono extra a Nu")
         composeRule.waitForIdle()
         assertTrue(hay(com.jvillada.movi.shared.model.EL_ABONO_A_UNA_TARJETA_NO_CAMBIA_TE_QUEDAN))
         assertTrue(!hay(EL_ABONO_PENDIENTE_NO_RESTA), "no promete que baja «Te quedan»")
@@ -270,7 +276,10 @@ class ElAbonoQueSeTildaEnPantallaTest {
             }
         }
         composeRule.waitForIdle()
-        assertTrue(hay("El día 15"))
+        assertTrue(hay("Abono planeado · el día 15"))
+        // Vuelta 136: «Anotar este abono» vive en la hoja de la factura.
+        composeRule.abrirLaFactura("Abono extra a Libre inversión 9695")
+        composeRule.waitForIdle()
         tocar(ANOTAR_ESTE_ABONO)
         val hoja = assertIs<Screen.QuickAdd>(hojaAbierta.value)
         // Vuelta 77: a un crédito, Pagar en modo abono (era Traspaso).

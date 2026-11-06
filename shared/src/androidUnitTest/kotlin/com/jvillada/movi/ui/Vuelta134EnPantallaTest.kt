@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui
 
+import com.jvillada.movi.ui.recurrentes.abrirLaFactura
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -276,14 +277,25 @@ class Vuelta134EnPantallaTest {
     // ── M-9 · Pagos y la ficha a 360 dp con la letra a ×1,456 ──────────────
 
     @Test
-    fun `la fila de Pagos con unos y la de octubre no se corta`() {
+    fun `la fila de Pagos con unos y su hoja con la de octubre no se cortan`() {
         montar { PlanScreen(onNavigate = {}, segmento = SEGMENTO_PAGOS) }
         esperarTag(TAG_FILA_DE_FACTURA)
         val filas = conTag(TAG_FILA_DE_FACTURA)
-        val laQueCambia = filas.single { "Libre inversión" in todoElTexto(it) }
+        // Revisión de la 136 (I2): un nombre que no cabe se ve cortado por el principio y el lector lo oye entero
+        // (sin disposición de texto propia): se busca por todo el texto de la fila, no solo el que se dibuja.
+        fun textoCompleto(n: SemanticsNode): String =
+            (n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()) + " " +
+                n.children.joinToString(" ") { textoCompleto(it) }
+        val laQueCambia = filas.single { "Libre inversión" in textoCompleto(it) }
         assertTrue("unos" in todoElTexto(laQueCambia), todoElTexto(laQueCambia))
-        assertTrue("Como la de octubre" in todoElTexto(laQueCambia), todoElTexto(laQueCambia))
-        nadaSeCorta("la fila de la cuota que cambia", listOf(laQueCambia))
+        // Vuelta 136: la fila es la de todas (el nombre en dos renglones con «…» si no cabe); su cifra con
+        // «unos» y su fecha no se cortan, y «Como la de octubre» lo dice la hoja de la factura, entera.
+        nadaSeCorta("la cifra de la fila de la cuota que cambia", conTag(com.jvillada.movi.ui.recurrentes.TAG_CIFRA_DE_LA_FACTURA))
+        composeRule.abrirLaFactura("Libre inversión")
+        composeRule.waitForIdle()
+        val hoja = conTag(com.jvillada.movi.ui.recurrentes.TAG_HOJA_DE_LA_FACTURA)
+        assertTrue(hoja.any { "Como la de octubre" in todoElTexto(it) }, hoja.joinToString { todoElTexto(it) })
+        nadaSeCorta("la hoja de la cuota que cambia", hoja)
     }
 
     @Test

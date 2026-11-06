@@ -19,8 +19,6 @@ import com.jvillada.movi.ui.credits.ElSaldoDelPlanEnLaFicha
 import com.jvillada.movi.ui.credits.USAR_EL_SALDO_DEL_PLAN
 import com.jvillada.movi.ui.credits.loQueSeDiceSinSaldo
 import com.jvillada.movi.ui.credits.loQueSeRegistraAlAjustar
-import com.jvillada.movi.ui.recurrentes.AccionDeLaFila
-import com.jvillada.movi.ui.recurrentes.accionDeLaFilaPendiente
 import com.jvillada.movi.ui.sdui.fraccionDeLaCategoriaEnElWidget
 import com.jvillada.movi.ui.sdui.tonoDeLaPildoraDeLaDiferencia
 import com.jvillada.movi.ui.transactions.AvisosPorConfirmar
@@ -89,14 +87,9 @@ class Vuelta80Test {
     }
 
     // ── (4) Una acción por factura ───────────────────────────────────────────
-
-    @Test
-    fun `la factura lleva el boton o el menu, nunca los dos`() {
-        assertEquals(AccionDeLaFila.BOTON, accionDeLaFilaPendiente(conAnotar = true, conPropuesta = false, conMenu = true))
-        assertEquals(AccionDeLaFila.MENU, accionDeLaFilaPendiente(conAnotar = true, conPropuesta = true, conMenu = true))
-        assertEquals(AccionDeLaFila.MENU, accionDeLaFilaPendiente(conAnotar = false, conPropuesta = false, conMenu = true))
-        assertEquals(AccionDeLaFila.NADA, accionDeLaFilaPendiente(conAnotar = false, conPropuesta = false, conMenu = false))
-    }
+    // Vuelta 136: la fila ya no lleva ni botón ni «⋯» (todo vive en la hoja de la factura). Lo que esta
+    // prueba fijaba —nunca dos acciones— lo prueba ahora `UnaSolaFilaDeFacturaReglasTest` (un solo amarillo
+    // en la hoja, según el estado).
 
     // ── (6) La tarjeta de avisos ─────────────────────────────────────────────
 

@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.recurrentes
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -54,37 +55,43 @@ class ElEnlaceDelCandidatoCabeTest {
         return r.single() to nodo.boundsInRoot.right
     }
 
+    /**
+     * Revisión de la 136 (I1, M5): la pregunta va en la fila solo con un candidato **cerca** del monto, y cabe
+     * entera al lado de la cifra más ancha que tiene Pagos («unos $4.101.123»).
+     */
     @Test
-    fun `Es el de 260 mil cabe entero a 360 con la letra 1,12`() {
-        composeRule.setContent {
-            val base = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
-                MoviTheme {
-                    Box(Modifier.fillMaxWidth()) {
-                        FilaDeFactura(
-                            pago = carro,
-                            principal = true,
-                            enVuelo = false,
-                            conPropuesta = false,
-                            onAnotar = {},
-                            onVerMovimiento = null,
-                            onAbrir = {},
-                            etiquetaDeAbrir = null,
-                            evidencia = null,
-                            debajo = {
-                                PropuestaLejana(
-                                    pago = carro,
-                                    propuesta = tanqueo,
-                                    enVuelo = false,
-                                    acciones = AccionesDelChecklist({ _, _ -> }, { _, _ -> }, {}, {}),
-                                    conBotonDeAnotar = false,
-                                )
-                            },
-                        )
-                    }
-                }
-            }
+    fun `Es el de 4 millones cabe entero al lado de unos 4101123 a 360 con la letra 1,12`() {
+        val pago4M = tanqueo.copy(id = "ev-4m", amount = 4_000_000L)
+        val cuota = PagoDelPeriodo(
+            ruleId = "credit_acc_veh", nombre = "Cuota Vehículo 8761", monto = 4_101_123L, pagado = false, diasParaVencer = -1,
+            vence = "2026-11-05", periodoDelSello = "2026-11", candidatos = listOf(pago4M),
+            cuotaQueCambia = com.jvillada.movi.shared.model.LaCuotaQueCambia(),
+        )
+        val lo = loDeLaFactura(cuota, emptySet(), false, emptyMap(), emptyMap(), emptyMap(), enElTotal = true)
+        montar { FilaDeFactura(pago = cuota, estado = lo.estado, extracto = null, onAbrir = {}) }
+
+        val texto = "¿Es el de \$4.000.000?"
+        assertEquals(texto, lo.estado.texto)
+        val (enlace, derecha) = disposicion(texto)
+        assertEquals(1, enlace.lineCount, "en un renglón")
+        assertFalse(enlace.isLineEllipsized(0), "sin «…»")
+        assertEquals(texto.length, enlace.getLineEnd(0, visibleEnd = true), "entero, con la pregunta")
+        assertTrue(derecha <= 360f * composeRule.density.density, "dentro de la pantalla")
+    }
+
+    /** I1: el Carro de $9.000 con un tanqueo de $260.000 sigue viéndose vencido; el candidato va en la hoja, entero. */
+    @Test
+    fun `con un candidato lejano la fila dice que vencio y la hoja lo pregunta entero`() {
+        montar {
+            SeccionChecklistDelPeriodo(
+                checklist = listOf(carro), cargando = false, pudoLeer = true, marcando = emptySet(),
+                onConfirmar = { _, _ -> }, onNoFueEste = { _, _ -> }, onAnotarMovimiento = {}, onQuitarLaMarca = {},
+                onReintentar = {},
+            )
         }
+        assertTrue(composeRule.onAllNodesWithText("Venció hace 3 días", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText("¿Es el de \$260.000?", useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "no en la fila")
+        composeRule.abrirLaFactura("Carro")
         composeRule.waitForIdle()
 
         val texto = "¿Es el de \$260.000?"
@@ -94,5 +101,15 @@ class ElEnlaceDelCandidatoCabeTest {
         assertFalse(enlace.isLineEllipsized(0), "sin «…»")
         assertEquals(texto.length, enlace.getLineEnd(0, visibleEnd = true), "entero, con la pregunta")
         assertTrue(derecha <= 360f * composeRule.density.density, "dentro de la pantalla")
+    }
+
+    private fun montar(contenido: @androidx.compose.runtime.Composable () -> Unit) {
+        composeRule.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
+                MoviTheme { Box(Modifier.fillMaxSize()) { contenido() } }
+            }
+        }
+        composeRule.waitForIdle()
     }
 }

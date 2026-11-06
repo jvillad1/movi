@@ -263,21 +263,23 @@ class FacturasPorCategoriaEnPantallaTest {
         montar()
         elegir(ROTULO_POR_CATEGORIA)
 
-        tocar(
-            composeRule.onNode(
-                hasAnyDescendant(hasText(ETIQUETA_ANOTAR)) and hasClickAction() and hasAnyAncestor(hasTestTag(TAG_FILA_DE_FACTURA) and hasAnyDescendant(hasText("Arriendo"))),
-                useUnmergedTree = true,
-            ),
-        )
-        assertEquals(listOf("rr_arriendo"), anotados, "«Anotar pago» de la fila, la de siempre")
+        // Vuelta 136: las acciones de una fila viven en su hoja; tocar la fila dentro del grupo la abre.
+        composeRule.abrirLaFactura("Arriendo")
+        composeRule.waitForIdle()
+        tocar(composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText(ETIQUETA_ANOTAR)) and hasAnyAncestor(hasTestTag(TAG_HOJA_DE_LA_FACTURA)), useUnmergedTree = true).onFirst())
+        assertEquals(listOf("rr_arriendo"), anotados, "«Anotar pago» de la hoja, el de siempre")
 
-        tocar(composeRule.onNodeWithContentDescription(descripcionDelMenuDeLaFila("Administración del conjunto")))
-        tocar(composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText(ETIQUETA_QUITAR_LA_MARCA)), useUnmergedTree = true).onFirst())
-        assertEquals(listOf("rr_admin"), quitadas, "«⋯» → «Quitar la marca» de la pagada")
+        composeRule.abrirLaFactura("Administración del conjunto")
+        composeRule.waitForIdle()
+        tocar(composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText(ETIQUETA_QUITAR_LA_MARCA)) and hasAnyAncestor(hasTestTag(TAG_HOJA_DE_LA_FACTURA)), useUnmergedTree = true).onFirst())
+        assertEquals(listOf("rr_admin"), quitadas, "hoja → «Quitar la marca» de la pagada")
 
-        // La tarjeta sin mínimo sigue diciendo que no suma, con su botón.
-        composeRule.onNode(hasTestTag(TAG_NO_SUMA) and hasAnyAncestor(hasTestTag(TAG_GRUPO_DE_FACTURAS)), useUnmergedTree = true).assertExists()
+        // La tarjeta sin mínimo dice en su hoja que no suma, con su botón.
+        composeRule.abrirLaFactura("Pago tarjeta Tarjeta Nu")
+        composeRule.waitForIdle()
+        composeRule.onNode(hasTestTag(TAG_NO_SUMA) and hasAnyAncestor(hasTestTag(TAG_HOJA_DE_LA_FACTURA)), useUnmergedTree = true).assertExists()
     }
+
 
     /**
      * Revisión: el selector iba debajo de la tarjeta amarilla y bajaba todo su alto al llegar los datos (y

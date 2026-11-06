@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
@@ -155,9 +156,13 @@ class OtrosPagosFijosEnPagosTest {
         assertTrue(hay(TITULO_DE_OTROS_PAGOS_FIJOS))
         assertTrue(hay("$TITULO_DE_OTROS_PAGOS_FIJOS · 2") || hay(" · 2"), "el conteo como en «Pausados · N»")
         assertFalse(hay("Administración"), "plegada: no se ve hasta abrirla")
-        // La luz, que sí vence en noviembre, está en la lista con su cadencia.
+        // La luz, que sí vence en noviembre, está en la lista; su cadencia la dice su hoja (vuelta 136).
+        composeRule.abrirLaFactura("Luz")
+        composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodesWithTag(TAG_CADENCIA_DE_LA_FILA, useUnmergedTree = true).fetchSemanticsNodes().size == 1)
         assertTrue(hay("Cada 2 meses"))
+        composeRule.onNodeWithContentDescription("Cerrar").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
 
         composeRule.onNodeWithText("Ver").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()

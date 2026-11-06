@@ -1,5 +1,10 @@
 package com.jvillada.movi.ui.plan
 
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import com.jvillada.movi.ui.recurrentes.abrirLaFactura
+import com.jvillada.movi.ui.recurrentes.TAG_FILA_DE_FACTURA
+import androidx.compose.ui.test.onAllNodesWithTag
 import com.jvillada.movi.ui.recurrentes.TITULO_TUS_FACTURAS
 import com.jvillada.movi.ui.recurrentes.ETIQUETA_ANOTAR
 import androidx.compose.foundation.layout.Box
@@ -200,13 +205,15 @@ class ChecklistDelPeriodoEnElTableroTest {
         }
     }
 
-    /** Vuelta 48: abre el «⋯» de la primera fila pagada (cuando aparece). */
-    private fun abrirElMenuDeLaFila() {
+    /**
+     * Vuelta 136 (era «abre el «⋯» de la fila pagada», vuelta 48): abre la hoja de la factura del arriendo,
+     * donde viven todas sus acciones.
+     */
+    private fun abrirLaHojaDelArriendo() {
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(TAG_FILA_DE_FACTURA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onAllNodesWithContentDescription("Más opciones de", substring = true).onFirst()
-            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.abrirLaFactura("Arriendo")
         composeRule.waitForIdle()
     }
 
@@ -225,10 +232,12 @@ class ChecklistDelPeriodoEnElTableroTest {
      * rótulo sale una sola vez por regla; `onFirst()` queda por si una prueba monta más de una.
      */
     private fun tocar(texto: String) {
+        // Vuelta 136: `onLast()`, el tocable más adentro: con la hoja de la factura abierta, su panel (que
+        // también acepta toques) contiene el botón y salía primero.
         composeRule.onAllNodes(
             hasClickAction() and hasAnyDescendant(hasText(texto)),
             useUnmergedTree = true,
-        ).onFirst().performSemanticsAction(SemanticsActions.OnClick)
+        ).onLast().performSemanticsAction(SemanticsActions.OnClick)
     }
 
     /** Cuántos nodos clickeables contienen ese renglón. Cero = la fila es de solo lectura. */
@@ -270,8 +279,23 @@ class ChecklistDelPeriodoEnElTableroTest {
         montar()
         esperarTexto(subtitulo)
 
-        assertEquals(1, clickeablesCon(subtitulo), "un solo toque: abrir la regla")
+        assertEquals(1, clickeablesCon(subtitulo), "un solo toque: abrir la hoja de la factura")
         tocar(subtitulo)
+        // Vuelta 136: la hoja de la factura lleva «Editar el pago fijo», que abre la regla.
+        esperarTexto("Editar el pago fijo")
+        // Revisión (M3): la hoja no vive en un item de la lista perezosa: se pinta con las demás del tablero.
+        val hojas = composeRule.onAllNodes(hasTestTag(com.jvillada.movi.ui.recurrentes.TAG_HOJA_DE_LA_FACTURA), useUnmergedTree = true)
+        assertEquals(1, hojas.fetchSemanticsNodes().size)
+        assertEquals(
+            0,
+            composeRule.onAllNodes(
+                hasTestTag(com.jvillada.movi.ui.recurrentes.TAG_HOJA_DE_LA_FACTURA) and
+                    hasAnyAncestor(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsActions.ScrollToIndex)),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().size,
+            "la hoja está fuera de la LazyColumn",
+        )
+        tocar("Editar el pago fijo")
 
         esperarTexto("Editar recurrente")
         assertEquals(0, marcadas, "abrir la regla no sella nada")
@@ -307,6 +331,8 @@ class ChecklistDelPeriodoEnElTableroTest {
     fun `con un candidato la fila pregunta y se confirma con el movimiento`() {
         estadoDelArriendo = estadoDelArriendo.copy(candidates = listOf(movimientoDelArriendo))
         montar()
+        // Vuelta 136: la fila dice «¿Es el de $X?»; la pregunta y sus botones están en su hoja.
+        abrirLaHojaDelArriendo()
         esperarTexto("¿Ya pagaste")
 
         tocar("Sí, fue este")
@@ -327,8 +353,8 @@ class ChecklistDelPeriodoEnElTableroTest {
             derivadaDeUnMovimiento = true, montoDelPago = 1_800_000L, monedaDelPago = "COP",
         )
         montar()
-        // Vuelta 48: la fila pagada es compacta; lo que Movi emparejó lo dice su «⋯», con «No fue este».
-        abrirElMenuDeLaFila()
+        // Vuelta 136: lo que Movi emparejó lo dice la hoja de la factura, con «No fue este».
+        abrirLaHojaDelArriendo()
         esperarTexto("Movi lo emparejó")
 
         tocar("No fue este")
@@ -347,8 +373,8 @@ class ChecklistDelPeriodoEnElTableroTest {
     fun `un sello sin movimiento se puede quitar`() {
         estadoDelArriendo = estadoDelArriendo.copy(occurred = true, eventId = null)
         montar()
-        // Vuelta 48: «Quitar la marca» vive en el «⋯» de la fila pagada, con lo que la fila es.
-        abrirElMenuDeLaFila()
+        // Vuelta 136: «Quitar la marca» vive en la hoja de la factura, con lo que la fila es.
+        abrirLaHojaDelArriendo()
         esperarTexto("Marcado a mano, sin movimiento")
 
         tocar("Quitar la marca")

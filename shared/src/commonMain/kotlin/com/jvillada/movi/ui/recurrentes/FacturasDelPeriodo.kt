@@ -1,47 +1,27 @@
 package com.jvillada.movi.ui.recurrentes
 
 import com.jvillada.movi.shared.model.ExtractoDeLaTarjeta
-import com.jvillada.movi.ui.credits.PUEDE_INCLUIR_DIFERIDOS
-import com.jvillada.movi.ui.credits.ANOTAR_ESTE_ABONO
 import com.jvillada.movi.ui.quickadd.lineaDelAbonoPlaneado
 import com.jvillada.movi.ui.quickadd.pastillaDelAbono
 import com.jvillada.movi.shared.model.abonosPlaneados
 import com.jvillada.movi.ui.credits.ROTULO_DEL_EXTRACTO
-import com.jvillada.movi.ui.credits.alternativaDelMinimo
 import com.jvillada.movi.ui.credits.montoDelExtracto
 import com.jvillada.movi.ui.credits.loQueFaltaDelExtracto
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.MoreHoriz
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import com.jvillada.movi.ui.components.ds.BotonDeIcono
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,15 +30,19 @@ import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
-import com.jvillada.movi.theme.Radio
 import com.jvillada.movi.ui.categorias.ICONO_DE_CATEGORIA_RESPALDO
 import com.jvillada.movi.ui.categorias.IconoDeCategoria
 import com.jvillada.movi.ui.categorias.aparienciaDe
 import com.jvillada.movi.ui.components.ds.BarraDeProgreso
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Cifra
-import com.jvillada.movi.ui.components.ds.ESPACIO_ANTES_DEL_FINAL_DE_FILA
-import com.jvillada.movi.ui.components.ds.ESPACIO_ANTES_DEL_TEXTO_DE_FILA
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.Separador
+import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
+import com.jvillada.movi.ui.components.ds.TonoDeSubtitulo
+import androidx.compose.ui.text.withStyle
+import com.jvillada.movi.shared.model.FinancialEvent
+import androidx.compose.ui.platform.LocalDensity
 import com.jvillada.movi.ui.components.ds.FondoDeBarra
 import com.jvillada.movi.ui.components.ds.Pildora
 import com.jvillada.movi.ui.components.ds.Superficie
@@ -281,7 +265,12 @@ fun textoDeVerTodas(cuantas: Int): String = "Ver los $cuantas pagos del período
  * capa 3 ([FondoDeBarra.Destacada]). El amarillo de Pagos es la acción de la factura más urgente.
  */
 @Composable
-internal fun TarjetaFaltaPorPagar(resumen: ResumenDeFacturas, modifier: Modifier = Modifier) {
+internal fun TarjetaFaltaPorPagar(
+    resumen: ResumenDeFacturas,
+    modifier: Modifier = Modifier,
+    /** Vuelta 136: el pago más urgente con su acción (el amarillo de Pagos). `null`: nada pendiente. */
+    loMasUrgente: LoMasUrgente? = null,
+) {
     Superficie(
         modifier = modifier
             .fillMaxWidth()
@@ -308,242 +297,252 @@ internal fun TarjetaFaltaPorPagar(resumen: ResumenDeFacturas, modifier: Modifier
                 fondo = FondoDeBarra.Destacada,
             )
             Text(lineaDeLoPagado(resumen), style = Movi.textos.apoyoMedio, color = Movi.colores.textoMedio)
+            loMasUrgente?.let { RenglonDeLoMasUrgente(it) }
         }
     }
 }
 
 /**
- * **Una factura del período** (vuelta 40): ícono de su categoría, nombre, cifra y debajo la pastilla
- * de vencimiento; a la derecha «Anotar pago» (en amarillo la más urgente, [principal]). Tocar el resto
- * de la fila abre la regla, como siempre ([onAbrir]). [debajo] es lo que la fila ofrece además (la
- * propuesta, la estimación de una cuota). **Pagada, es compacta** ([FilaDeFacturaPagada], vuelta 48):
- * tocarla abre el movimiento ([onVerMovimiento]) y lo demás va en su «⋯» ([accionesDelMenu]).
+ * Vuelta 136 · **lo más urgente, con su acción**, al pie de «Falta por pagar»: «Lo más urgente: Arriendo» y,
+ * **siempre en su propio renglón**, el botón (revisión, M4: al llegar un gasto que se parece a la cuota el rótulo
+ * cambia de «Anotar pago» a «¿Es el de $980.000?», y en un renglón compartido el botón podía bajar: la tarjeta
+ * saltaba).
  */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun RenglonDeLoMasUrgente(urgente: LoMasUrgente) {
+    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_LO_MAS_URGENTE), verticalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+        Separador(SangriaDeSeparador.Ninguna, modifier = Modifier.padding(top = Espacio.xs))
+        // Un renglón, «Lo más urgente: Arriendo» (el nombre en negrita): el estado ya lo dice su fila,
+        // que va primera en la lista.
+        Text(
+            textoDeLoMasUrgente(urgente.nombre),
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Boton(
+            urgente.boton,
+            onClick = urgente.onClick,
+            variante = if (urgente.principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
+            tamano = TamanoDeBoton.S,
+            habilitado = urgente.habilitado,
+            modifier = Modifier.testTag(TAG_ACCION_DE_LO_MAS_URGENTE),
+        )
+    }
+}
+
+// ── Vuelta 136 · una sola fila de factura ─────────────────────────────────────────────────────────
+
+/**
+ * **Lo que dice el renglón de estado de una factura** (vuelta 136): un texto y su tono, siempre en el mismo
+ * lugar de la fila. [conCheck] pone el visto antes del texto («Pagado»): el color nunca es la única pista.
+ */
+data class EstadoDeLaFactura(
+    val texto: String,
+    val tono: TonoDeSubtitulo,
+    val conCheck: Boolean = false,
+    /**
+     * Revisión de la 136 (M2, M7) · la versión larga, solo si cabe entera en la fila («Venció hace 3 días · falta
+     * el mínimo», «Vence el 22 nov · cada 3 meses»); si no, [texto]. `null`: no hay versión larga.
+     */
+    val siCabe: String? = null,
+)
+
+/** Lo que dice el renglón de estado de una fila mientras una escritura suya viaja. */
+const val GUARDANDO_LA_FACTURA: String = "Guardando…"
+
+/** «Abono planeado · el día 15», «Abono planeado · este mes». */
+const val ABONO_PLANEADO: String = "Abono planeado"
+
+/**
+ * **El renglón de estado de una factura** (vuelta 136), en este orden —lo primero que aplica—:
+ *
+ * - con una escritura en vuelo, «Guardando…»;
+ * - sellada con el extracto de su tarjeta todavía abierto: «Faltan $1.292.700 del extracto», en aviso (no se ve
+ *   pagada), y si cabe entera la larga, [loQueFaltaDelExtracto] («Abonaste $100.000 · faltan $1.292.700 del extracto…»);
+ * - **pagada** ([PagoDelPeriodo.hecho]): «Pagado · 25 oct» («Recibido» si es un ingreso, «Mínimo cubierto»
+ *   si el mínimo del extracto quedó cubierto sin un pago propio), en el verde de `entra` con el visto;
+ * - una tarjeta pagada por debajo de su mínimo: [lineaDelMinimo], en aviso (cortada a un renglón en la fila;
+ *   la hoja la dice entera);
+ * - con un movimiento que Movi propone **cerca del monto** ([candidato]; revisión de la 136, I1: uno lejano o el
+ *   gasto que se parece a la cuota no tapan el vencimiento, se ven en la hoja): «¿Es el de $4.000.000?»
+ *   ([enlaceDeLaPropuestaLejana]), en el azul del enlace;
+ * - una fila que no suma en «Falta por pagar» (vuelta 86): «No suma: falta el mínimo» ([pildoraDeLoQueNoSuma]), en aviso;
+ *   vencida, gana el vencimiento («Venció hace 3 días · falta el mínimo» si cabe; M2);
+ * - un abono: «Abono planeado · el día 15» ([pastillaDelAbono]);
+ * - lo demás (con «· cada 3 meses» si no es de cada mes, está por vencer y cabe; M7), la pastilla de vencimiento de siempre ([pastillaDeVencimiento]: «Vence el 17 nov», «Venció hace 3
+ *   días», «Se cobra sola el 5», «¿Se cobró?»), con su tono: el aviso, o neutro.
+ *
+ * Todo sale de funciones que ya existían: ningún estado nuevo. Pura.
+ */
+fun estadoDeLaFactura(
+    pago: PagoDelPeriodo,
+    candidato: FinancialEvent?,
+    enVuelo: Boolean = false,
+    /** Vuelta 86: la fila no suma en «Falta por pagar» ([porQueNoSuma]); lo dice en aviso. */
+    noSuma: PorQueNoSuma? = null,
+    /** Vuelta 62 · el extracto de la tarjeta de esta fila (`extractoDeLaFila`); en una sellada, sigue abierto. */
+    extracto: ExtractoDeLaTarjeta? = null,
+): EstadoDeLaFactura {
+    if (enVuelo) return EstadoDeLaFactura(GUARDANDO_LA_FACTURA, TonoDeSubtitulo.Normal)
+    // Revisión de la 136 (C1): un abono menor que el extracto sella la fila, pero el extracto sigue abierto: la
+    // fila no puede verse pagada. Dice lo que falta, en aviso (la regla de la vuelta 62).
+    // Re-revisión (1): la frase larga a 360 dp cortaba justo la cifra que falta; lo corto es «Faltan $X del extracto»
+    // y la larga va solo si cabe entera.
+    if (pago.hecho && extracto != null) {
+        return EstadoDeLaFactura(
+            "Faltan ${montoDelExtracto(extracto.facturado, extracto.moneda)} del extracto",
+            TonoDeSubtitulo.Aviso,
+            siCabe = loQueFaltaDelExtracto(extracto),
+        )
+    }
+    if (pago.hecho) {
+        val estado = when {
+            pago.esIngreso -> "Recibido"
+            // Vuelta 72 (revisión): el mínimo del extracto ya está cubierto sin un pago propio.
+            !pago.pagado -> MINIMO_CUBIERTO
+            else -> "Pagado"
+        }
+        val fecha = pago.pagadoEl?.let(::fechaCortaDeFactura)?.takeIf { pago.pagado }
+        return EstadoDeLaFactura(if (fecha == null) estado else "$estado · $fecha", TonoDeSubtitulo.Exito, conCheck = true)
+    }
+    lineaDelMinimo(pago)?.let { return EstadoDeLaFactura(it, TonoDeSubtitulo.Aviso) }
+    if (candidato != null) return EstadoDeLaFactura(enlaceDeLaPropuestaLejana(candidato), TonoDeSubtitulo.Enlace)
+    val (vencimiento, tonoDelVencimiento) = pastillaDeVencimiento(pago, conPropuesta = false)
+    // Vuelta 86: lo que no suma lo dice la fila («No suma: falta el mínimo»); «Cargar mínimo» va en la hoja.
+    // Revisión de la 136 (M2): vencida, gana el vencimiento, con «· falta el mínimo» si cabe.
+    if (noSuma != null) {
+        return if (pago.vencido) {
+            EstadoDeLaFactura(vencimiento, TonoDeSubtitulo.Aviso, siCabe = "$vencimiento · ${pildoraDeLoQueNoSuma(noSuma).removePrefix(PREFIJO_DE_NO_SUMA)}")
+        } else {
+            EstadoDeLaFactura(pildoraDeLoQueNoSuma(noSuma), TonoDeSubtitulo.Aviso)
+        }
+    }
+    if (pago.esAbono) {
+        return EstadoDeLaFactura("$ABONO_PLANEADO · ${pastillaDelAbono(pago).replaceFirstChar { it.lowercase() }}", TonoDeSubtitulo.Normal)
+    }
+    // Revisión de la 136 (M7): por vencer, la cadencia de una factura que no es de cada mes, si cabe.
+    val cadencia = cadenciaDeLaFila(pago)?.takeIf { !pago.vencido }?.replaceFirstChar { it.lowercase() }
+    return EstadoDeLaFactura(
+        vencimiento,
+        if (tonoDelVencimiento == TonoDePildora.Neutra) TonoDeSubtitulo.Normal else TonoDeSubtitulo.Aviso,
+        siCabe = cadencia?.let { "$vencimiento · $it" },
+    )
+}
+
+/** Lo que se le quita a «No suma: falta el mínimo» para decirlo después del vencimiento. */
+private const val PREFIJO_DE_NO_SUMA: String = "No suma: "
+
+/**
+ * **La cifra de una factura y lo que la acompaña** (vuelta 136): «unos» antes del monto de una cuota que
+ * cambia sin pagar ([estimada], la regla única `laCifraDelPagoEsEstimada` de la vuelta 134, que la pinta
+ * `ConUnos`), y después «saldo» si el monto de una tarjeta es su saldo o «extracto» si es lo facturado al
+ * corte (vuelta 62). La misma en la fila y en la hoja. Pura.
+ *
+ * @property despues lo que va después del monto, o `null`.
+ */
+data class CifraDeLaFactura(val texto: String, val estimada: Boolean = false, val despues: String? = null)
+
+/** Ver [CifraDeLaFactura]. Pura. */
+fun cifraDeLaFactura(pago: PagoDelPeriodo, extracto: ExtractoDeLaTarjeta?): CifraDeLaFactura = when {
+    // Vuelta 62: lo que pide el extracto, no el saldo entero. Solo sin pagar (C1): sellada, va lo que salió.
+    extracto != null && !pago.hecho -> CifraDeLaFactura(montoDelExtracto(extracto.facturado, extracto.moneda), despues = ROTULO_DEL_EXTRACTO)
+    // Vuelta 133/134: la cuota que cambia es una estimación, y se dice («unos $X»), con la regla única.
+    com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago) -> CifraDeLaFactura(textoDelMontoDelChecklist(pago), estimada = true)
+    // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.
+    !pago.hecho && pago.montoEsSaldo -> CifraDeLaFactura(textoDelMontoDelChecklist(pago), despues = "saldo")
+    else -> CifraDeLaFactura(textoDelMontoDelChecklist(pago))
+}
+
+/**
+ * Con la letra del sistema por encima de esto (la de la app ya es ×1,12), la fila de una factura reserva dos
+ * renglones para el nombre y dos para el estado (vuelta 136). La misma regla para todas: crecen juntas.
+ */
+const val ESCALA_DE_LETRA_GRANDE_EN_LAS_FACTURAS: Float = 1.2f
+
+/** Cuántos renglones ocupan el nombre y el estado de una factura con esta escala de letra. Pura. */
+fun renglonesDeLaFactura(escalaDeLaLetra: Float): Int = if (escalaDeLaLetra > ESCALA_DE_LETRA_GRANDE_EN_LAS_FACTURAS) 2 else 1
+
+/** El tag de una factura sin pagar (la pagada lleva [TAG_FILA_PAGADA]); las dos, además, [TAG_FILA_DE_FACTURA]. */
+const val TAG_FILA_PENDIENTE: String = "pagos:fila-pendiente"
+
+/** El tag de la cifra de una factura con lo que la acompaña («unos», «saldo», «extracto»). */
+const val TAG_CIFRA_DE_LA_FACTURA: String = "pagos:cifra-de-la-factura"
+
+/** Lo que dice el toque sobre una factura al lector de pantalla. */
+const val ETIQUETA_ABRIR_LA_FACTURA: String = "Ver el pago"
+
+/**
+ * **Una factura del período** (vuelta 136: **una sola anatomía** para toda fila de «Tus facturas del período»
+ * —vencida, por vencer, por confirmar, pagada, abono, cuota, tarjeta, débito automático—). Es la [Fila] del
+ * sistema:
+ *
+ * - a la izquierda el ícono de su categoría ([nombreParaElIconoDeLaFactura]);
+ * - en el centro **dos renglones fijos**: el nombre (uno; dos con la letra grande; si no cabe, cortado por el
+ *   principio, «…Master Black 3684») y el renglón de estado ([estadoDeLaFactura]: un texto y un tono, con la
+ *   fecha: «Vence el 17 nov», «Pagado · 25 oct»);
+ * - a la derecha, solo la cifra ([cifraDeLaFactura], con «unos», «saldo» o «extracto»);
+ * - **toda la fila se toca** y abre la hoja de esa factura ([onAbrir]), donde vive todo lo demás.
+ *
+ * Todas miden lo mismo con la letra normal; con la grande reservan los mismos renglones y crecen igual
+ * (`reservarRenglones`). Lo vigila `UnaSolaFilaDeFacturaTest`.
+ */
 @Composable
 internal fun FilaDeFactura(
     pago: PagoDelPeriodo,
-    principal: Boolean,
-    enVuelo: Boolean,
-    conPropuesta: Boolean,
-    onAnotar: (() -> Unit)?,
-    onVerMovimiento: ((String) -> Unit)?,
+    estado: EstadoDeLaFactura,
+    extracto: ExtractoDeLaTarjeta?,
     onAbrir: (() -> Unit)?,
-    etiquetaDeAbrir: String?,
-    evidencia: String?,
-    debajo: (@Composable () -> Unit)? = null,
-    /**
-     * Vuelta 48 · lo que la fila pagada guarda en su «⋯» («Quitar la marca», «No fue este»), con su
-     * acción. Solo se mira en una fila pagada: ver [FilaDeFacturaPagada].
-     */
-    accionesDelMenu: List<Pair<String, () -> Unit>> = emptyList(),
-    /**
-     * Vuelta 62 · el extracto de la tarjeta de esta fila (ver `extractoDeLaFila`): la cifra pasa a ser
-     * lo facturado al corte —no el saldo entero— con el mínimo como alternativa debajo. `null` = la
-     * fila de siempre.
-     */
-    extracto: ExtractoDeLaTarjeta? = null,
-    /** Vuelta 72 (revisión) · el «⋯» de una fila sin pagar: «Pausar». Vacío, sin «⋯». */
-    accionesDelMenuPendiente: List<Pair<String, () -> Unit>> = emptyList(),
-    /**
-     * Vuelta 86 · la fila no suma en «Falta por pagar» ([porQueNoSuma]): lleva la píldora «No suma: falta el
-     * mínimo» y, con [onCargarMinimo], «Cargar mínimo» ahí mismo (la hoja de los términos de la tarjeta).
-     */
-    noSuma: PorQueNoSuma? = null,
-    onCargarMinimo: (() -> Unit)? = null,
 ) {
-    // Vuelta 72: solo lo HECHO es compacto; una tarjeta pagada por debajo de su mínimo sigue pendiente.
-    if (pago.hecho) {
-        FilaDeFacturaPagada(
-            pago = pago,
-            enVuelo = enVuelo,
-            onTocar = pago.eventId?.let { id -> onVerMovimiento?.let { ver -> { ver(id) } } } ?: onAbrir,
-            etiquetaDeTocar = if (pago.eventId != null && onVerMovimiento != null) "Ver el movimiento" else etiquetaDeAbrir,
-            accionesDelMenu = accionesDelMenu,
-            // Lo que Movi emparejó solo y el sello viejo sin movimiento dicen de dónde salió el
-            // «Pagado» arriba de su «⋯»: es justo lo que «No fue este» y «Quitar la marca» discuten.
-            // Vuelta 51: la cuota de un crédito dice cómo deshacerla (`notaDelMenuDeLaFilaPagada`).
-            notaDelMenu = notaDelMenuDeLaFilaPagada(pago, evidencia),
-            extracto = extracto,
-        )
-        return
-    }
-    // Lo que se toca para abrir la regla es el ícono con los textos, no la fila entera: el botón de la
-    // derecha es otro control, y un botón adentro de otro tocable se lee mal (y se toca mal).
-    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_FACTURA)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = Medida.altoDeFila)
-                .padding(end = Medida.margenDePantalla),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .then(if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir) else Modifier)
-                    .padding(start = Medida.margenDePantalla, top = Espacio.s, bottom = Espacio.xxs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(modifier = Modifier.size(Medida.avatar), contentAlignment = Alignment.Center) {
-                    // Vuelta 40: el ícono de la categoría, o el del nombre si la categoría no dice nada
-                    // («Arriendo» anotado en «Otros» lleva la casa, no el ícono genérico).
-                    IconoDeCategoria(nombreParaElIconoDeLaFactura(pago.categoria, pago.nombre))
-                }
-                Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                    // Vuelta 55: tres renglones. Con la letra al 130 % a 360 dp, «Administración del
-                    // conjunto» al lado de «Anotar pago» necesita tres; con dos se cortaba. Vuelta 134: cuatro;
-                    // «Cuota Libre inversión 9695» (el nombre de la cuota de un crédito) necesita cuatro a ×1,456.
-                    Text(
-                        pago.nombre,
-                        style = Movi.textos.cuerpoFuerte,
-                        color = Movi.colores.texto,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                        if (extracto != null) {
-                            // Vuelta 62: lo que pide el extracto, no el saldo entero.
-                            MontoDeFila(montoDelExtracto(extracto.facturado, extracto.moneda), color = Movi.colores.texto)
-                            Text(ROTULO_DEL_EXTRACTO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                        } else if (com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago)) {
-                            // Vuelta 133: la cuota que cambia es una estimación, y se dice («unos $X»).
-                            // Vuelta 134: con la regla única, la misma de «Próximo pago», el widget y la campana; y en
-                            // un renglón que se parte: a 360 dp con la letra a ×1,456 la cifra baja entera debajo de
-                            // «unos» en vez de salirse de su caja.
-                            com.jvillada.movi.ui.components.ds.ConUnos(estimada = true) {
-                                MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
-                            }
-                        } else {
-                            MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
-                            // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.
-                            if (pago.montoEsSaldo) {
-                                Text("saldo", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                            }
-                        }
+    val renglones = renglonesDeLaFactura(LocalDensity.current.fontScale)
+    Box(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_FACTURA)) {
+        Box(modifier = Modifier.fillMaxWidth().testTag(if (pago.hecho) TAG_FILA_PAGADA else TAG_FILA_PENDIENTE)) {
+            Fila(
+                titulo = pago.nombre,
+                subtitulo = estado.texto,
+                subtituloSiCabe = estado.siCabe,
+                // Vuelta 40: el ícono de la categoría, o el del nombre si la categoría no dice nada.
+                inicio = { IconoDeCategoria(nombreParaElIconoDeLaFactura(pago.categoria, pago.nombre)) },
+                // Revisión de la 136 (I2, M1): a la derecha solo la cifra; la fecha la dice el renglón de estado.
+                final = {
+                    Box(modifier = Modifier.testTag(TAG_CIFRA_DE_LA_FACTURA)) {
+                        CifraConRotulosDeLaFactura(cifraDeLaFactura(pago, extracto), VarianteDeCifra.Fila)
                     }
-                    lineaDeLaCuotaAnterior(pago)?.let { anterior ->
-                        Text(
-                            anterior,
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.testTag(TAG_CUOTA_ANTERIOR_DE_LA_FILA),
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.width(ESPACIO_ANTES_DEL_FINAL_DE_FILA))
-            // Vuelta 80: **una sola acción al final de la fila**: el botón o el «⋯», nunca los dos
-            // apilados (el «⋯» flotaba debajo del botón, `r7-pagos-390-a.png`). Con botón, «Pausar»
-            // queda en la regla, que abre tocar la fila.
-            if (accionDeLaFilaPendiente(onAnotar != null, conPropuesta, accionesDelMenuPendiente.isNotEmpty()) == AccionDeLaFila.MENU) {
-                MenuDeLaFila(pago.nombre, accionesDelMenuPendiente, nota = null, enVuelo = enVuelo, tag = TAG_MENU_DE_LA_FILA_PENDIENTE)
-            }
-            if (onAnotar != null && !conPropuesta) {
-                Boton(
-                    when {
-                        pago.esIngreso -> ETIQUETA_ANOTAR_INGRESO
-                        // Vuelta 63: abre el Traspaso hacia la deuda, ya lleno, y al guardar la tilda.
-                        pago.esAbono -> ANOTAR_ESTE_ABONO
-                        else -> ETIQUETA_ANOTAR
-                    },
-                    onClick = onAnotar,
-                    variante = if (principal) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
-                    tamano = TamanoDeBoton.S,
-                    habilitado = !enVuelo,
-                )
-            }
-        }
-        // **La pastilla va en su renglón**, a todo el ancho desde el texto (vuelta 40, revisión): al
-        // lado de «Anotar pago», a 360 dp, «Venció hace 23 días» se cortaba en «Venció hace 23». Lo
-        // mide `LaPastillaCabeEnteraTest`. El renglón también abre la regla (es parte de lo que se lee
-        // de la fila).
-        // Vuelta 72 (revisión): el «⋯» con «Pausar» va al final de ESTE renglón, no al lado de «Anotar pago»:
-        // ahí le quitaba al nombre y a la cifra el ancho que necesitan con la letra al 130 % a 360 dp.
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .then(if (onAbrir != null) Modifier.clickable(onClickLabel = etiquetaDeAbrir, onClick = onAbrir) else Modifier)
-                .padding(
-                    start = SANGRIA_DEL_TEXTO_DE_LA_FILA,
-                    end = Medida.margenDePantalla,
-                    bottom = Espacio.s,
-                ),
-            verticalArrangement = Arrangement.spacedBy(Espacio.xxs),
-        ) {
-            when {
-                enVuelo -> Text("Guardando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                // Vuelta 72: la tarjeta con un pago por debajo del mínimo dice cuánto falta, en aviso.
-                // Un texto y no una pastilla: la frase es larga y a 360 dp tiene que poder partirse.
-                lineaDelMinimo(pago) != null -> Text(
-                    lineaDelMinimo(pago)!!,
-                    style = Movi.textos.apoyoMedio,
-                    color = Movi.colores.aviso,
-                    modifier = Modifier.testTag(TAG_FALTA_DEL_MINIMO),
-                )
-                else -> {
-                    val (texto, tono) = pastillaDeVencimiento(pago, conPropuesta)
-                    Pildora(texto, tono)
-                }
-            }
-            // Vuelta 126: una factura que no es de cada mes lo dice («Cada 3 meses»): este período la cobra entera.
-            cadenciaDeLaFila(pago)?.let {
-                Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_CADENCIA_DE_LA_FILA))
-            }
-            extracto?.let { e ->
-                alternativaDelMinimo(e)?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
-                if (e.puedeIncluirDiferidos) Text(PUEDE_INCLUIR_DIFERIDOS, style = Movi.textos.apoyo, color = Movi.colores.textoApagado)
-            }
-        }
-        }
-        // Vuelta 86: lo que no suma lo dice la fila, con cómo arreglarlo, no tres pantallas abajo. Fuera
-        // del renglón que abre la regla: un botón adentro de otro tocable se lee (y se toca) mal.
-        if (noSuma != null && !enVuelo) {
-            // A 360 con la letra al 130 % la píldora y el botón no caben juntos: el botón baja.
-            androidx.compose.foundation.layout.FlowRow(
-                modifier = Modifier
-                    .padding(start = SANGRIA_DEL_TEXTO_DE_LA_FILA, end = Medida.margenDePantalla)
-                    .padding(bottom = Espacio.xs),
-                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-            ) {
-                Box(Modifier.align(Alignment.CenterVertically).testTag(TAG_NO_SUMA)) {
-                    Pildora(pildoraDeLoQueNoSuma(noSuma), TonoDePildora.Aviso)
-                }
-                if (onCargarMinimo != null) {
-                    Boton(
-                        accionDeLoQueNoSuma(noSuma),
-                        onClick = onCargarMinimo,
-                        variante = VarianteDeBoton.Fantasma,
-                        tamano = TamanoDeBoton.S,
-                        modifier = Modifier.align(Alignment.CenterVertically).testTag(TAG_CARGAR_MINIMO),
-                    )
-                }
-            }
+                },
+                onClick = onAbrir,
+                onClickLabel = ETIQUETA_ABRIR_LA_FACTURA,
+                lineasDelTitulo = renglones,
+                // Revisión de la 136 (I2): si no cabe, se corta por el principio («…Master Black 3684»).
+                cortarElTituloPorElPrincipio = true,
+                lineasDelSubtitulo = renglones,
+                reservarRenglones = true,
+                tonoDelSubtitulo = estado.tono,
+                iconoDelSubtitulo = if (estado.conCheck) Icons.Rounded.Check else null,
+                // El texto ya dice «Pagado»: el visto no lo repite al lector.
+                descripcionDelIconoDelSubtitulo = null,
+                chevron = false,
+            )
         }
     }
-    debajo?.let { BajoLaFila { it() } }
 }
 
-/** Qué lleva al final una factura sin pagar (vuelta 80): una sola cosa. */
-internal enum class AccionDeLaFila { BOTON, MENU, NADA }
-
-/**
- * **La única acción al final de una factura sin pagar** (vuelta 80): el botón si lo hay («Anotar pago»,
- * sin una propuesta que lo reemplace); si no, el «⋯» si tiene algo; si no, nada. Pura.
- */
-internal fun accionDeLaFilaPendiente(conAnotar: Boolean, conPropuesta: Boolean, conMenu: Boolean): AccionDeLaFila = when {
-    conAnotar && !conPropuesta -> AccionDeLaFila.BOTON
-    conMenu -> AccionDeLaFila.MENU
-    else -> AccionDeLaFila.NADA
+/** El monto de [cifra] con lo que va antes y después, en la variante [variante]. Fila y hoja. */
+@Composable
+internal fun CifraConRotulosDeLaFactura(cifra: CifraDeLaFactura, variante: VarianteDeCifra) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+        // Vuelta 134: «unos» se arma en un solo lugar (`ConUnos`).
+        com.jvillada.movi.ui.components.ds.ConUnos(estimada = cifra.estimada) {
+            MontoDeFila(cifra.texto, color = Movi.colores.texto, variante = variante)
+        }
+        cifra.despues?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1) }
+    }
 }
 
 /**
- * «$1.800.000 · 27 oct»: lo que va después de «Pagado ✓» en una factura pagada (vuelta 48), con lo que de
- * verdad salió ([textoDelMontoDelChecklist]) y el día en que salió, si se sabe. Pura.
+ * «$1.800.000 · 27 oct»: lo que salió y cuándo, en una factura pagada (vuelta 48; desde la vuelta 136 lo dice
+ * la hoja de la factura), con lo que de verdad salió ([textoDelMontoDelChecklist]) y el día en que salió, si
+ * se sabe. Pura.
  */
 fun resumenDeLaFacturaPagada(pago: PagoDelPeriodo): String =
     if (!pago.pagado && pago.restoDelMinimo == 0L) {
@@ -555,153 +554,40 @@ fun resumenDeLaFacturaPagada(pago: PagoDelPeriodo): String =
 /** Vuelta 72 (revisión) · la fila del extracto con el mínimo cubierto, sin un pago que la tilde. */
 const val MINIMO_CUBIERTO: String = "Mínimo cubierto"
 
-/** El tag de una factura pagada (vuelta 48) y el de su «⋯». */
+/** El tag de una factura pagada (vuelta 48). */
 const val TAG_FILA_PAGADA: String = "pagos:fila-pagada"
-const val TAG_MENU_DE_LA_FILA_PAGADA: String = "pagos:menu-de-la-fila-pagada"
 
-/** Lo que dice el «⋯» de una factura pagada al lector de pantalla. */
-fun descripcionDelMenuDeLaFila(nombre: String): String = "Más opciones de $nombre"
+// ── Vuelta 136 · lo más urgente, en la tarjeta «Falta por pagar» ─────────────────────────────────────
+
+/** El rótulo del renglón de lo más urgente en la tarjeta «Falta por pagar». */
+const val ROTULO_DE_LO_MAS_URGENTE: String = "Lo más urgente"
+
+/** «Lo más urgente: Arriendo», con el nombre en `cuerpoFuerte` y la tinta. */
+@Composable
+private fun textoDeLoMasUrgente(nombre: String): androidx.compose.ui.text.AnnotatedString =
+    androidx.compose.ui.text.buildAnnotatedString {
+        append("$ROTULO_DE_LO_MAS_URGENTE: ")
+        withStyle(Movi.textos.cuerpoFuerte.toSpanStyle().copy(color = Movi.colores.texto)) { append(nombre) }
+    }
+
+/** El tag de ese renglón y el de su botón. */
+const val TAG_LO_MAS_URGENTE: String = "pagos:lo-mas-urgente"
+const val TAG_ACCION_DE_LO_MAS_URGENTE: String = "pagos:accion-de-lo-mas-urgente"
 
 /**
- * **Una factura pagada, compacta** (vuelta 48): ícono, nombre y «Pagado ✓ · $1.800.000 · 27 oct» en un
- * renglón. Tocarla abre el movimiento que la pagó ([onTocar]; sin movimiento, la regla). Lo que se
- * puede hacer con ella —«Quitar la marca», «No fue este» en lo que Movi emparejó solo— va en el «⋯» de
- * la derecha, no en dos botones con borde apilados: una lista de cosas resueltas no se llena de
- * botones. **Nunca mide más que una pendiente** (lo mide `LaFacturaPagadaEsCompactaTest`).
+ * **El renglón de lo más urgente en «Falta por pagar»** (vuelta 136): «Lo más urgente: Arriendo» y una acción. Así
+ * las filas de la lista son todas iguales y el amarillo de Pagos sigue siendo el pago más urgente (vuelta 79).
+ *
+ * @property boton «Anotar pago» o, si Movi tiene un candidato, «¿Es el de $X?» (que abre la hoja).
+ * @property principal el amarillo; ver [accionPrincipalDeLaFila].
  */
-@Composable
-private fun FilaDeFacturaPagada(
-    pago: PagoDelPeriodo,
-    enVuelo: Boolean,
-    onTocar: (() -> Unit)?,
-    etiquetaDeTocar: String?,
-    accionesDelMenu: List<Pair<String, () -> Unit>>,
-    notaDelMenu: String? = null,
-    /** Vuelta 62: el extracto de la tarjeta que sigue abierto aunque un abono haya sellado la fila. */
-    extracto: ExtractoDeLaTarjeta? = null,
-) {
-    Box(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_FACTURA)) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = Medida.altoDeFila)
-            .testTag(TAG_FILA_PAGADA),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .then(if (onTocar != null) Modifier.clickable(onClickLabel = etiquetaDeTocar, onClick = onTocar) else Modifier)
-                .padding(start = Medida.margenDePantalla, top = Espacio.s, bottom = Espacio.s),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = Modifier.size(Medida.avatar), contentAlignment = Alignment.Center) {
-                IconoDeCategoria(nombreParaElIconoDeLaFactura(pago.categoria, pago.nombre))
-            }
-            Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                Text(
-                    pago.nombre,
-                    style = Movi.textos.cuerpoFuerte,
-                    color = Movi.colores.texto,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (enVuelo) {
-                    Text("Guardando…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val estado = when {
-                            pago.esIngreso -> "Recibido"
-                            // Vuelta 72 (revisión): el mínimo del extracto ya está cubierto sin un pago propio.
-                            !pago.pagado -> MINIMO_CUBIERTO
-                            else -> "Pagado"
-                        }
-                        Text(estado, style = Movi.textos.apoyoMedio, color = Movi.colores.entra)
-                        Icon(
-                            Icons.Rounded.Check,
-                            // Como la píldora de antes: el check dice «Pagado» (lo buscan las pruebas).
-                            contentDescription = estado,
-                            tint = Movi.colores.entra,
-                            modifier = Modifier.padding(start = Espacio.xxs).size(Icono.s),
-                        )
-                        Text(
-                            " · ${resumenDeLaFacturaPagada(pago)}",
-                            style = Movi.textos.apoyo,
-                            color = Movi.colores.textoMedio,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    // Vuelta 62 (revisión): un abono menor que el extracto sella la fila, pero el
-                    // extracto sigue abierto. La regla del sello no cambia; la fila lo dice.
-                    extracto?.let { e ->
-                        Text(loQueFaltaDelExtracto(e), style = Movi.textos.apoyo, color = Movi.colores.aviso)
-                    }
-                }
-            }
-        }
-        if (accionesDelMenu.isNotEmpty()) {
-            MenuDeLaFila(pago.nombre, accionesDelMenu, notaDelMenu, enVuelo, TAG_MENU_DE_LA_FILA_PAGADA)
-            Spacer(Modifier.width(Espacio.xs))
-        } else {
-            Spacer(Modifier.width(Medida.margenDePantalla))
-        }
-    }
-    }
-}
-
-/** El tag del «⋯» de una factura sin pagar (vuelta 72: «Pausar»). */
-const val TAG_MENU_DE_LA_FILA_PENDIENTE: String = "pagos:menu-de-la-fila-pendiente"
-
-/**
- * **El «⋯» de una factura** (vuelta 48 en la pagada; vuelta 72 también en la pendiente, con «Pausar»): el
- * botón redondo con su menú, y arriba la [nota] si la hay.
- */
-@Composable
-private fun MenuDeLaFila(
-    nombre: String,
-    acciones: List<Pair<String, () -> Unit>>,
-    nota: String?,
-    enVuelo: Boolean,
-    tag: String,
-) {
-    Box(modifier = Modifier.testTag(tag)) {
-        var abierto by remember { mutableStateOf(false) }
-        BotonDeIcono(
-            icono = Icons.Rounded.MoreHoriz,
-            descripcion = descripcionDelMenuDeLaFila(nombre),
-            onClick = { abierto = true },
-            habilitado = !enVuelo,
-        )
-        DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }, containerColor = Movi.colores.tarjeta) {
-            if (nota != null) {
-                Text(
-                    nota,
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    modifier = Modifier.padding(horizontal = Espacio.m, vertical = Espacio.xs),
-                )
-            }
-            acciones.forEach { (texto, accion) ->
-                DropdownMenuItem(
-                    text = { Text(texto, style = Movi.textos.cuerpo, color = Movi.colores.texto) },
-                    onClick = { abierto = false; accion() },
-                )
-            }
-        }
-    }
-}
+data class LoMasUrgente(
+    val nombre: String,
+    val boton: String,
+    val principal: Boolean,
+    val habilitado: Boolean,
+    val onClick: () -> Unit,
+)
 
 /** Los planes de las cuotas, para la estimación de cada fila (ver [estimacionDeLaFila]). */
 internal typealias PlanesDeCuotas = Map<String, PlanDelCredito>
-
-/** ¿La fila de [pago] trae algo que ofrecer debajo, además de su botón? */
-internal fun ofreceAlgoDebajo(pago: PagoDelPeriodo, conPropuesta: Boolean): Boolean = when (pago.estado) {
-    EstadoDeLaFila.LISTO -> pago.automatica || (pago.eventId != null && !pago.derivado)
-    EstadoDeLaFila.MARCADA_A_MANO -> true
-    // Con o sin propuesta: o pregunta «¿fue este?», o dice que Movi no encontró el movimiento.
-    EstadoDeLaFila.CON_DUDAS -> true
-    EstadoDeLaFila.SIN_MOVIMIENTO -> true
-    else -> false
-}

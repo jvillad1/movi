@@ -1,5 +1,9 @@
 package com.jvillada.movi.ui.recurrentes
 
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -92,12 +96,32 @@ class LaCuotaParecidaEnPagosTest {
         composeRule.waitForIdle()
     }
 
+    /** Vuelta 136: el candidato se mira y se confirma en la hoja de la factura. */
+    private fun abrirLaHoja(nombre: String = cuota.nombre) {
+        composeRule.abrirLaFactura(nombre)
+        composeRule.waitForIdle()
+    }
+
+    /** La variante del botón [texto] dentro de la hoja abierta. */
+    private fun varianteEnLaHoja(texto: String): VarianteDeBoton? = composeRule.onNode(
+        hasAnyDescendant(hasText(texto)) and hasAnyAncestor(hasTestTag(TAG_HOJA_DE_LA_FACTURA)) and SemanticsMatcher.keyIsDefined(VarianteDeBotonKey),
+        useUnmergedTree = true,
+    ).fetchSemanticsNode().config.getOrNull(VarianteDeBotonKey)
+
+    /** La variante del botón de «Lo más urgente», en «Falta por pagar». */
+    private fun varianteDeLoMasUrgente(): VarianteDeBoton? =
+        composeRule.onNodeWithTag(TAG_ACCION_DE_LO_MAS_URGENTE).fetchSemanticsNode().config.getOrNull(VarianteDeBotonKey)
+
     @Test
     fun `la cuota pendiente ofrece el gasto parecido y Si es la cuota hace lo del detalle`() {
         montar(mapOf(claveDeLaCuotaPorSaldar("v4083", "2026-10-27") to parecido))
 
-        composeRule.onNodeWithTag(TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS).performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
+        // Revisión de la 136 (I1): un gasto parecido no tapa el estado de la cuota («¿Se cobró?»); la hoja lo
+        // pregunta (y «Falta por pagar», si es la más urgente).
+        assertTrue(composeRule.onAllNodes(hasText("¿Es el de \$980.000?") and hasAnyAncestor(hasTestTag(TAG_FILA_DE_FACTURA)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodes(hasText(PILDORA_SE_COBRO) and hasAnyAncestor(hasTestTag(TAG_FILA_DE_FACTURA)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        abrirLaHoja()
+        composeRule.onNodeWithTag(TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS, useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("¿Es la cuota de Vehículo 4083?").assertExists()
         assertTrue(esLaCuota.isEmpty(), "nunca se tilda solo")
         tocar(SI_ES_LA_CUOTA)
@@ -107,8 +131,7 @@ class LaCuotaParecidaEnPagosTest {
     @Test
     fun `No fue este deja de ofrecerlo, y sin parecido la fila sigue como antes`() {
         montar(mapOf(claveDeLaCuotaPorSaldar("v4083", "2026-10-27") to parecido))
-        composeRule.onNodeWithText("¿Es el de \$980.000?").performSemanticsAction(SemanticsActions.OnClick)
-        composeRule.waitForIdle()
+        abrirLaHoja()
         tocar(ETIQUETA_NO_FUE_ESTE)
         assertEquals(listOf("ev-980"), noEs)
     }
@@ -118,27 +141,29 @@ class LaCuotaParecidaEnPagosTest {
         // La clave de otro vencimiento no es la de esta fila.
         montar(mapOf(claveDeLaCuotaPorSaldar("v4083", "2026-11-27") to parecido))
         assertTrue(composeRule.onAllNodesWithText("¿Es el de", substring = true).fetchSemanticsNodes().isEmpty())
+        abrirLaHoja()
         composeRule.onNodeWithText(TEXTO_SIN_MOVIMIENTO_DEL_DEBITO).assertExists()
     }
 
     // ── Vuelta 58 · con un gasto parecido, la acción principal es el candidato, no «Anotar pago» ────
 
-    private fun variante(texto: String): VarianteDeBoton? =
-        composeRule.onNodeWithText(texto).fetchSemanticsNode().config.getOrNull(VarianteDeBotonKey)
-
     /**
      * Revisión de la vuelta 57: «Anotar pago» seguía siendo el botón amarillo y «¿Es el de $980.000?» un
      * enlace; tocar el principal duplicaba el gasto. Con un candidato **parecido** el principal es el
-     * candidato y «Anotar pago» pasa a secundario.
+     * candidato y «Anotar pago» pasa a secundario. Vuelta 136: en «Falta por pagar» el amarillo es
+     * «¿Es el de $980.000?» (abre la hoja), y en la hoja «Sí, es la cuota»; «Anotar pago», con borde.
      */
     @Test
     fun `con un gasto parecido el principal es el candidato y Anotar pago es secundario`() {
         montar(mapOf(claveDeLaCuotaPorSaldar("v4083", "2026-10-27") to parecido))
-        assertEquals(VarianteDeBoton.Principal, variante("¿Es el de \$980.000?"))
-        assertEquals(VarianteDeBoton.Secundario, variante(ETIQUETA_ANOTAR))
+        assertEquals(VarianteDeBoton.Principal, varianteDeLoMasUrgente())
+        composeRule.onNodeWithTag(TAG_ACCION_DE_LO_MAS_URGENTE).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertEquals(VarianteDeBoton.Principal, varianteEnLaHoja(SI_ES_LA_CUOTA))
+        assertEquals(VarianteDeBoton.Secundario, varianteEnLaHoja(ETIQUETA_ANOTAR))
     }
 
-    /** Con un candidato **lejano** (más del 50 %) queda como estaba: «Anotar pago» principal, el enlace al lado. */
+    /** Con un candidato **lejano** (más del 50 %) queda como estaba: «Anotar pago» principal, el candidato con borde. */
     @Test
     fun `con un candidato lejano Anotar pago sigue siendo el principal y el enlace es secundario`() {
         val tanqueo = FinancialEvent(
@@ -150,8 +175,11 @@ class LaCuotaParecidaEnPagosTest {
             vence = "2026-10-25", periodoDelSello = "2026-10", categoria = "Transporte", candidatos = listOf(tanqueo),
         )
         montar(emptyMap(), checklist = listOf(carro))
-        assertEquals(VarianteDeBoton.Principal, variante(ETIQUETA_ANOTAR))
-        assertEquals(VarianteDeBoton.Fantasma, variante("¿Es el de \$260.000?"))
+        assertEquals(VarianteDeBoton.Principal, varianteDeLoMasUrgente(), "«Anotar pago» en «Falta por pagar»")
+        abrirLaHoja("Carro")
+        composeRule.onNodeWithTag(TAG_PROPUESTA_LEJANA, useUnmergedTree = true).assertExists()
+        assertEquals(VarianteDeBoton.Principal, varianteEnLaHoja(ETIQUETA_ANOTAR))
+        assertEquals(VarianteDeBoton.Secundario, varianteEnLaHoja(ETIQUETA_SI_FUE_ESTE))
     }
 
     @Test
@@ -169,9 +197,9 @@ class LaCuotaParecidaEnPagosTest {
     }
 
     /**
-     * Vuelta 40: **un solo amarillo, y solo en la fila más urgente.** Dos cuotas, cada una con su gasto
-     * parecido: «¿Es el de…?» es el principal de la más urgente; en la otra va con borde. «Anotar pago»
-     * es secundario en las dos.
+     * Vuelta 40: **un solo amarillo, y solo en la más urgente.** Dos cuotas, cada una con su gasto parecido.
+     * Vuelta 136: el amarillo es el botón de «Lo más urgente» («¿Es el de $450.000?»); las filas no llevan
+     * botones.
      */
     @Test
     fun `con dos facturas con candidato parecido hay un solo amarillo y es el de la mas urgente`() {
@@ -195,18 +223,23 @@ class LaCuotaParecidaEnPagosTest {
         val botones = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(VarianteDeBotonKey)).fetchSemanticsNodes()
         val amarillos = botones.filter { it.config.getOrNull(VarianteDeBotonKey) == VarianteDeBoton.Principal }
         assertEquals(1, amarillos.size, "un solo botón amarillo en Pagos")
-        assertEquals(VarianteDeBoton.Principal, variante("¿Es el de \$450.000?"), "el de la más urgente")
-        assertEquals(VarianteDeBoton.Secundario, variante("¿Es el de \$980.000?"), "el de la otra, con borde")
-        composeRule.onAllNodesWithText(ETIQUETA_ANOTAR).fetchSemanticsNodes().forEach {
-            assertEquals(VarianteDeBoton.Secundario, it.config.getOrNull(VarianteDeBotonKey), "Anotar pago, secundario")
-        }
+        assertEquals(VarianteDeBoton.Principal, varianteDeLoMasUrgente(), "el de la más urgente")
+        composeRule.onNode(hasTestTag(TAG_ACCION_DE_LO_MAS_URGENTE) and hasText("¿Es el de \$450.000?")).assertExists()
+
+        // Revisión de la 136 (M6): la otra cuota, la que no es la más urgente, también ofrece su gasto parecido,
+        // en su hoja: «Sí, es la cuota» amarillo (el único de la hoja) y «Anotar pago» con borde.
+        abrirLaHoja(menosUrgente.nombre)
+        composeRule.onNodeWithText("¿Es la cuota de Vehículo 4083?").assertExists()
+        assertEquals(VarianteDeBoton.Principal, varianteEnLaHoja(SI_ES_LA_CUOTA))
+        assertEquals(VarianteDeBoton.Secundario, varianteEnLaHoja(ETIQUETA_ANOTAR))
+        tocar(SI_ES_LA_CUOTA)
+        assertEquals(listOf("ev-980"), esLaCuota, "la de la otra cuota, no la de la más urgente")
     }
 
     /**
-     * Vuelta 58: lo mismo con el candidato del **server** dentro del ±50 % («Sí, fue este»). Vuelta 72: ya
-     * no es amarillo en ninguna fila. Tres facturas —una cuota con gasto parecido (la menos urgente), una con
-     * candidato del server (la del medio) y una con candidato del server que es la más urgente—: un solo
-     * amarillo, y es el «Sí, fue este» de la más urgente.
+     * Vuelta 58: lo mismo con el candidato del **server** dentro del ±50 % («Sí, fue este»). Vuelta 72: en la
+     * lista no es amarillo. Vuelta 136: la lista no lleva ningún amarillo (la más urgente tiene una propuesta:
+     * su botón en «Falta por pagar» va con borde), y en la hoja de esa factura «Sí, fue este» es el único.
      */
     @Test
     fun `con candidatos del server en varias filas tambien hay un solo amarillo`() {
@@ -228,11 +261,12 @@ class LaCuotaParecidaEnPagosTest {
         )
         val botones = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(VarianteDeBotonKey)).fetchSemanticsNodes()
         val amarillos = botones.filter { it.config.getOrNull(VarianteDeBotonKey) == VarianteDeBoton.Principal }
-        // Vuelta 72: «Sí, fue este» nunca es amarillo; tildar es decisión del dueño. Ningún amarillo acá.
         assertEquals(0, amarillos.size, "sin un amarillo que empuje a tildar")
-        val si = composeRule.onAllNodesWithText(ETIQUETA_SI_FUE_ESTE).fetchSemanticsNodes().map { it.config.getOrNull(VarianteDeBotonKey) }
-        assertEquals(2, si.size)
-        assertTrue(si.all { it == VarianteDeBoton.Secundario }, "los dos con borde")
-        assertEquals(VarianteDeBoton.Secundario, variante("¿Es el de \$980.000?"), "la cuota parecida, con borde")
+        assertEquals(VarianteDeBoton.Secundario, varianteDeLoMasUrgente())
+        assertTrue(composeRule.onAllNodesWithText(ETIQUETA_SI_FUE_ESTE).fetchSemanticsNodes().isEmpty(), "la fila no lleva botones")
+
+        abrirLaHoja("Agua")
+        assertEquals(VarianteDeBoton.Principal, varianteEnLaHoja(ETIQUETA_SI_FUE_ESTE), "en la hoja, el único amarillo")
+        assertTrue(composeRule.onAllNodes(hasText(ETIQUETA_ANOTAR) and hasAnyAncestor(hasTestTag(TAG_HOJA_DE_LA_FACTURA)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "anotar duplicaría el gasto")
     }
 }

@@ -153,8 +153,13 @@ class PagosQueSeManejanSolosTest {
             restoDelMinimo = 80_000L, pagadoDesdeElCorte = 100_000L,
         )
         montar(listOf(tarjeta, arriendo))
-        composeRule.onNodeWithTag(TAG_FALTA_DEL_MINIMO, useUnmergedTree = true).assertExists()
+        // Vuelta 136: la fila lo dice en su renglón de estado; la hoja, entero y con su tag.
         assertTrue(hay("Pagaste \$100.000 · faltan \$80.000 para el mínimo"))
+        composeRule.abrirLaFactura("Pago tarjeta Nu")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(TAG_FALTA_DEL_MINIMO, useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithContentDescription("Cerrar").performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
         assertTrue(composeRule.onAllNodesWithTag(TAG_FILA_PAGADA, useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "no es una fila pagada")
         // «queda 2 de 2»: la tarjeta no cuenta como hecha, y lo que falta del mínimo suma.
         assertTrue(hay("quedan 2 de 2 pagos"))
@@ -163,17 +168,27 @@ class PagosQueSeManejanSolosTest {
 
     // ── «Sí, fue este» con borde ──────────────────────────────────────────────
 
+    /**
+     * Vuelta 72: «Sí, fue este» nunca era el amarillo de la lista. Vuelta 136: la lista sigue sin ese amarillo
+     * (la fila no lleva botones y el de «Falta por pagar» va con borde con una propuesta), y en la hoja de la
+     * factura —donde se decide— «Sí, fue este» es el único amarillo (pedido de la vuelta).
+     */
     @Test
-    fun `Si fue este va con borde, aun en la fila mas urgente`() {
+    fun `Si fue este no es amarillo en la lista, y en la hoja lo es a 5 por ciento del monto`() {
         val candidato = FinancialEvent(
             id = "ev_arr", accountId = "acc", type = TransactionType.EXPENSE, amount = 1_790_000L, category = "Vivienda",
             description = "Transferencia", timestamp = 1_793_000_000_000L,
         )
         montar(listOf(arriendo.copy(diasParaVencer = -2, periodoDelSello = "2026-10", candidatos = listOf(candidato))))
-        assertEquals(VarianteDeBoton.Secundario, variante(ETIQUETA_SI_FUE_ESTE))
-        val amarillos = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(VarianteDeBotonKey)).fetchSemanticsNodes()
-            .filter { it.config.getOrNull(VarianteDeBotonKey) == VarianteDeBoton.Principal }
-        assertEquals(0, amarillos.size)
+        val amarillos = { composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(VarianteDeBotonKey)).fetchSemanticsNodes()
+            .filter { it.config.getOrNull(VarianteDeBotonKey) == VarianteDeBoton.Principal } }
+        assertEquals(0, amarillos().size)
+        composeRule.abrirLaFactura("Arriendo")
+        composeRule.waitForIdle()
+        // Re-revisión de la 136 (2): el candidato ($1.790.000) está a −0,6 % de la factura ($1.800.000), dentro del
+        // ±5 %: «Sí, fue este» es el amarillo de la hoja. Más allá del ±5 % va con borde (`UnaSolaFilaDeFacturaReglasTest`).
+        assertEquals(VarianteDeBoton.Principal, variante(ETIQUETA_SI_FUE_ESTE))
+        assertEquals(1, amarillos().size)
     }
 
     // ── «¿Usar siempre Nu para Carro?» ────────────────────────────────────────
@@ -220,25 +235,32 @@ class PagosQueSeManejanSolosTest {
 
     // ── «Pausar» en el «⋯» de una fila sin pagar ───────────────────────────────
 
-    /** Vuelta 80: con «Anotar pago» al final, la fila no lleva además el «⋯» (Pausar está en la regla). */
+    /**
+     * Vuelta 136 (reemplaza a la de la vuelta 80, «con Anotar pago la fila no lleva además el menú»): la fila
+     * no lleva botón ni «⋯»; tocarla abre su hoja, con «Anotar pago» y «Pausar».
+     */
     @Test
-    fun `con Anotar pago la fila no lleva ademas el menu`() {
+    fun `tocar la fila abre su hoja, con Anotar pago y Pausar`() {
+        val pausadas = mutableListOf<String>()
         composeRule.setContent {
             MoviTheme {
                 SeccionChecklistDelPeriodo(
                     checklist = listOf(arriendo), cargando = false, pudoLeer = true, marcando = emptySet(),
                     onConfirmar = { _, _ -> }, onNoFueEste = { _, _ -> }, onAnotarMovimiento = {}, onQuitarLaMarca = {},
-                    onReintentar = {}, onPausar = {},
+                    onReintentar = {}, onPausar = { pausadas += it.ruleId },
                 )
             }
         }
         composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithTag(TAG_HOJA_DE_LA_FACTURA, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        composeRule.abrirLaFactura("Arriendo")
+        composeRule.waitForIdle()
+        assertTrue(composeRule.onAllNodesWithTag(TAG_HOJA_DE_LA_FACTURA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertTrue(hay(com.jvillada.movi.ui.recurrentes.ETIQUETA_ANOTAR))
-        assertTrue(composeRule.onAllNodesWithTag(TAG_MENU_DE_LA_FILA_PENDIENTE, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        tocar(ETIQUETA_PAUSAR)
+        assertEquals(listOf("rr_arriendo"), pausadas)
+        assertTrue(composeRule.onAllNodesWithTag(TAG_HOJA_DE_LA_FACTURA, useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "la hoja se cierra al pausar")
     }
-
-    // Vuelta 80: «Pausar esta en el menu de una fila sin pagar» se fue: con «Anotar pago» al final la fila
-    // no lleva además el «⋯»; «Pausar» se ofrece en la hoja de la regla (`la hoja ofrece Pausar`).
 
     @Test
     fun `la fila vencida de una regla ya pausada no ofrece Pausar`() {
@@ -253,7 +275,10 @@ class PagosQueSeManejanSolosTest {
             }
         }
         composeRule.waitForIdle()
-        assertTrue(composeRule.onAllNodesWithTag(TAG_MENU_DE_LA_FILA_PENDIENTE, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        composeRule.abrirLaFactura("Arriendo")
+        composeRule.waitForIdle()
+        assertTrue(hay(com.jvillada.movi.ui.recurrentes.ETIQUETA_ANOTAR), "la hoja está abierta")
+        assertFalse(hay(ETIQUETA_PAUSAR), "una regla ya pausada no se vuelve a pausar")
     }
 
     @Test

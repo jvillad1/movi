@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.text
+import androidx.compose.ui.semantics.getTextLayoutResult
 import androidx.compose.ui.text.AnnotatedString
 import com.jvillada.movi.ui.components.partirLaColaDelNombreCorto
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,8 +57,19 @@ const val LINEAS_DEL_TITULO_DE_FILA: Int = 2
 /**
  * **El tono del subtítulo de una [Fila]**: [Normal] (texto medio) casi siempre; [Aviso] cuando el
  * subtítulo pide algo al dueño («Faltan datos», en Créditos).
+ *
+ * Vuelta 136: [Exito] (el verde de `entra`: «Pagado» en una factura) y [Enlace] (el azul del enlace: lo que
+ * Movi pregunta, «¿Es el de $4.000.000?»). Un estado en su renglón, siempre en el mismo lugar.
  */
-enum class TonoDeSubtitulo { Normal, Aviso }
+enum class TonoDeSubtitulo { Normal, Aviso, Exito, Enlace }
+
+/** El color de un [TonoDeSubtitulo], en la paleta del tema. Pura. */
+fun colorDelTonoDeSubtitulo(tono: TonoDeSubtitulo, colores: ColoresDeMovi): Color = when (tono) {
+    TonoDeSubtitulo.Normal -> colores.textoMedio
+    TonoDeSubtitulo.Aviso -> colores.aviso
+    TonoDeSubtitulo.Exito -> colores.entra
+    TonoDeSubtitulo.Enlace -> colores.enlace
+}
 
 /** Entre el `inicio` de una [Fila] (el avatar) y su texto: [Espacio.s]. */
 val ESPACIO_ANTES_DEL_TEXTO_DE_FILA = Espacio.s
@@ -191,6 +203,23 @@ fun Fila(
      * (más el tag de quien la monta) con el id en los datos, y nunca con su título.
      */
     entidadDeUso: String? = null,
+    /**
+     * Vuelta 136 · el título y el subtítulo **ocupan siempre** sus renglones ([lineasDelTitulo] y
+     * [lineasDelSubtitulo]), aunque el texto quepa en menos: una lista cuyas filas tienen que medir lo
+     * mismo (las facturas de Pagos).
+     */
+    reservarRenglones: Boolean = false,
+    /**
+     * Revisión de la vuelta 136 (I2) · si el título no cabe en sus renglones, se corta **por el principio**
+     * («…Master Black 3684»): lo que distingue una factura de su hermana va al final del nombre (los dígitos,
+     * el banco entre paréntesis). El lector de pantalla oye el título entero. Ver [recortarPorElPrincipio].
+     */
+    cortarElTituloPorElPrincipio: Boolean = false,
+    /**
+     * Revisión de la vuelta 136 (M2, M7) · una versión más larga del [subtitulo] que se usa **solo si cabe
+     * entera** en sus renglones («Vence el 22 nov · cada 3 meses»); si no, va [subtitulo]. Nunca se corta.
+     */
+    subtituloSiCabe: String? = null,
 ) {
     Row(
         modifier = modifier
@@ -231,18 +260,23 @@ fun Fila(
             Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            if (cortarElTituloPorElPrincipio) {
+                TituloQueSeCortaPorElPrincipio(
+                    titulo = titulo,
+                    color = colorDelTituloDeFila(tonoDelTitulo, Movi.colores),
+                    renglones = lineasDelTitulo,
+                    reservar = reservarRenglones,
+                )
+            } else Text(
                 text = titulo,
                 style = Movi.textos.cuerpo,
                 color = colorDelTituloDeFila(tonoDelTitulo, Movi.colores),
                 maxLines = lineasDelTitulo,
+                minLines = if (reservarRenglones) lineasDelTitulo else 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitulo != null) {
-                val colorDelSubtitulo = when (tonoDelSubtitulo) {
-                    TonoDeSubtitulo.Normal -> Movi.colores.textoMedio
-                    TonoDeSubtitulo.Aviso -> Movi.colores.aviso
-                }
+                val colorDelSubtitulo = colorDelTonoDeSubtitulo(tonoDelSubtitulo, Movi.colores)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (iconoDelSubtitulo != null) {
                         Icon(
@@ -254,13 +288,22 @@ fun Fila(
                         Spacer(Modifier.width(Espacio.xxs))
                     }
                     // Vuelta 87: un subtítulo que termina en «·4057» recorta la cabeza, nunca esa cola.
-                    val partido = if (lineasDelSubtitulo == 1) partirLaColaDelNombreCorto(subtitulo) else null
-                    if (partido == null) {
+                    val partido = if (lineasDelSubtitulo == 1 && subtituloSiCabe == null) partirLaColaDelNombreCorto(subtitulo) else null
+                    if (subtituloSiCabe != null) {
+                        SubtituloLargoSiCabe(
+                            corto = subtitulo,
+                            largo = subtituloSiCabe,
+                            color = colorDelSubtitulo,
+                            renglones = lineasDelSubtitulo,
+                            reservar = reservarRenglones,
+                        )
+                    } else if (partido == null) {
                         Text(
                             text = subtitulo,
                             style = Movi.textos.apoyo,
                             color = colorDelSubtitulo,
                             maxLines = lineasDelSubtitulo,
+                            minLines = if (reservarRenglones) lineasDelSubtitulo else 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     } else {
@@ -441,3 +484,121 @@ fun FilaDeNavegacion(
 
 /** El tono del ícono de una [FilaDeNavegacion]: el neutro, o el de aviso si la fila avisa algo. Pura. */
 fun tonoDeLaFilaDeNavegacion(aviso: Boolean): TonoDeIcono = if (aviso) TonoDeIcono.Aviso else TonoDeIcono.Neutro
+
+/** Lo que se ve del título de una [Fila] que se corta por el principio (para las pruebas: el lector oye el entero). */
+val TituloVisibleDeFilaKey: SemanticsPropertyKey<String> = SemanticsPropertyKey("TituloVisibleDeFila")
+
+/** El carácter con que empieza un título cortado por el principio. */
+const val PUNTOS_DEL_PRINCIPIO: String = "…"
+
+/**
+ * **Un texto cortado por el principio** (revisión de la vuelta 136): [texto] entero si [cabe]; si no, «…» y la
+ * cola más larga que quepa, **empezando en una palabra** cuando se puede («…Master Black 3684», no «…aster Black
+ * 3684»; re-revisión, punto 3). Solo si ni la última palabra cabe, corta por carácter. Sin espacios sueltos después
+ * de los puntos. [cabe] mide con la letra de verdad; aquí solo se busca (binaria) dónde cortar. Pura.
+ */
+fun recortarPorElPrincipio(texto: String, cabe: (String) -> Boolean): String {
+    if (cabe(texto)) return texto
+    fun desde(i: Int) = PUNTOS_DEL_PRINCIPIO + texto.substring(i).trimStart()
+    // Primero, entre los comienzos de palabra (de izquierda a derecha: la primera que cabe deja la cola más larga).
+    val palabras = texto.indices.filter { it > 0 && texto[it - 1] == ' ' && texto[it] != ' ' }
+    if (palabras.isNotEmpty() && cabe(desde(palabras.last()))) {
+        var bajo = 0
+        var alto = palabras.lastIndex
+        while (bajo < alto) {
+            val medio = (bajo + alto) / 2
+            if (cabe(desde(palabras[medio]))) alto = medio else bajo = medio + 1
+        }
+        return desde(palabras[bajo])
+    }
+    var bajo = 1
+    var alto = texto.length
+    while (bajo < alto) {
+        val medio = (bajo + alto) / 2
+        if (cabe(desde(medio))) alto = medio else bajo = medio + 1
+    }
+    return desde(bajo)
+}
+
+/** El título de una [Fila] que se corta por el principio: mide con la letra de verdad y el ancho que le queda. */
+@Composable
+private fun TituloQueSeCortaPorElPrincipio(titulo: String, color: Color, renglones: Int, reservar: Boolean) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val medidor = androidx.compose.ui.text.rememberTextMeasurer()
+        val estilo = Movi.textos.cuerpo
+        val ancho = constraints.maxWidth
+        val visible = androidx.compose.runtime.remember(titulo, ancho, estilo, renglones, medidor) {
+            recortarPorElPrincipio(titulo) { t ->
+                !medidor.measure(
+                    t, estilo, maxLines = renglones,
+                    constraints = androidx.compose.ui.unit.Constraints(maxWidth = ancho),
+                ).hasVisualOverflow
+            }
+        }
+        Text(
+            text = visible,
+            style = estilo,
+            color = color,
+            maxLines = renglones,
+            minLines = if (reservar) renglones else 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = if (visible == titulo) {
+                Modifier.semantics { this[TituloVisibleDeFilaKey] = visible }
+            } else {
+                // El lector (y una prueba) oye el título entero, no el pedazo.
+                Modifier.clearAndSetSemantics {
+                    text = AnnotatedString(titulo)
+                    this[TituloVisibleDeFilaKey] = visible
+                }
+            },
+        )
+    }
+}
+
+/** Lo que se ve del subtítulo de una [Fila] con versión larga (el lector oye la larga; ver [SubtituloLargoSiCabe]). */
+val SubtituloVisibleDeFilaKey: SemanticsPropertyKey<String> = SemanticsPropertyKey("SubtituloVisibleDeFila")
+
+/**
+ * El subtítulo de una [Fila] con una versión larga que se usa solo si cabe entera en [renglones] (revisión de la
+ * vuelta 136): mide con la letra de verdad y el ancho que le queda; si no cabe, [corto] (con «…» si hace falta).
+ * **El lector de pantalla oye siempre la larga** (re-revisión, punto 5): con la corta a la vista, la semántica
+ * del texto es [largo], y la disposición que se informa es la de lo que se dibuja ([SubtituloVisibleDeFilaKey]).
+ */
+@Composable
+private fun SubtituloLargoSiCabe(corto: String, largo: String, color: Color, renglones: Int, reservar: Boolean) {
+    androidx.compose.foundation.layout.BoxWithConstraints {
+        val medidor = androidx.compose.ui.text.rememberTextMeasurer()
+        val estilo = Movi.textos.apoyo
+        val ancho = constraints.maxWidth
+        val texto = androidx.compose.runtime.remember(corto, largo, ancho, estilo, renglones, medidor) {
+            val cabe = !medidor.measure(
+                largo, estilo, maxLines = renglones,
+                constraints = androidx.compose.ui.unit.Constraints(maxWidth = ancho),
+            ).hasVisualOverflow
+            if (cabe) largo else corto
+        }
+        val disposicion = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+        Text(
+            text = texto,
+            style = estilo,
+            color = color,
+            maxLines = renglones,
+            minLines = if (reservar) renglones else 1,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { disposicion.value = it },
+            modifier = if (texto == largo) {
+                Modifier.semantics { this[SubtituloVisibleDeFilaKey] = texto }
+            } else {
+                Modifier.clearAndSetSemantics {
+                    text = AnnotatedString(largo)
+                    this[SubtituloVisibleDeFilaKey] = texto
+                    getTextLayoutResult { resultados ->
+                        val d = disposicion.value ?: return@getTextLayoutResult false
+                        resultados.add(d)
+                        true
+                    }
+                }
+            },
+        )
+    }
+}

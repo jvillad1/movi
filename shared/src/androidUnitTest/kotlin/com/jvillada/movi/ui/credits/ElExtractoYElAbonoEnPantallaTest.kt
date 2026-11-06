@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.ui.recurrentes.abrirLaFactura
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -146,6 +147,9 @@ class ElExtractoYElAbonoEnPantallaTest {
 
         assertTrue(hay("\$1.292.700"), "lo facturado, no el saldo")
         assertTrue(hay(ROTULO_DEL_EXTRACTO))
+        // Vuelta 136: la alternativa del mínimo la dice la hoja de la factura.
+        composeRule.abrirLaFactura("Pago tarjeta Nu")
+        composeRule.waitForIdle()
         assertTrue(hay("o lo que falta del mínimo, \$80.000"))
         assertFalse(hay("saldo"), "ya no pide el saldo entero")
         assertFalse(hay("\$1.583.000"))
@@ -374,6 +378,20 @@ class ElExtractoYElAbonoEnPantallaTest {
                 }
             }
         }
+        composeRule.waitForIdle()
+        // Revisión de la 136 (C1): la FILA, sin abrir la hoja, dice lo que falta del extracto (en su renglón de
+        // estado) y no se ve pagada; a la derecha va lo que salió, no la cifra del extracto.
+        val enLaFila = composeRule.onAllNodes(
+            hasText("Abonaste \$100.000 · faltan \$1.292.700 del extracto", substring = true) and
+                hasAnyAncestor(hasTestTag(com.jvillada.movi.ui.recurrentes.TAG_FILA_DE_FACTURA)),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes()
+        assertEquals(1, enLaFila.size, "la fila dice lo que falta del extracto")
+        assertFalse(hay("Pagado", substring = true), "no se ve pagada")
+        assertFalse(hay("\$1.292.700"), "la cifra de la derecha no es el extracto entero")
+        assertTrue(hay("\$100.000"), "es lo que salió")
+        // Y la hoja lo dice entero.
+        composeRule.abrirLaFactura("Pago tarjeta Nu")
         composeRule.waitForIdle()
         assertTrue(hay("Abonaste \$100.000 · faltan \$1.292.700 del extracto (mínimo: faltan \$80.000)"))
     }
