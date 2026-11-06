@@ -45,14 +45,23 @@ data class DeudaDelDueno(
 )
 
 /**
- * Vuelta 134 (M-8) · ¿[monto] es la cuota de esta deuda? Una cuota fija, exacta (lo de siempre); una que
- * cambia, a ±[com.jvillada.movi.shared.model.MARGEN_DE_LA_CUOTA_QUE_SE_PARECE] % de la de este mes —la misma
- * cercanía con que el detalle sugiere «¿Es la cuota de X?» (`montoSeAcercaALaCuota`)—: la estimación es la
- * del mes pasado y la de este casi nunca da igual al peso.
+ * Vuelta 134 (M-8) · **el crédito cuya cuota es [monto]**, entre [candidatas] del mismo banco, en dos pasos:
+ *
+ * 1. **Exacto, como siempre**: si alguna cuota es [monto] al peso, decide eso (una o ninguna si son dos). Un
+ *    crédito de cuota fija se reconoce exactamente como antes de la vuelta 133, aunque al lado haya uno que
+ *    cambia con una cuota parecida (revisión 134, I-1: Vehículo 4083 en $980.000 fijo y Libre inversión 9695
+ *    en unos $1.080.500; un aviso de $980.000 sigue siendo el Vehículo).
+ * 2. **De cerca, solo si nadie calzó exacto y solo entre los que cambian**: a
+ *    ±[com.jvillada.movi.shared.model.MARGEN_DE_LA_CUOTA_QUE_SE_PARECE] % de la de este mes, la cercanía de
+ *    «¿Es la cuota de X?» (`montoSeAcercaALaCuota`): la estimación es la del mes pasado y la de este casi
+ *    nunca da igual al peso.
  */
-internal fun DeudaDelDueno.cuotaSeReconoceEn(monto: Long): Boolean {
-    val esta = cuota ?: return false
-    return if (cuotaEstimada) com.jvillada.movi.shared.model.montoSeAcercaALaCuota(monto, esta) else esta == monto
+internal fun cuotaQueReconoce(candidatas: List<DeudaDelDueno>, monto: Long): DeudaDelDueno? {
+    val exactas = candidatas.filter { it.cuota == monto }
+    if (exactas.isNotEmpty()) return exactas.singleOrNull()
+    return candidatas
+        .filter { d -> d.cuotaEstimada && d.cuota?.let { com.jvillada.movi.shared.model.montoSeAcercaALaCuota(monto, it) } == true }
+        .singleOrNull()
 }
 
 /** Una regla recurrente del dueño, reducida a lo que sirve para saber de qué cuenta sale. */
@@ -122,10 +131,11 @@ fun loQueMoviSabeDelPago(
     val porId = cuentas.associateBy { it.id }
 
     val deuda: Account? = when (parsed.category) {
-        CUOTA_CATEGORY -> unaSola(
-            deudas.filter { !it.noLaPagaEl && it.cuenta.type == AccountType.LOAN && it.cuenta.currency == parsed.currency }
-                .filter { nombra("${it.cuenta.name} ${it.banco.orEmpty()}", marca) },
-        ) { it.cuotaSeReconoceEn(parsed.amount.roundToLong()) }?.cuenta
+        CUOTA_CATEGORY -> deudas
+            .filter { !it.noLaPagaEl && it.cuenta.type == AccountType.LOAN && it.cuenta.currency == parsed.currency }
+            .filter { nombra("${it.cuenta.name} ${it.banco.orEmpty()}", marca) }
+            .let { candidatas -> candidatas.singleOrNull() ?: cuotaQueReconoce(candidatas, parsed.amount.roundToLong()) }
+            ?.cuenta
         CARD_PAYMENT_CATEGORY -> cuentas
             .filter { it.type == AccountType.CREDIT_CARD && it.currency == parsed.currency && nombra(it.name, marca) }
             .singleOrNull()
@@ -220,10 +230,6 @@ fun pagosPorPseDe(avisos: List<Pair<String, String>>, eventos: List<FinancialEve
         .groupingBy { it.second }
         .eachCount()
 }
-
-/** Uno solo; con varios, el único que cumple [desempate]; si no, ninguno. */
-private fun <T> unaSola(candidatas: List<T>, desempate: (T) -> Boolean): T? =
-    candidatas.singleOrNull() ?: candidatas.filter(desempate).singleOrNull()
 
 /** «Coomeva» nombra a «Coomeva Medicina Prepagada»; «Celular» no nombra a «Colombia Telecomunicaciones». */
 private fun reglaNombraALaEmpresa(nombreDeLaRegla: String, marcaDeLaEmpresa: List<String>): Boolean {
