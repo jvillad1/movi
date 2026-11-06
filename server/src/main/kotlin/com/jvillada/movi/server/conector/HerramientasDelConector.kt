@@ -188,9 +188,31 @@ internal val NOMBRES_DE_LAS_HERRAMIENTAS: Set<String> = HERRAMIENTAS_DEL_CONECTO
 
 internal val jsonDelConector = Json { encodeDefaults = true; explicitNulls = false }
 
+/**
+ * **Los números completos fuera, los montos y las fechas no** (M5 de la revisión). Es la regla de la página
+ * compartida (`sinNumerosCompletos`: toda secuencia de 5+ dígitos a sus últimos 4), con dos excepciones que esa
+ * página no necesita y Claude sí: un **monto** —con «$» delante, o con separadores de miles («1.500.000»,
+ * «27,500.00»)— y una **fecha** («2026-10-01», «01/10/2026») salen tal cual. Una variante para el conector y no un
+ * cambio a la función compartida: la página compartida no muestra textos libres con montos, y su prueba fija lo
+ * que hace hoy. Un número de cuenta escrito con puntos de a tres («123.456.789») queda como un monto: es el precio.
+ */
+internal fun sinNumerosCompletosSalvoMontosYFechas(texto: String): String =
+    NUMEROS_MONTOS_Y_FECHAS.replace(texto) { m ->
+        when {
+            m.groups["fecha"] != null || m.groups["monto"] != null -> m.value
+            else -> sinNumerosCompletos(m.value)
+        }
+    }
+
+private val NUMEROS_MONTOS_Y_FECHAS = Regex(
+    """(?<fecha>\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b)""" +
+        """|(?<monto>\$\s?\d[\d.,]*|(?<![\d.,])\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?(?![\d.,]))""" +
+        """|\d(?:[\d .\-]*\d)?""",
+)
+
 /** **Un texto de afuera, listo para salir**: sin control, una línea, corto y sin números completos. */
 internal fun textoSeguro(crudo: String?, max: Int = LARGO_MAXIMO_DE_UN_TEXTO): String =
-    sinNumerosCompletos(
+    sinNumerosCompletosSalvoMontosYFechas(
         crudo.orEmpty()
             .filter { it.category != CharCategory.FORMAT }
             .map { if (it.isISOControl()) ' ' else it }
@@ -435,10 +457,12 @@ private suspend fun movimientos(uid: String, argumentos: JsonObject, hoy: LocalD
         it.toIntOrNull()?.takeIf { n -> n >= 0 } ?: throw ArgumentoInvalido("`siguiente` es el que trajo la respuesta anterior.")
     } ?: 0
 
+    // M4 · `cuenta` y `texto` buscan sobre lo MISMO que se devuelve (ya recortado): buscar sobre el original dejaba
+    // reconstruir un número completo dígito a dígito («0098», «00987»…) aunque la respuesta dijera «••5432».
     val todas = filasDe(uid, desde, hasta)
         .filter { categoria == null || normalizarParaBuscar(it.categoria) == normalizarParaBuscar(categoria) }
-        .filter { cuenta == null || normalizarParaBuscar(cuenta) in normalizarParaBuscar(it.cuenta) }
-        .filter { texto == null || normalizarParaBuscar(texto) in normalizarParaBuscar(it.nombre) }
+        .filter { cuenta == null || normalizarParaBuscar(cuenta) in normalizarParaBuscar(textoSeguro(it.cuenta, 60)) }
+        .filter { texto == null || normalizarParaBuscar(texto) in normalizarParaBuscar(textoSeguro(it.nombre)) }
         .filter { tipo == null || (tipo == "ingreso") == it.esIngreso }
 
     var pagina = todas.drop(desdeLaFila).take(limite).map { f ->

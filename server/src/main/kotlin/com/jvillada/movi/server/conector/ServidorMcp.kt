@@ -85,7 +85,8 @@ internal object ServidorMcp {
             "ping" -> resultado(id, JsonObject(emptyMap()))
             "tools/list" -> resultado(id, listaDeHerramientas())
             "tools/call" -> llamar(id, params, ejecutar, alLlamar)
-            else -> error(id, METHOD_NOT_FOUND, "Movi no tiene el método «$metodo».")
+            // M8 · el nombre vuelve recortado: un método de 64 KB no se repite entero en el error.
+            else -> error(id, METHOD_NOT_FOUND, "Movi no tiene el método «${textoSeguro(metodo, 64)}».")
         }
     }
 

@@ -169,6 +169,9 @@ class ConectorMcpTest {
         // Un método que no existe, y una herramienta que no existe.
         val raro = c.json.parseToJsonElement(with(c) { mcp(acceso, "resources/list") }.bodyAsText()).jsonObject
         assertEquals(ServidorMcp.METHOD_NOT_FOUND.toString(), raro["error"]!!.jsonObject["code"]!!.jsonPrimitive.content)
+        // M8 · un método larguísimo vuelve recortado en el error.
+        val largo = with(c) { mcp(acceso, "x".repeat(5_000)) }.bodyAsText()
+        assertTrue(largo.length < 500, "el error repite el método entero: ${largo.length}")
         val noExiste = c.json.parseToJsonElement(with(c) { mcp(acceso, "tools/call", """{"name":"anotar_gasto","arguments":{}}""") }.bodyAsText()).jsonObject
         assertEquals(ServidorMcp.INVALID_PARAMS.toString(), noExiste["error"]!!.jsonObject["code"]!!.jsonPrimitive.content)
     }
@@ -274,6 +277,9 @@ class ConectorMcpTest {
         assertFalse("1234567890" in r.toString() || "Compraste" in r.toString(), "nunca el cuerpo del SMS")
         assertTrue(descripciones.all { it.length <= LARGO_MAXIMO_DE_UN_TEXTO })
 
+        // M4 · los filtros buscan sobre lo que se devuelve: los dígitos escondidos no encuentran nada.
+        assertEquals(0, with(c) { herramienta(acceso, "movimientos", """{"ultimos_dias":7,"texto":"00987"}""") }["total"]!!.jsonPrimitive.long.toInt())
+        assertEquals(1, with(c) { herramienta(acceso, "movimientos", """{"ultimos_dias":7,"texto":"5432"}""") }["total"]!!.jsonPrimitive.long.toInt())
         // Un filtro y una fecha mala.
         val soloComida = with(c) { herramienta(acceso, "movimientos", """{"ultimos_dias":7,"texto":"rappi"}""") }
         assertEquals(1, soloComida["total"]!!.jsonPrimitive.long.toInt())
