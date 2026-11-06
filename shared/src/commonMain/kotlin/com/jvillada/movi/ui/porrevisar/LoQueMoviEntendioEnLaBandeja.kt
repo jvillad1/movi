@@ -63,8 +63,20 @@ data class AnotacionEntendida(
     val leido: ParsedSms,
     val cuenta: Account,
     val categoria: String,
+    /**
+     * Vuelta 133 · a cuántas cuotas fue la compra, si el dueño lo dijo en la tarjeta («¿A cuántas
+     * cuotas?»). `null` = no lo dijo: se guarda como hoy, con las cuotas desconocidas (un «1» que nadie
+     * eligió le cerraría la puerta al extracto, la regla de `cuotasParaGuardar`).
+     */
+    val cuotas: Int? = null,
 ) {
     val monto: Long get() = leido.amount.roundToLong()
+
+    /**
+     * Vuelta 133 · **¿la tarjeta pregunta las cuotas?** Solo un gasto de una tarjeta de crédito que no
+     * es un traspaso: el SMS, la notificación y el correo no dicen las cuotas.
+     */
+    val preguntaLasCuotas: Boolean get() = preguntaLasCuotasDelAviso(cuenta.type, leido)
 
     /** «Comida · Bancolombia Ahorros · $46.000»: lo que se va a anotar, en una línea. */
     val linea: String get() = lineaDeLoQueVaAAnotar(categoria, cuenta.name, monto, leido.currency)
@@ -72,6 +84,12 @@ data class AnotacionEntendida(
     /** Los avisos que este pago cierra: el suelto, o todos los del pago. */
     val avisos: List<String> get() = pago?.miembros?.map { it.id } ?: listOf(sms.id)
 }
+
+/** Vuelta 133 · ¿confirmar este aviso con esta cuenta es una compra con tarjeta (y lleva cuotas)? Pura. */
+fun preguntaLasCuotasDelAviso(tipoDeLaCuenta: com.jvillada.movi.shared.model.AccountType?, leido: ParsedSms): Boolean =
+    tipoDeLaCuenta == com.jvillada.movi.shared.model.AccountType.CREDIT_CARD &&
+        leido.type == TransactionType.EXPENSE &&
+        leido.category != TRANSFER_CATEGORY && leido.traspasoHaciaId == null && leido.deudaSugeridaId == null
 
 /** «Comida · Bancolombia Ahorros · $46.000». */
 fun lineaDeLoQueVaAAnotar(categoria: String, cuenta: String, monto: Long, moneda: String): String =
@@ -174,6 +192,8 @@ fun loQueMoviEntendio(
      * Manda sobre la que leyó Movi, como si la hubiera elegido en Revisar aviso.
      */
     categoriaElegida: String? = null,
+    /** Vuelta 133: las cuotas que el dueño eligió en la tarjeta (solo cuentan en una compra con tarjeta). */
+    cuotasElegidas: Int? = null,
 ): LoQueMoviEntendio {
     val noSe = LoQueMoviEntendio(null, setOf(DudaDelAviso.NO_SE_LEYO))
     if (cabeza.state != SMS_STATE_PENDING || cuentas.isEmpty()) return noSe
@@ -231,7 +251,10 @@ fun loQueMoviEntendio(
     val titulo = puntasDelTraspaso(leido, resuelta, cuentas)?.let { (de, a) -> tituloDelTraspaso(de, a) }
     if (dudas.isNotEmpty() || cuenta == null) return LoQueMoviEntendio(null, dudas, advertencia, linea, faltaSoloLaCategoria, titulo)
     return LoQueMoviEntendio(
-        AnotacionEntendida(cabezaId = cabeza.id, sms = delQueSale, pago = pago, leido = leido, cuenta = cuenta, categoria = leido.category),
+        AnotacionEntendida(
+            cabezaId = cabeza.id, sms = delQueSale, pago = pago, leido = leido, cuenta = cuenta, categoria = leido.category,
+            cuotas = cuotasElegidas?.takeIf { preguntaLasCuotasDelAviso(cuenta.type, leido) },
+        ),
         emptySet(),
         advertencia,
         linea,
@@ -267,6 +290,7 @@ suspend fun confirmarLoEntendido(
         textoDelAviso = anotacion.sms.text,
         esComprobante = esIdDeComprobante(anotacion.sms.id),
         id = idDelMovimiento,
+        cuotas = anotacion.cuotas,
     )
     return anotarElMovimientoDelAviso(anotacion.sms.id, anotacion.pago, evento, esIdDeComprobante(anotacion.sms.id), alCrearElMovimiento, repo)
 }

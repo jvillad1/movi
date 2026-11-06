@@ -233,7 +233,8 @@ internal fun EncabezadoDelMovimiento(
         )
     } else if (!ficha) {
         // Vuelta 71 (revisión): una compra diferida dice a cuántas cuotas, como su fila en Actividad.
-        textoDeLasCuotas(evento.cuotas)?.let { cuotas ->
+        // Vuelta 133: salvo que el detalle las diga en su renglón, que además las cambia.
+        textoDeLasCuotas(evento.cuotas)?.takeUnless { ofreceLasCuotas(evento, cuentas) }?.let { cuotas ->
             Text(cuotas, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_CUOTAS_DEL_MOVIMIENTO))
         }
     }
@@ -550,6 +551,8 @@ fun datosDeLaFicha(
     nombreDeLaCuenta: String?,
     espacio: EspacioCompartido?,
     hoy: kotlinx.datetime.LocalDate,
+    /** Vuelta 133: las cuotas las dice su renglón propio ([CuotasDelMovimiento]); acá no se repiten. */
+    conLasCuotasAparte: Boolean = false,
 ): List<DatoDeLaFicha> = buildList {
     nombreDeLaCuenta?.takeIf { it.isNotBlank() }?.let { add(DatoDeLaFicha(ClaveDelDato.Cuenta, it, AccionDelMovimiento.Nota)) }
     add(DatoDeLaFicha(ClaveDelDato.Fecha, lineaDeCuandoYDonde(evento, null, hoy), AccionDelMovimiento.Fecha))
@@ -557,7 +560,7 @@ fun datosDeLaFicha(
     notaDeLaFicha(evento, tituloDelMovimiento(evento, nombreDeLaCuenta))
         ?.let { add(DatoDeLaFicha(ClaveDelDato.Nota, it, AccionDelMovimiento.Nota)) }
     add(DatoDeLaFicha(ClaveDelDato.Origen, origenDelMovimiento(evento.source), null))
-    evento.cuotas?.takeIf { it > 1 }?.let { add(DatoDeLaFicha(ClaveDelDato.Cuotas, "$it cuotas", null)) }
+    evento.cuotas?.takeIf { it > 1 && !conLasCuotasAparte }?.let { add(DatoDeLaFicha(ClaveDelDato.Cuotas, "$it cuotas", null)) }
     if (evento.espacioId != null) {
         add(DatoDeLaFicha(ClaveDelDato.Grupo, espacio?.nombre?.trim()?.ifEmpty { null } ?: "Repartido", null))
     }

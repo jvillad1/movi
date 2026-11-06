@@ -1201,6 +1201,18 @@ class WalletRepositoryImpl(
         return response.body()
     }
 
+    // Vuelta 133: el 400 / 404 / 422 viaja con su texto, como en updateEventRepeats.
+    override suspend fun updateEventCuotas(id: String, cuotas: Int): FinancialEvent {
+        val response = client.put("$baseUrl/api/events/$id/cuotas") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.UpdateEventCuotasRequest(cuotas))
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
+        }
+        return response.body()
+    }
+
     override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent {
         val response = client.put("$baseUrl/api/events/$id/repeats") {
             contentType(ContentType.Application.Json)

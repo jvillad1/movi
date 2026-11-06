@@ -1030,9 +1030,11 @@ class LocalRepository(
         val types = accountTypes(uid)
         val anulados = db.voidEventQueries.selectAllVoidedIds().executeAsList().toSet()
         val compartido = loCompartidoGuardado(uid)
+        // Vuelta 133: las cuotas que esperan subir (de Agregar, de un aviso o del detalle) se ven ya.
+        val cuotas = CuotasPorSubir.todas(db, uid)
         return leerFilasLocales(uid, accountId)
             .filterNot { it.id in anulados }
-            .map { it.toModel(types).conLoCompartido(compartido) }
+            .map { fila -> fila.toModel(types).conLoCompartido(compartido).let { e -> cuotas[e.id]?.let { e.copy(cuotas = it) } ?: e } }
             .masRecientePrimero()
     }
 
@@ -1417,6 +1419,33 @@ class LocalRepository(
         val updated = remote.confirmEvent(id)
         db.financialEventQueries.updateReconciliationStatus(updated.reconciliationStatus.name, updated.id, uid)
         return@enDisco updated
+    }
+
+    /**
+     * Vuelta 133 · las cuotas de una compra con tarjeta. La base local no tiene la columna (vuelta 71: no
+     * se migró SQLDelight a propósito), así que:
+     *
+     * - **todavía no subió** (`syncedAt == null`): se guardan en [CuotasPorSubir], donde ya esperan las
+     *   de Agregar, y el `SyncEngine` las pone en el `POST` de la subida. Mismas guardas que el server.
+     * - **ya subió**: manda el server (`PUT /api/events/{id}/cuotas`) y esto pide red. Lo que contesta
+     *   trae las cuotas, y la próxima lectura con red (`getEvents`, server primero) las sigue trayendo.
+     */
+    override suspend fun updateEventCuotas(id: String, cuotas: Int): FinancialEvent = enDisco {
+        val uid = userId()
+        val types = accountTypes(uid)
+        val local = db.financialEventQueries.selectById(id, uid).executeAsOneOrNull()
+        if (local != null && local.syncedAt == null) {
+            if (!com.jvillada.movi.shared.model.cuotasValidas(cuotas)) {
+                throw ApiException(400, com.jvillada.movi.shared.model.CUOTAS_FUERA_DE_RANGO)
+            }
+            val modelo = local.toModel(types)
+            if (!com.jvillada.movi.shared.model.llevaCuotas(modelo, types[modelo.accountId])) {
+                throw ApiException(422, com.jvillada.movi.shared.model.CUOTAS_SOLO_EN_UNA_COMPRA_CON_TARJETA)
+            }
+            CuotasPorSubir.guardar(db, uid, id, cuotas)
+            return@enDisco modelo.copy(cuotas = cuotas)
+        }
+        remote.updateEventCuotas(id, cuotas)
     }
 
     override suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent = enDisco {

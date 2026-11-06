@@ -17,6 +17,7 @@ import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.shared.model.inicioDeLaCuentaSiElSmsEsAnterior
 import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlin.math.roundToLong
+import com.jvillada.movi.ui.porrevisar.preguntaLasCuotasDelAviso
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -760,6 +761,11 @@ internal fun TarjetaDeMensajeDelBanco(
      * Bancolombia ·8133 a Nu», ver `LoQueMoviEntendio.titulo`). Sin esto, el de siempre (el comercio).
      */
     titulo: String? = null,
+    /**
+     * Vuelta 133 · **una compra con tarjeta pregunta a cuántas cuotas** («¿A cuántas cuotas? · Elegir»,
+     * ver `LasCuotasDelAviso.kt`). Solo con «Confirmar» a la vista; no lo bloquea. Solo la bandeja lo pasa.
+     */
+    cuotasDelAviso: CuotasDelAviso? = null,
 ) {
     val apartado = loApartoMovi(sms)
     var eligiendoLaCategoria by remember(sms.id) { mutableStateOf(false) }
@@ -884,6 +890,10 @@ internal fun TarjetaDeMensajeDelBanco(
             is BloqueDeAbajo.Detalle -> Text(abajo.texto, style = Movi.textos.cuerpo, color = Movi.colores.texto)
             null -> Unit
         }
+        // Vuelta 133: «¿A cuántas cuotas? · Elegir», un renglón fijo de la tarjeta (ver `LasCuotasDelAviso.kt`).
+        if (confirmable && yaAnotado == null && cuotasDelAviso != null) {
+            RenglonDeLasCuotas(cuotasDelAviso, habilitado = !trabajando)
+        }
         // Vuelta 46: las pastillas de las frecuentes, con «Todas ›» en el renglón del rótulo. Vuelta 51:
         // también las abre «Cambiar» de un aviso entendido, y debajo va «Más cambios ›».
         if (pastillasAbiertas && eligeLaCategoria != null) {
@@ -928,6 +938,9 @@ fun tituloDelAvisoEnReconciliar(bank: String): String {
     if (limpio.isNotEmpty() && !limpio.all { it.isDigit() || it == '+' } && !limpio.equals("SMS", ignoreCase = true)) return limpio
     return bancoDelAviso(limpio).takeIf { it != "SMS" } ?: TITULO_DE_UN_AVISO_SIN_BANCO
 }
+
+/** Vuelta 133 · el prefijo de los tags de «¿A cuántas cuotas?» en Revisar aviso. */
+const val TAG_FILA_DE_CUOTAS_EN_REVISAR: String = "revisar-aviso:cuotas"
 
 /** El tag de la tarjeta con los avisos del mismo pago en Reconciliar. */
 const val TAG_AVISOS_DEL_PAGO_EN_RECONCILIAR: String = "avisos-del-pago-en-reconciliar"
@@ -1337,6 +1350,13 @@ fun SMSReconcileScreen(
      * apagado y el pie dice «Elige el crédito»: nunca un gasto suelto en «Cuota de crédito».
      */
     val faltaElCredito = porQueFaltaElCredito(parsed, categoriaActual, resolvedAccount, cuentaDeDeudaElegida, lasDosPatas)
+    /**
+     * Vuelta 133 · **«¿A cuántas cuotas?»** de una compra con tarjeta: la misma fila de Agregar, debajo de
+     * la cuenta. `null` = nadie eligió, y se guarda como siempre (cuotas desconocidas). No bloquea Confirmar.
+     */
+    var cuotasEnRevisar by remember(smsId) { mutableStateOf<Int?>(null) }
+    val preguntaLasCuotasAca = lasDosPatas == null &&
+        parsed?.let { preguntaLasCuotasDelAviso(resolvedAccount?.type, it.copy(category = categoriaActual ?: it.category)) } == true
 
     // Vuelta 56 · la segunda cuota del mes: el server contestó 409 (`CUOTA_YA_PAGADA`) al confirmar la
     // cuota de un crédito cuya cuota del período ya saldó otro movimiento. La pantalla pregunta si es un
@@ -1414,6 +1434,7 @@ fun SMSReconcileScreen(
                     momento = momento,
                     textoDelAviso = (avisoDeLaPropuesta ?: sms)?.text.orEmpty(),
                     esComprobante = esComprobante,
+                    cuotas = cuotasEnRevisar.takeIf { preguntaLasCuotasAca },
                 )
                 suelto = anotarElMovimientoDelAviso(smsId, pagoActual, event, esComprobante, alCrearElMovimiento = { movimientoCreado = true })
             }.onSuccess {
@@ -1972,6 +1993,18 @@ fun SMSReconcileScreen(
                                     eligiendoCuenta = false
                                 },
                                 modifier = Modifier.padding(horizontal = Medida.margenDePantalla),
+                            )
+                        }
+                        // Vuelta 133: con una tarjeta de crédito, a cuántas cuotas fue la compra.
+                        if (preguntaLasCuotasAca && pendiente) {
+                            Separador()
+                            com.jvillada.movi.ui.quickadd.FilaDeCuotas(
+                                cuotas = cuotasEnRevisar,
+                                onCuotas = { cuotasEnRevisar = it },
+                                monto = parsed?.amount?.roundToLong() ?: 0L,
+                                moneda = parsed?.currency ?: "COP",
+                                habilitada = !working,
+                                base = TAG_FILA_DE_CUOTAS_EN_REVISAR,
                             )
                         }
                         Separador()
