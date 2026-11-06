@@ -1,18 +1,15 @@
 package com.jvillada.movi.server.conector
 
 import com.jvillada.movi.server.compartir.TokenDeEnlace
-import com.jvillada.movi.server.db.ClientesDelConector
 import com.jvillada.movi.server.db.CodigosDelConector
 import com.jvillada.movi.server.db.LlamadasDelConector
 import com.jvillada.movi.server.db.ConcesionesDelConector
-import com.jvillada.movi.server.db.SolicitudesDelConector
 import com.jvillada.movi.server.db.TokensDelConector
 import com.jvillada.movi.server.db.Users
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInSubQuery
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
@@ -63,16 +60,6 @@ internal object LasConcesiones {
     /** Ver el KDoc del objeto: 90 días sin uso y la concesión se acaba. También la retención del registro. */
     const val VIDA_SIN_USO_MS = 90L * 24 * 60 * 60 * 1000
 
-    /**
-     * Topes globales (I2 de la revisión): cuántas solicitudes pendientes y cuántos clientes DCR puede haber a la
-     * vez. Elegidos, no medidos: un uso normal tiene unas pocas de cada uno. Con el tope lleno se contesta 503.
-     */
-    const val MAX_SOLICITUDES_PENDIENTES = 2_000
-    const val MAX_CLIENTES_DCR = 2_000
-
-    /** Un cliente DCR que nunca llegó a una concesión se borra al día: Claude registra uno por conexión. */
-    const val VIDA_DE_UN_CLIENTE_SIN_USO_MS = 24L * 60 * 60 * 1000
-
     private val FORMA = Regex("^mvc_[arcs]_[A-Za-z0-9_-]{${TokenDeEnlace.LARGO}}$")
 
     fun nuevo(prefijo: String): String = prefijo + TokenDeEnlace.nuevo()
@@ -85,63 +72,27 @@ internal object LasConcesiones {
 /** Lo que un token de acceso válido dice: de quién es y de qué concesión. */
 internal data class AccesoDelConector(val userId: String, val concesionId: String)
 
-/** Una autorización pedida, ya validada por `GET /oauth/authorize`. */
+/**
+ * **Una autorización pedida**, ya validada por `GET /oauth/authorize`. No se guarda: viaja en la pantalla de
+ * consentimiento firmada con HMAC (ver `SolicitudFirmada`), así que pedir permiso no escribe nada en la base.
+ */
 internal data class SolicitudDelConector(
     val clientId: String,
-    val nombreDelCliente: String,
     val redirectUri: String,
     val codeChallenge: String,
     val state: String?,
     val scope: String,
     val venceEn: Long,
-    val usadaEn: Long?,
-)
+) {
+    /** El nombre sale del retorno, nunca de lo que dice el cliente (ver `nombreDelCliente`). */
+    val nombreDelCliente: String get() = nombreDelCliente(redirectUri)
+}
 
 /** Lo que devuelve `/oauth/token`: el par nuevo, en claro, una sola vez. */
 internal data class ParDeTokens(val acceso: String, val refresco: String, val scope: String)
 
 /** Por qué no salió un token. Hoy una sola razón, que se contesta `invalid_grant`. */
 internal enum class FallaDelToken { INVALIDO }
-
-// ── Solicitudes ────────────────────────────────────────────────────────────────────────────────
-
-internal fun Transaction.guardarSolicitud(s: SolicitudDelConector): String {
-    limpiarLoVencido(s.venceEn - ConfigDelConector.VIDA_DE_LA_SOLICITUD_MS)
-    val id = LasConcesiones.nuevo(LasConcesiones.PREFIJO_SOLICITUD)
-    SolicitudesDelConector.insert {
-        it[SolicitudesDelConector.id] = LasConcesiones.hash(id)
-        it[clientId] = s.clientId
-        it[nombreDelCliente] = s.nombreDelCliente.take(100)
-        it[redirectUri] = s.redirectUri
-        it[codeChallenge] = s.codeChallenge
-        it[state] = s.state
-        it[scope] = s.scope
-        it[venceEn] = s.venceEn
-    }
-    return id
-}
-
-internal fun Transaction.leerSolicitud(id: String): SolicitudDelConector? {
-    if (!LasConcesiones.tieneForma(id, LasConcesiones.PREFIJO_SOLICITUD)) return null
-    return SolicitudesDelConector.selectAll().where { SolicitudesDelConector.id eq LasConcesiones.hash(id) }.firstOrNull()?.let {
-        SolicitudDelConector(
-            clientId = it[SolicitudesDelConector.clientId],
-            nombreDelCliente = it[SolicitudesDelConector.nombreDelCliente],
-            redirectUri = it[SolicitudesDelConector.redirectUri],
-            codeChallenge = it[SolicitudesDelConector.codeChallenge],
-            state = it[SolicitudesDelConector.state],
-            scope = it[SolicitudesDelConector.scope],
-            venceEn = it[SolicitudesDelConector.venceEn],
-            usadaEn = it[SolicitudesDelConector.usadaEn],
-        )
-    }
-}
-
-/** La marca como usada si nadie la usó antes. `false` = ya se había usado (otra pestaña, un doble clic). */
-internal fun Transaction.usarSolicitud(id: String, ahora: Long): Boolean =
-    SolicitudesDelConector.update({ (SolicitudesDelConector.id eq LasConcesiones.hash(id)) and SolicitudesDelConector.usadaEn.isNull() }) {
-        it[usadaEn] = ahora
-    } == 1
 
 // ── Concesión y código ─────────────────────────────────────────────────────────────────────────
 
@@ -384,37 +335,17 @@ internal fun Transaction.conexionesActivas(uid: String, ahora: Long): List<Conex
         .sortedByDescending { it.ultimoUso ?: it.conectadaEn }
 }
 
-/** Lo vencido de lo que se guarda en cada pedido de autorización: solicitudes y códigos pasados de su vida. */
-private fun Transaction.limpiarLoVencido(ahora: Long) {
-    SolicitudesDelConector.deleteWhere { SolicitudesDelConector.venceEn less ahora }
-    CodigosDelConector.deleteWhere { CodigosDelConector.venceEn less ahora }
-}
-
-/** ¿Cuántas solicitudes pendientes (sin usar y sin vencer) hay? Para el tope de [LasConcesiones.MAX_SOLICITUDES_PENDIENTES]. */
-internal fun Transaction.solicitudesPendientes(ahora: Long): Long =
-    SolicitudesDelConector.selectAll()
-        .where { SolicitudesDelConector.usadaEn.isNull() and (SolicitudesDelConector.venceEn greater ahora) }
-        .count()
-
-/** Los clientes DCR registrados que nunca llegaron a una concesión y tienen más de un día. Un `NOT IN` en SQL. */
-internal fun Transaction.borrarClientesSinUso(ahora: Long): Int =
-    ClientesDelConector.deleteWhere {
-        (ClientesDelConector.creadoEn less ahora - LasConcesiones.VIDA_DE_UN_CLIENTE_SIN_USO_MS) and
-            (ClientesDelConector.id notInSubQuery ConcesionesDelConector.select(ConcesionesDelConector.clientId))
-    }
-
 /**
- * **El barrido diario del conector** (I2 y M6 de la revisión), en el mismo bucle que la retención de la
- * observabilidad (`startReminderScheduler`): solicitudes, códigos y tokens vencidos; clientes DCR sin uso;
- * llamadas de más de 90 días; y las concesiones que nadie usó en 90 días o que se revocaron hace más de 90 días
- * (con sus tokens y códigos). Devuelve cuántas filas se fueron.
+ * **El barrido diario del conector** (M6 de la revisión), en el mismo bucle que la retención de la observabilidad
+ * (`startReminderScheduler`): códigos y tokens vencidos, llamadas de más de 90 días, y las concesiones que nadie
+ * usó en 90 días, que pasaron su vida máxima o que se revocaron hace más de 90 días (con sus tokens y códigos).
+ * Devuelve cuántas filas se fueron. Ya no hay solicitudes guardadas (van firmadas) ni clientes DCR que limpiar
+ * (son a lo sumo siete, ver `idDelClienteDcr`).
  */
 internal fun Transaction.limpiarElConector(ahora: Long): Int {
     var filas = 0
-    filas += SolicitudesDelConector.deleteWhere { SolicitudesDelConector.venceEn less ahora }
     filas += CodigosDelConector.deleteWhere { CodigosDelConector.venceEn less ahora }
     filas += TokensDelConector.deleteWhere { TokensDelConector.venceEn less ahora }
-    filas += borrarClientesSinUso(ahora)
     val corte = ahora - LasConcesiones.VIDA_SIN_USO_MS
     filas += LlamadasDelConector.deleteWhere { LlamadasDelConector.en less corte }
     val viejas = ConcesionesDelConector.selectAll()

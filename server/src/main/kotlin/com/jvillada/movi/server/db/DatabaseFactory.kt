@@ -93,7 +93,7 @@ object DatabaseFactory {
             // Vuelta 102 · la observabilidad del servidor: seis tablas NUEVAS, sin `user_id` (ver
             // TablasDeObservabilidad.kt). Entran solo por el `create`, como toda tabla nueva.
             SchemaUtils.create(*TABLAS_DE_OBSERVABILIDAD)
-            // Vuelta 135 · el conector de Movi para Claude: seis tablas NUEVAS (ver TablasDelConector.kt).
+            // Vuelta 135 · el conector de Movi para Claude: cinco tablas NUEVAS (ver TablasDelConector.kt).
             SchemaUtils.create(*TABLAS_DEL_CONECTOR)
             // Screens: `seed_version` (Ola 4) — sin esta columna una instalación ya desplegada
             // no podría recibir la generación nueva del Inicio.

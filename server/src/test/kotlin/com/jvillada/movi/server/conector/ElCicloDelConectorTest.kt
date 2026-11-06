@@ -5,14 +5,14 @@ import com.jvillada.movi.server.conector.AndamioDelConector.Companion.CIMD_DE_CL
 import com.jvillada.movi.server.conector.AndamioDelConector.Companion.RETORNO_DE_CLAUDE
 import com.jvillada.movi.server.db.ClientesDelConector
 import com.jvillada.movi.server.routes.LIMITE_DE_TOKEN_POR_CONCESION
-import com.jvillada.movi.server.routes.LIMITE_GLOBAL_DE_REGISTROS_POR_HORA
 import com.jvillada.movi.server.db.CodigosDelConector
 import com.jvillada.movi.server.db.ConcesionesDelConector
 import com.jvillada.movi.server.db.LlamadasDelConector
-import com.jvillada.movi.server.db.SolicitudesDelConector
 import com.jvillada.movi.server.db.TokensDelConector
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.http.HttpHeaders
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -56,48 +56,59 @@ class ElCicloDelConectorTest {
     fun tearDown() = c.cerrar()
 
     @Test
-    fun `con el tope de solicitudes pendientes lleno, autorizar contesta 503 sin escribir`() = testApplication {
+    fun `pedir permiso no escribe nada, y una solicitud firmada sigue sirviendo`() = testApplication {
         with(c) { montar() }
-        val vence = System.currentTimeMillis() + 60_000
+        val primera = c.solicitudDe(client.get(c.urlDeAutorizar()).bodyAsText())
+        // Antes, cada GET dejaba una fila y un tope global de 2.000 se llenaba desde cuatro IP.
+        repeat(300) { i -> client.get(c.urlDeAutorizar()) { header("X-Forwarded-For", "10.9.${i / 256}.${i % 256}") } }
         transaction {
-            SolicitudesDelConector.batchInsert(1..LasConcesiones.MAX_SOLICITUDES_PENDIENTES) { i ->
-                this[SolicitudesDelConector.id] = "s$i"
-                this[SolicitudesDelConector.clientId] = CIMD_DE_CLAUDE
-                this[SolicitudesDelConector.nombreDelCliente] = "Claude"
-                this[SolicitudesDelConector.redirectUri] = RETORNO_DE_CLAUDE
-                this[SolicitudesDelConector.codeChallenge] = "x"
-                this[SolicitudesDelConector.scope] = "movi:leer"
-                this[SolicitudesDelConector.venceEn] = vence
-            }
+            assertEquals(0L, ConcesionesDelConector.selectAll().count())
+            assertEquals(0L, CodigosDelConector.selectAll().count())
         }
-        val res = client.get(c.urlDeAutorizar())
-        assertEquals(HttpStatusCode.ServiceUnavailable, res.status)
-        assertTrue(PantallaDeConsentimiento.OCUPADO in res.bodyAsText())
-        assertEquals(LasConcesiones.MAX_SOLICITUDES_PENDIENTES.toLong(), transaction { SolicitudesDelConector.selectAll().count() })
+        assertEquals(HttpStatusCode.Found, with(c) { permitir(primera) }.status)
     }
 
     @Test
-    fun `con el tope de clientes DCR lleno, registrar contesta 503, y el limite de registros es global`() = testApplication {
+    fun `una solicitud alterada o vencida no sirve, y reenviarla solo vuelve a pedir la contrasena`() = testApplication {
         with(c) { montar() }
-        val ahora = System.currentTimeMillis()
-        transaction {
-            ClientesDelConector.batchInsert(1..LasConcesiones.MAX_CLIENTES_DCR) { i ->
-                this[ClientesDelConector.id] = "cli$i"
-                this[ClientesDelConector.nombre] = ""
-                this[ClientesDelConector.redirectUris] = "[]"
-                this[ClientesDelConector.creadoEn] = ahora
-            }
-        }
-        suspend fun registrar() = client.post("/oauth/register") {
+        val s = c.solicitudDe(client.get(c.urlDeAutorizar()).bodyAsText())
+        val alterada = s.replaceRange(10, 11, if (s[10] == 'A') "B" else "A")
+        assertEquals(HttpStatusCode.BadRequest, with(c) { permitir(alterada) }.status)
+        val vencida = SolicitudFirmada.firmar(
+            SolicitudDelConector(CIMD_DE_CLAUDE, RETORNO_DE_CLAUDE, c.desafioDe(c.verificador), "x", "movi:leer", System.currentTimeMillis() - 1),
+        )
+        assertEquals(HttpStatusCode.BadRequest, with(c) { permitir(vencida) }.status)
+        // Dos «Permitir» con la misma solicitud: dos códigos, cada uno de un solo uso.
+        val uno = c.parametrosDe(with(c) { permitir(s) }.headers[HttpHeaders.Location]!!)["code"]!!
+        val dos = c.parametrosDe(with(c) { permitir(s) }.headers[HttpHeaders.Location]!!)["code"]!!
+        assertTrue(uno != dos)
+        assertEquals(HttpStatusCode.OK, with(c) { canjear(uno) }.status)
+        assertEquals(HttpStatusCode.BadRequest, with(c) { canjear(uno) }.status)
+        assertEquals(HttpStatusCode.OK, with(c) { canjear(dos) }.status)
+    }
+
+    @Test
+    fun `DCR es idempotente y sin limite global`() = testApplication {
+        with(c) { montar() }
+        suspend fun registrar(ip: String, uris: String) = client.post("/oauth/register") {
+            header("X-Forwarded-For", ip)
             contentType(ContentType.Application.Json)
-            setBody("""{"redirect_uris":["$RETORNO_DE_CLAUDE"]}""")
+            setBody("""{"client_name":"Claude","redirect_uris":$uris}""")
         }
-        assertEquals(HttpStatusCode.ServiceUnavailable, registrar().status)
-        transaction { ClientesDelConector.deleteAll() }
-        // El 503 de arriba ya gastó uno del balde global.
-        repeat(LIMITE_GLOBAL_DE_REGISTROS_POR_HORA - 2) { RateLimiter.allow("conector:register:global", LIMITE_GLOBAL_DE_REGISTROS_POR_HORA, 60 * 60_000L) }
-        assertEquals(HttpStatusCode.Created, registrar().status)
-        assertEquals(HttpStatusCode.TooManyRequests, registrar().status)
+        val ids = (1..320).map { i ->
+            val res = registrar("10.8.${i / 256}.${i % 256}", """["$RETORNO_DE_CLAUDE"]""")
+            assertEquals(HttpStatusCode.Created, res.status, "registro $i")
+            c.json.parseToJsonElement(res.bodyAsText()).jsonObject["client_id"]!!.jsonPrimitive.content
+        }.toSet()
+        assertEquals(1, ids.size, "el mismo client_id cada vez")
+        // Otro orden y otro puerto de loopback: el mismo cliente.
+        val a = registrar("10.7.0.1", """["http://localhost:1234/callback","http://127.0.0.1/callback"]""").bodyAsText()
+        val b = registrar("10.7.0.2", """["http://127.0.0.1:9/callback","http://localhost/callback"]""").bodyAsText()
+        assertEquals(
+            c.json.parseToJsonElement(a).jsonObject["client_id"]!!.jsonPrimitive.content,
+            c.json.parseToJsonElement(b).jsonObject["client_id"]!!.jsonPrimitive.content,
+        )
+        assertEquals(2L, transaction { ClientesDelConector.selectAll().count() })
     }
 
     @Test
@@ -167,12 +178,6 @@ class ElCicloDelConectorTest {
         with(c) { herramienta(acceso, "cuentas") }
         val ahora = System.currentTimeMillis()
         transaction {
-            SolicitudesDelConector.insert {
-                it[id] = "vieja"; it[clientId] = CIMD_DE_CLAUDE; it[nombreDelCliente] = "Claude"; it[redirectUri] = RETORNO_DE_CLAUDE
-                it[codeChallenge] = "x"; it[scope] = "movi:leer"; it[venceEn] = ahora - 1
-            }
-            ClientesDelConector.insert { it[id] = "cli-viejo"; it[nombre] = ""; it[redirectUris] = "[]"; it[creadoEn] = ahora - 2 * dia }
-            ClientesDelConector.insert { it[id] = "cli-nuevo"; it[nombre] = ""; it[redirectUris] = "[]"; it[creadoEn] = ahora }
             LlamadasDelConector.insert {
                 it[id] = "llm-vieja"; it[userId] = c.a.duenoA; it[concesionId] = "x"; it[herramienta] = "cuentas"
                 it[en] = ahora - 91 * dia; it[bytes] = 1; it[ok] = true
@@ -188,10 +193,8 @@ class ElCicloDelConectorTest {
             }
         }
         val borradas = transaction { limpiarElConector(ahora) }
-        assertTrue(borradas >= 5, "borró $borradas")
+        assertTrue(borradas >= 3, "borró $borradas")
         transaction {
-            assertTrue(SolicitudesDelConector.selectAll().where { SolicitudesDelConector.id eq "vieja" }.empty())
-            assertEquals(listOf("cli-nuevo"), ClientesDelConector.selectAll().map { it[ClientesDelConector.id] })
             assertEquals(1L, LlamadasDelConector.selectAll().count(), "queda la llamada de hoy")
             assertTrue(ConcesionesDelConector.selectAll().where { ConcesionesDelConector.id eq "cnc-abandonada" }.empty())
             assertTrue(TokensDelConector.selectAll().where { TokensDelConector.concesionId eq "cnc-abandonada" }.empty())

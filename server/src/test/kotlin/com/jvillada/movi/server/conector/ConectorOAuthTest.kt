@@ -219,13 +219,12 @@ class ConectorOAuthTest {
     }
 
     @Test
-    fun `la solicitud es de un solo uso y cancelar devuelve access_denied`() = testApplication {
+    fun `cancelar devuelve access_denied`() = testApplication {
         with(c) { montar() }
         val s = c.solicitudDe(client.get(c.urlDeAutorizar()).bodyAsText())
         val cancelar = with(c) { permitir(s, decision = "cancelar") }
         assertEquals(HttpStatusCode.Found, cancelar.status)
         assertEquals("access_denied", c.parametrosDe(cancelar.headers[HttpHeaders.Location]!!)["error"])
-        assertEquals(HttpStatusCode.BadRequest, with(c) { permitir(s) }.status, "ya se usó")
     }
 
     @Test

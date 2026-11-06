@@ -64,6 +64,7 @@ internal class AndamioDelConector(nombreDeLaBase: String, tablasDeMas: Array<Tab
 
     init {
         ConfigDelConector.baseParaPruebas = BASE
+        SolicitudFirmada.claveParaPruebas = "clave-de-prueba-de-las-solicitudes-del-conector".toByteArray()
         lectorDeCimd = LectorDeCimd { url -> documentos[url]?.let { LecturaDelCimd.Documento(it) } ?: LecturaDelCimd.NoExiste }
         olvidarLosCimdEnMemoria()
         RateLimiter.reset()
@@ -77,6 +78,7 @@ internal class AndamioDelConector(nombreDeLaBase: String, tablasDeMas: Array<Tab
 
     fun cerrar() {
         ConfigDelConector.baseParaPruebas = null
+        SolicitudFirmada.claveParaPruebas = null
         lectorDeCimd = LectorDeCimdPorRed
         cimdDePrueba = emptySet()
         olvidarLosCimdEnMemoria()

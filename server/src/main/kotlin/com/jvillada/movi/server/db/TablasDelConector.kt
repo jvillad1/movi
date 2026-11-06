@@ -13,16 +13,18 @@ import org.jetbrains.exposed.sql.Table
  * guarda el SHA-256 en hex y nada más. Son 256 bits de `SecureRandom`, así que un hash rápido alcanza y deja
  * buscar por índice; lo que se filtre de la base no abre nada.
  *
- * Las cuatro con `user_id` entran a `TABLAS_DEL_USUARIO` (borrar la cuenta se las lleva). Las otras dos no son
- * de nadie todavía: un cliente registrado por DCR y una solicitud de autorización antes de que alguien entre.
+ * Las cuatro con `user_id` entran a `TABLAS_DEL_USUARIO` (borrar la cuenta se las lleva). La otra no es de nadie:
+ * los clientes registrados por DCR (a lo sumo siete). Las solicitudes de autorización no se guardan: van firmadas
+ * (`SolicitudFirmada`).
  *
  * Tablas NUEVAS: entran por el `SchemaUtils.create` del arranque, con sus índices dentro del CREATE TABLE.
  */
 
 /**
- * `conector_clientes` · **los clientes registrados por DCR** (RFC 7591, `POST /oauth/register`). Claude
- * registra uno nuevo en cada conexión fresca. Los de CIMD (el `client_id` es una URL https) no se guardan: se
- * leen de su documento.
+ * `conector_clientes` · **los clientes registrados por DCR** (RFC 7591, `POST /oauth/register`). El `client_id`
+ * sale de los retornos declarados (`idDelClienteDcr`): registrar lo mismo dos veces da el mismo cliente, y como los
+ * retornos solo pueden ser los de Claude, hay a lo sumo siete filas. Los de CIMD no se guardan: se leen de su
+ * documento.
  */
 object ClientesDelConector : Table("conector_clientes") {
     val id = varchar("id", 80)
@@ -31,28 +33,6 @@ object ClientesDelConector : Table("conector_clientes") {
     /** Las `redirect_uris` que declaró, en JSON. */
     val redirectUris = text("redirect_uris")
     val creadoEn = long("creado_en")
-    override val primaryKey = PrimaryKey(id)
-}
-
-/**
- * `conector_solicitudes` · **una autorización pedida y todavía no resuelta**: lo que `GET /oauth/authorize`
- * validó, guardado del lado del server para que la pantalla de consentimiento solo lleve un identificador de un
- * solo uso (su hash es [id]). Así nadie puede cambiar el `redirect_uri` ni el `code_challenge` entre la pantalla
- * y el «Permitir», y una misma pantalla no sirve dos veces.
- */
-object SolicitudesDelConector : Table("conector_solicitudes") {
-    /** SHA-256 del identificador que viaja en el formulario. */
-    val id = varchar("id", 64)
-    val clientId = varchar("client_id", 500)
-    val nombreDelCliente = varchar("nombre_del_cliente", 100)
-    val redirectUri = varchar("redirect_uri", 500)
-    val codeChallenge = varchar("code_challenge", 128)
-    /** El `state` del cliente, que vuelve tal cual. `null` = no mandó. */
-    val state = varchar("state", 500).nullable()
-    val scope = varchar("scope", 100)
-    val venceEn = long("vence_en")
-    /** Cuándo se usó (permitida o cancelada). `null` = todavía sirve. */
-    val usadaEn = long("usada_en").nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -136,7 +116,7 @@ object LlamadasDelConector : Table("conector_llamadas") {
     init { index("idx_conector_llamadas_user_id", false, userId) }
 }
 
-/** Las seis, para el arranque y las pruebas. */
+/** Las cinco, para el arranque y las pruebas. (`conector_solicitudes` se fue: las solicitudes van firmadas.) */
 val TABLAS_DEL_CONECTOR: Array<Table> = arrayOf(
-    ClientesDelConector, SolicitudesDelConector, ConcesionesDelConector, CodigosDelConector, TokensDelConector, LlamadasDelConector,
+    ClientesDelConector, ConcesionesDelConector, CodigosDelConector, TokensDelConector, LlamadasDelConector,
 )

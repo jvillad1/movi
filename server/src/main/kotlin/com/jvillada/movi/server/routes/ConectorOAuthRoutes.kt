@@ -4,15 +4,15 @@ import at.favre.lib.crypto.bcrypt.BCrypt
 import com.jvillada.movi.shared.model.PasswordPolicy
 import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.conector.ConfigDelConector
+import com.jvillada.movi.server.conector.SolicitudFirmada
+import com.jvillada.movi.server.conector.idDelClienteDcr
+import com.jvillada.movi.server.conector.retornoNormalizado
 import io.ktor.server.response.respond
 import com.jvillada.movi.server.conector.revocarPorToken
 import com.jvillada.movi.server.conector.credencialDe
 import com.jvillada.movi.server.conector.claveDeIp
 import com.jvillada.movi.server.conector.clientIdConForma
 import com.jvillada.movi.server.conector.limitadorDelConector
-import com.jvillada.movi.server.conector.borrarClientesSinUso
-import com.jvillada.movi.server.conector.solicitudesPendientes
-import com.jvillada.movi.server.conector.LasConcesiones
 import com.jvillada.movi.server.conector.FORMA_DEL_VERIFICADOR
 import com.jvillada.movi.server.conector.MAX_REDIRECT_URIS
 import com.jvillada.movi.server.conector.PantallaDeConsentimiento
@@ -20,15 +20,12 @@ import com.jvillada.movi.server.conector.ParDeTokens
 import com.jvillada.movi.server.conector.SolicitudDelConector
 import com.jvillada.movi.server.conector.canjearCodigo
 import com.jvillada.movi.server.conector.concederYEmitirCodigo
-import com.jvillada.movi.server.conector.guardarSolicitud
-import com.jvillada.movi.server.conector.leerSolicitud
 import com.jvillada.movi.server.conector.nombreDelCliente
 import com.jvillada.movi.server.conector.nombreLimpio
 import com.jvillada.movi.server.conector.redirectPermitido
 import com.jvillada.movi.server.conector.redirectValidoParaDeclarar
 import com.jvillada.movi.server.conector.refrescar
 import com.jvillada.movi.server.conector.resolverCliente
-import com.jvillada.movi.server.conector.usarSolicitud
 import com.jvillada.movi.server.db.ClientesDelConector
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
@@ -59,7 +56,6 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import java.net.URLEncoder
-import java.util.UUID
 
 /**
  * # Vuelta 135 · El conector de Movi para Claude: OAuth 2.1
@@ -155,8 +151,8 @@ private val FORMA_DEL_DESAFIO = Regex("^[A-Za-z0-9._~-]{43,128}$")
 /**
  * **`GET /oauth/authorize`.** Primero el cliente y su `redirect_uri`: si alguno no sirve **no se redirige a
  * ningún lado** (RFC 6749 §4.1.2.1: sería un redirector abierto) y se muestra el error acá. Con esos dos bien,
- * todo otro error vuelve al cliente con `error=`. Si todo está bien, se guarda la solicitud y se muestra la
- * pantalla.
+ * todo otro error vuelve al cliente con `error=`. Si todo está bien, se muestra la pantalla con la solicitud
+ * firmada (N2 de la re-revisión): pedir permiso no escribe nada en la base.
  */
 private suspend fun ApplicationCall.autorizar(p: Parameters) {
     val clientId = p["client_id"].orEmpty()
@@ -185,28 +181,15 @@ private suspend fun ApplicationCall.autorizar(p: Parameters) {
     }
     p["resource"]?.let { if (it.trimEnd('/') != ConfigDelConector.urlDelMcp) return volverCon("invalid_target", "el recurso es ${ConfigDelConector.urlDelMcp}") }
 
-    val nombre = nombreDelCliente(redirectUri)
-    val ahora = System.currentTimeMillis()
-    // I2 · el tope global de solicitudes pendientes: con el tope lleno no se escribe nada.
-    if (dbQuery { solicitudesPendientes(ahora) } >= LasConcesiones.MAX_SOLICITUDES_PENDIENTES) {
-        logDelConector.warn("Conector: ${LasConcesiones.MAX_SOLICITUDES_PENDIENTES} solicitudes pendientes, el tope; no se aceptan más por ahora")
-        return pantalla(PantallaDeConsentimiento.noSePuede(PantallaDeConsentimiento.OCUPADO), HttpStatusCode.ServiceUnavailable)
-    }
-    val solicitud = dbQuery {
-        guardarSolicitud(
-            SolicitudDelConector(
-                clientId = clientId,
-                nombreDelCliente = nombre,
-                redirectUri = redirectUri,
-                codeChallenge = desafio,
-                state = state,
-                scope = ConfigDelConector.SCOPE_LEER,
-                venceEn = ahora + ConfigDelConector.VIDA_DE_LA_SOLICITUD_MS,
-                usadaEn = null,
-            ),
-        )
-    }
-    pantalla(PantallaDeConsentimiento.pedirPermiso(solicitud, nombre, hostDe(redirectUri)))
+    val solicitud = SolicitudDelConector(
+        clientId = clientId,
+        redirectUri = redirectUri,
+        codeChallenge = desafio,
+        state = state,
+        scope = ConfigDelConector.SCOPE_LEER,
+        venceEn = System.currentTimeMillis() + ConfigDelConector.VIDA_DE_LA_SOLICITUD_MS,
+    )
+    pantalla(PantallaDeConsentimiento.pedirPermiso(SolicitudFirmada.firmar(solicitud), solicitud.nombreDelCliente, hostDe(redirectUri)))
 }
 
 private fun hostDe(uri: String): String = runCatching { java.net.URI(uri).host }.getOrNull().orEmpty()
@@ -225,14 +208,12 @@ private suspend fun ApplicationCall.resolverElConsentimiento() {
         ?: return pantalla(PantallaDeConsentimiento.noSePuede("No pudimos leer el formulario."), HttpStatusCode.BadRequest)
     val id = form["solicitud"].orEmpty()
     val ahora = System.currentTimeMillis()
-    val s = dbQuery { leerSolicitud(id) }
-    if (s == null || s.usadaEn != null || s.venceEn <= ahora) {
-        return pantalla(PantallaDeConsentimiento.noSePuede("Esta solicitud ya se usó o venció."), HttpStatusCode.BadRequest)
-    }
+    // La firma es nuestra y no venció; si no, nada (ni se mira la contraseña).
+    val s = SolicitudFirmada.leer(id, ahora)
+        ?: return pantalla(PantallaDeConsentimiento.noSePuede("Esta solicitud venció o no es de Movi."), HttpStatusCode.BadRequest)
     val host = hostDe(s.redirectUri)
 
     if (form["decision"] == "cancelar") {
-        if (!dbQuery { usarSolicitud(id, ahora) }) return pantalla(PantallaDeConsentimiento.noSePuede("Esta solicitud ya se usó o venció."), HttpStatusCode.BadRequest)
         return respondRedirect(retornoCon(s.redirectUri, listOf("error" to "access_denied", "error_description" to "el dueño no lo permitió", "state" to s.state)))
     }
 
@@ -261,9 +242,8 @@ private suspend fun ApplicationCall.resolverElConsentimiento() {
     if (!bien || fila == null) return pantalla(deNuevo(PantallaDeConsentimiento.CREDENCIALES_MALAS), HttpStatusCode.Unauthorized)
 
     val uid = fila[Users.id]
-    val codigo = dbQuery {
-        if (!usarSolicitud(id, ahora)) null else concederYEmitirCodigo(uid, s, ahora)
-    } ?: return pantalla(PantallaDeConsentimiento.noSePuede("Esta solicitud ya se usó o venció."), HttpStatusCode.BadRequest)
+    // Cada «Permitir» con la contraseña da un código nuevo, de un solo uso y atado al mismo desafío PKCE.
+    val codigo = dbQuery { concederYEmitirCodigo(uid, s, ahora) }
     respondRedirect(retornoCon(s.redirectUri, listOf("code" to codigo, "state" to s.state)))
 }
 
@@ -347,10 +327,6 @@ private suspend fun permitirCredencial(credencial: String?, clientId: String, ru
         limitadorDelConector.permitir("$ruta:concesion:${dueno.first}", LIMITE_DE_TOKEN_POR_CONCESION, 60_000L)
 }
 
-/** `/oauth/register`: registros por hora en total (Anthropic registra desde unas pocas IP para todos). */
-internal const val LIMITE_GLOBAL_DE_REGISTROS_POR_HORA = 300
-
-private val logDelConector = org.slf4j.LoggerFactory.getLogger("ConectorDeClaude")
 
 /**
  * **`POST /oauth/register`** (RFC 7591). Solo clientes públicos (`token_endpoint_auth_method: none`), con retornos
@@ -361,8 +337,8 @@ private suspend fun ApplicationCall.registrar() {
     suspend fun mal(error: String, descripcion: String) =
         responderJson(buildJsonObject { put("error", error); put("error_description", descripcion) }, HttpStatusCode.BadRequest)
 
-    // M3 · un límite global, no por IP (ver LIMITE_GLOBAL_DE_REGISTROS_POR_HORA).
-    if (!RateLimiter.allow("conector:register:global", LIMITE_GLOBAL_DE_REGISTROS_POR_HORA, 60 * 60_000L)) {
+    // N2 · sin límite global (un registro ya no agrega filas: ver idDelClienteDcr); solo un balde por IP (o /64).
+    if (!limitadorDelConector.permitir("register:ip:${claveDeIp(ipDelPedido(this))}", 30, 60_000L)) {
         return responderJson(buildJsonObject { put("error", "slow_down"); put("error_description", "demasiados registros; espera") }, HttpStatusCode.TooManyRequests)
     }
     val crudo = when (val leido = leerConTope(MAX_BYTES_DEL_FORMULARIO)) {
@@ -379,29 +355,18 @@ private suspend fun ApplicationCall.registrar() {
     if (metodo != null && metodo != "none") return mal("invalid_client_metadata", "solo clientes públicos (token_endpoint_auth_method=none)")
     val nombre = nombreLimpio((objeto["client_name"] as? JsonPrimitive)?.contentOrNull)
     val ahora = System.currentTimeMillis()
-    val id = "mvc_cli_" + UUID.randomUUID().toString().replace("-", "")
-    val lleno = dbQuery {
-        // Lo que se registró y nunca se usó, antes de sumar uno más (un NOT IN en SQL).
-        borrarClientesSinUso(ahora)
-        ClientesDelConector.selectAll().count() >= LasConcesiones.MAX_CLIENTES_DCR
-    }
-    // I2 · el tope global de clientes: con el tope lleno no se escribe nada.
-    if (lleno) {
-        logDelConector.warn("Conector: ${LasConcesiones.MAX_CLIENTES_DCR} clientes DCR registrados, el tope; no se registran más por ahora")
-        return responderJson(
-            buildJsonObject {
-                put("error", "temporarily_unavailable")
-                put("error_description", "Movi no acepta registros nuevos ahora; vuelve a intentar en unas horas o usa el cliente de Claude (CIMD)")
-            },
-            HttpStatusCode.ServiceUnavailable,
-        )
-    }
+    // N2 · idempotente: el `client_id` sale de los retornos (sin el puerto del loopback, sin repetidos, en orden), y
+    // registrar lo mismo otra vez no escribe nada. A lo sumo siete filas en total, así que no hace falta ningún tope.
+    val retornos = uris.map(::retornoNormalizado).distinct().sorted()
+    val id = idDelClienteDcr(retornos)
     dbQuery {
-        ClientesDelConector.insert {
-            it[ClientesDelConector.id] = id
-            it[ClientesDelConector.nombre] = nombre
-            it[redirectUris] = Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>()), uris)
-            it[creadoEn] = ahora
+        if (ClientesDelConector.selectAll().where { ClientesDelConector.id eq id }.empty()) {
+            ClientesDelConector.insert {
+                it[ClientesDelConector.id] = id
+                it[ClientesDelConector.nombre] = ""
+                it[redirectUris] = Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>()), retornos)
+                it[creadoEn] = ahora
+            }
         }
     }
     responderJson(
