@@ -342,7 +342,8 @@ fun Route.eventRoutes() {
             event.cuotas?.let { cuotas ->
                 if (!cuotasValidas(cuotas)) return@post call.respond(HttpStatusCode.BadRequest, CUOTAS_FUERA_DE_RANGO)
             }
-            if (event.type != TransactionType.EXPENSE || tipoDeLaCuenta != AccountType.CREDIT_CARD) event = event.copy(cuotas = null)
+            // Revisión 2 de la vuelta 133: la misma regla que el `PUT …/cuotas` y el detalle (`llevaCuotas`).
+            if (!llevaCuotas(event, tipoDeLaCuenta)) event = event.copy(cuotas = null)
 
             // **Un id que ya existe no es un error: es el mismo movimiento que vuelve.**
             //
@@ -1007,6 +1008,47 @@ fun Route.eventRoutes() {
             }
             if (updated == null) call.respond(HttpStatusCode.NotFound)
             else call.respond(updated)
+        }
+
+        /**
+         * Vuelta 133 · **a cuántas cuotas fue una compra con tarjeta ya anotada** («A 12 cuotas · Cambiar»
+         * en el detalle). Solo un gasto suelto de una `CREDIT_CARD` del dueño ([llevaCuotas]); 1..72
+         * (400 fuera de rango, como `POST /api/events`); 404 si no existe, es de otro o está anulado; 422
+         * si no lleva cuotas. **No toca monto, fecha ni categoría**: la compra sigue contando entera el día
+         * que se hizo, y solo `extractoDeLaTarjeta` reparte. Idempotente: el mismo número dos veces, lo mismo.
+         */
+        put("/{id}/cuotas") {
+            val id = call.parameters["id"]
+                ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing id")
+            val uid = call.userId()
+            val cuotas = call.receive<UpdateEventCuotasRequest>().cuotas
+            if (!cuotasValidas(cuotas)) return@put call.respond(HttpStatusCode.BadRequest, CUOTAS_FUERA_DE_RANGO)
+            val resultado: Pair<HttpStatusCode, FinancialEvent?> = dbQuery {
+                val event = Events.selectAll()
+                    .where { (Events.id eq id) and (Events.userId eq uid) }
+                    .firstOrNull()?.toFinancialEvent()
+                val isVoided = event != null && VoidEvents.selectAll()
+                    .where { (VoidEvents.originalEventId eq id) and (VoidEvents.userId eq uid) }
+                    .count() > 0
+                if (event == null || isVoided) return@dbQuery HttpStatusCode.NotFound to null
+                val tipo = Accounts.selectAll()
+                    .where { (Accounts.id eq event.accountId) and (Accounts.userId eq uid) }
+                    .firstOrNull()?.let { runCatching { AccountType.valueOf(it[Accounts.type]) }.getOrNull() }
+                if (!llevaCuotas(event, tipo)) return@dbQuery HttpStatusCode.UnprocessableEntity to null
+                if (event.cuotas == cuotas) return@dbQuery HttpStatusCode.OK to event.withCashFlowFlag(accountTypesFor(uid))
+                val ahora = System.currentTimeMillis()
+                Events.update({ (Events.id eq id) and (Events.userId eq uid) }) {
+                    it[Events.cuotas] = cuotas
+                    it[Events.lastEditedAt] = ahora
+                }
+                HttpStatusCode.OK to event.copy(cuotas = cuotas, lastEditedAt = ahora).withCashFlowFlag(accountTypesFor(uid))
+            }
+            val (estado, evento) = resultado
+            when {
+                evento != null -> call.respond(evento)
+                estado == HttpStatusCode.UnprocessableEntity -> call.respond(estado, CUOTAS_SOLO_EN_UNA_COMPRA_CON_TARJETA)
+                else -> call.respond(estado)
+            }
         }
 
         put("/{id}/timestamp") {

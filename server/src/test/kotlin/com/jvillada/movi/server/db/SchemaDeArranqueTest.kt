@@ -146,6 +146,12 @@ class SchemaDeArranqueTest {
         // Vuelta 77 — desde qué período corren las cuotas de un crédito que ya venía. La lectura de
         // los créditos la nombra: sin el ALTER, Créditos, Pagos y el Inicio caerían.
         "credit_terms" to "cuotas_desde",
+        // Vuelta 133 — la cuota que cambia (tasa variable, UVR, abono constante). `toCreditTerms` —toda
+        // lectura de créditos, o sea Créditos, Pagos, la caja y el Inicio— las nombra.
+        "credit_terms" to "tipo_de_cuota",
+        "credit_terms" to "indice_de_la_tasa",
+        "credit_terms" to "puntos_sobre_el_indice",
+        "credit_terms" to "al_cambiar_la_tasa",
         // Vuelta 90 — el `email_id` de Resend de lo que llegó por correo. `toSmsMessage` y el guardado
         // del correo la nombran: sin el ALTER, la bandeja entera caería con «column does not exist».
         "sms_messages" to "id_del_proveedor",

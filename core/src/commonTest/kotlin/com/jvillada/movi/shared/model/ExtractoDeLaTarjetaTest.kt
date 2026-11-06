@@ -188,6 +188,16 @@ class ExtractoDeLaTarjetaTest {
     }
 
     @Test
+    fun `vuelta 133 · una compra a 60 cuotas cuenta un sesentavo en el corte`() {
+        val nevera = compra("2026-10-05", 6_000_000L, id = "nevera").copy(cuotas = 60)
+        val e = extractoDeLaTarjeta(nu, "COP", listOf(nevera), hoy)!!
+        assertEquals(100_000L, e.facturado, "6.000.000 / 60: la cuota del mes, no el total")
+        assertFalse(e.puedeIncluirDiferidos, "sus cuotas se conocen")
+        val aCuarentaYOcho = compra("2026-10-05", 4_800_001L, id = "tele").copy(cuotas = 48)
+        assertEquals(100_000L, extractoDeLaTarjeta(nu, "COP", listOf(aCuarentaYOcho), hoy)!!.facturado, "división entera")
+    }
+
+    @Test
     fun `vuelta 63 · la frase de diferidos sale solo si hay compras con cuotas desconocidas`() {
         val conocida = compra("2026-10-05", 1_200_000L, id = "tv").copy(cuotas = 12)
         val deUna = compra("2026-10-06", 80_000L, id = "pan").copy(cuotas = 1)

@@ -52,6 +52,15 @@ class PushPayloadTest {
     }
 
     @Test
+    fun `vuelta 133 · la cuota de un credito que cambia dice unos, como el correo`() {
+        val r = rule("Cuota Libre inversión", 1_262_300, 22).copy(
+            cuotaQueCambia = com.jvillada.movi.shared.model.LaCuotaQueCambia(com.jvillada.movi.shared.model.CuotaPagada(1_262_300, "2026-06")),
+        )
+        assertEquals("Cuota Libre inversión — unos ${'$'}1.262.300 (vence en 2 días)", body(buildPushPayload(listOf(r), today, leadDays = 3)))
+        assertEquals("unos ${'$'}1,262,300 COP", com.jvillada.movi.server.reminders.montoConMoneda(r), "el correo dice lo mismo")
+    }
+
+    @Test
     fun `more than three payments collapse into a suffix`() {
         val rules = (1..5).map { rule("Pago $it", 10_000L * it, 20) }
         val lines = body(buildPushPayload(rules, today, leadDays = 3)).split("\n")

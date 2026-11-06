@@ -5544,7 +5544,23 @@ Una pantalla de información sobre plata de terceros (`ui/seguros/TusSegurosScre
 - **Lo que no se dice**: precios de seguros ajenos, aseguradoras como oferta, «te conviene». Una línea
   `apoyo` al final: «Movi no vende seguros ni te asesora para comprarlos.»
 
-## Vuelta 133 · Las categorías del número y la nota
+## Vuelta 133 · Una cuota que cambia y las cuotas de una compra, sin bloquear nada
+
+- **Una pregunta que no hace falta contestar va en un renglón fijo que se abre con el dedo.** La tarjeta de
+  Por revisar de una compra con tarjeta lleva «¿A cuántas cuotas? · Elegir» (`RenglonDeLasCuotas`, texto
+  `apoyo` + `Boton` `Fantasma` S): el renglón está desde que la tarjeta se pinta (no salta nada) y al tocarlo
+  abre la MISMA fila de Agregar (`FilaDeCuotas`, pastillas en un renglón que se desliza: 1 · 3 · 6 · 12 · 24 ·
+  36 · 48 · 60 · Otra). Elegida, se cierra y el renglón dice «A 60 cuotas · Cambiar». Sin elegir, «Confirmar»
+  guarda como siempre. El detalle de un gasto de tarjeta usa el mismo renglón; Revisar aviso, la fila abierta.
+- **Una cifra estimada se dice estimada**: la cuota de un crédito que cambia lleva «unos» delante del monto
+  (en la fila de Pagos, `apoyo` antes de la `MontoDeFila`) y debajo «La de octubre fue $Y». En la ficha,
+  «Este mes, unos $X (la de octubre fue $Y)» y lo que supone el plan, en `apoyo`; el botón de pagar no lleva
+  el paréntesis (a 360 dp con letra grande no cabe).
+- **Una pregunta de varias respuestas en una hoja**: `RotuloDeCampo` + pastillas `PildoraDeFiltro` en un
+  `FlowRow` que baja de renglón («¿Tu cuota es siempre la misma?» · Sí · No, cambia; el porqué; «¿Cambia la
+  cuota o el plazo?»). Sí por defecto, ningún amarillo nuevo.
+
+## Vuelta 134 · Las categorías del número y la nota
 
 Cuando un mismo número (llave o cuenta) se ha anotado con varias categorías, Movi no adivina: las pone
 a la vista. El patrón:

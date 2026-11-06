@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.model
 
+import kotlin.math.pow
 import kotlinx.serialization.Serializable
 
 /**
@@ -64,6 +65,13 @@ data class DeudaParaSalir(
     val noAmortiza: Long = 0L,
     val quienLaPaga: String? = null,
     val moneda: String = "COP",
+    /**
+     * Vuelta 133 · en un crédito de abono constante a capital, lo que se abona cada mes ([capitalFijoDe]):
+     * el plan abona eso más el interés del saldo y la cuota baja. `null` en los demás, que pagan [cuota].
+     */
+    val capitalFijo: Long? = null,
+    /** Vuelta 133 · cómo se mueve la cuota del crédito ([CreditTerms.tipoDeCuota]); `null` = fija. */
+    val tipoDeCuota: TipoDeCuota? = null,
 ) {
     val saleDeTuBolsillo: Boolean get() = quienLaPaga == null
 
@@ -108,7 +116,8 @@ fun deudasParaSalir(creditos: List<CreditSummary>, tarjetas: List<CardSummary>):
             saldo = saldo,
             tasaEa = t?.rateEa?.takeIf { it > 0.0 },
             sinIntereses = t?.sinIntereses == true,
-            cuota = t?.installment?.takeIf { it > 0L },
+            // Vuelta 133: la cuota de este mes (la que cambia, la última pagada de verdad).
+            cuota = t?.let { cuotaDeEsteMes(it, c.ultimaCuotaPagada) }?.takeIf { it > 0L },
             noAmortiza = (t?.insuranceMonthly ?: 0L).coerceAtLeast(0L) + (t?.otrosCargosMensuales ?: 0L).coerceAtLeast(0L),
             quienLaPaga = when {
                 t == null -> null
@@ -117,6 +126,8 @@ fun deudasParaSalir(creditos: List<CreditSummary>, tarjetas: List<CardSummary>):
                 else -> null
             },
             moneda = if (enOtraMoneda) (c.account.balancesByCurrency.keys.firstOrNull { it != "COP" } ?: c.account.currency) else "COP",
+            capitalFijo = t?.let { capitalFijoDe(it) },
+            tipoDeCuota = t?.tipoDeCuota?.takeIf { it != TipoDeCuota.FIJA },
         )
     }
     val deTarjetas = tarjetas.mapNotNull { t ->
@@ -233,6 +244,8 @@ fun planDeSalida(
                 otrosCargosMensuales = 0L,
                 saleDeTuBolsillo = true,
                 sinIntereses = d.sinIntereses,
+                tipoDeCuota = d.tipoDeCuota,
+                capitalFijo = d.capitalFijo,
             ).comoVa == ComoVaLaDeuda.AMORTIZA
             val mesesSin = sin[i].meses.takeIf { seTerminaSinAbono }
             SalidaDeUnaDeuda(
@@ -248,6 +261,9 @@ fun planDeSalida(
         ajenas = ajenas,
     )
 }
+
+/** La inflación mensual de [INFLACION_SUPUESTA_PARA_LA_UVR], la misma de la ficha. */
+private val INFLACION_MENSUAL_DE_LA_UVR: Double = inflacionMensualDe(INFLACION_SUPUESTA_PARA_LA_UVR)
 
 private class Recorrido(var saldo: Long) {
     var meses: Int? = null
@@ -267,8 +283,13 @@ private fun simular(deudas: List<DeudaParaSalir>, abonoMensual: Long): List<Reco
             val r = recorridos[i]
             if (r.meses != null) return@forEachIndexed
             val interes = interesDelPeriodo(r.saldo, d.tasaMensualParaElPlan)
-            r.interes += interes
-            val capital = (d.cuota ?: 0L) - interes - d.noAmortiza
+            // Revisión de la vuelta 133: en UVR, el interés a pesos corrientes con la misma inflación supuesta
+            // que la ficha (`planDeUnaDeuda`): sin abono, los dos dicen el mismo interés por pagar.
+            r.interes += if (d.tipoDeCuota == TipoDeCuota.UVR) {
+                kotlin.math.round(interes * (1.0 + INFLACION_MENSUAL_DE_LA_UVR).pow((mes - 1).toDouble())).toLong()
+            } else interes
+            // Vuelta 133: un abono constante abona su capital fijo (la cuota baja sola); los demás, la cuota.
+            val capital = d.capitalFijo?.let { minOf(it, r.saldo) } ?: ((d.cuota ?: 0L) - interes - d.noAmortiza)
             r.saldo -= capital
             if (r.saldo <= 0L) {
                 r.saldo = 0L

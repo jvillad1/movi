@@ -337,9 +337,14 @@ private fun LoQueDiceElPrestamo(
         // Al lado de la cuota, a 360 dp, la fecha no entra en un renglón: baja al segundo.
         lineasDelSubtitulo = 2,
         inicio = { IconoEnCirculo(Icons.Rounded.Event, tono = TonoDeIcono.Neutro) },
-        final = { Cifra(t.installment) },
+        // Vuelta 133: la cuota de este mes, de la misma función que Pagos y «Te quedan».
+        final = { Cifra(com.jvillada.movi.shared.model.cuotaDeEsteMes(t, credit.ultimaCuotaPagada)) },
     )
     BajoLaFila {
+        // Vuelta 133: una cuota que cambia dice por qué, que es una estimación y cuánto fue la última.
+        lineasDeLaCuotaQueCambia(t, credit.ultimaCuotaPagada, plan, periodoActual).forEach { linea ->
+            Text(linea, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_CUOTA_QUE_CAMBIA))
+        }
         // Quién la paga, si no es el dueño: un estado de la cuota, en una píldora.
         when {
             t.payrollDeduction -> Pildora("De tu nómina", TonoDePildora.Info)

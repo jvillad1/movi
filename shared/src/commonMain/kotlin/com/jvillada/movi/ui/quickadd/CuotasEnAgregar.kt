@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CUOTAS_FRECUENTES
 import com.jvillada.movi.shared.model.MAXIMO_DE_CUOTAS
@@ -31,7 +32,12 @@ import com.jvillada.movi.ui.components.formatMoneySinOcultar
  * # Vuelta 71 · «¿A cuántas cuotas?» en Agregar
  *
  * Con una tarjeta de crédito elegida en «Gasto», debajo de la fila «Cuenta» aparece la fila de las
- * cuotas: `1 · 3 · 6 · 12 · 24 · 36 · Otra`, con 1 por defecto. Se guarda en `FinancialEvent.cuotas`.
+ * cuotas: `1 · 3 · 6 · 12 · 24 · 36 · 48 · 60 · Otra` (vuelta 133: 48 y 60), con 1 por defecto. Se guarda
+ * en `FinancialEvent.cuotas`.
+ *
+ * Vuelta 133: la MISMA fila pregunta las cuotas al confirmar un aviso de una compra con tarjeta (la
+ * tarjeta de Por revisar y Revisar aviso) y al cambiarlas en el detalle de un movimiento; por eso es
+ * pública, con su prefijo de tags y su margen.
  *
  * **No cambia cómo cuenta la compra** (sin regla nueva): entra entera hoy en los gastos, y el extracto
  * de la tarjeta (`extractoDeLaTarjeta`) cuenta la cuota del mes. La línea de ayuda lo dice.
@@ -52,8 +58,8 @@ const val TAG_FILA_DE_CUOTAS: String = "agregar:cuotas"
 /** El `testTag` de la línea de ayuda de las cuotas. */
 const val TAG_AYUDA_DE_LAS_CUOTAS: String = "agregar:cuotas:ayuda"
 
-/** El `testTag` de la pastilla de [cuotas] (o de «Otra» con `null`). */
-fun tagDeLaPastillaDeCuotas(cuotas: Int?): String = "agregar:cuotas:${cuotas ?: "otra"}"
+/** El `testTag` de la pastilla de [cuotas] (o de «Otra» con `null`), en la fila de prefijo [base]. */
+fun tagDeLaPastillaDeCuotas(cuotas: Int?, base: String = TAG_FILA_DE_CUOTAS): String = "$base:${cuotas ?: "otra"}"
 
 /** ¿La fila de cuotas va en la hoja? Solo en «Gasto» (no en modo pago) y con una tarjeta de crédito. */
 internal fun preguntaLasCuotas(tipoDeLaCuenta: AccountType?, esGasto: Boolean, enModoPago: Boolean): Boolean =
@@ -85,29 +91,39 @@ internal fun ayudaDeLasCuotas(): String = "Cuenta completa hoy en tus gastos."
  * La fila «¿A cuántas cuotas?» de Agregar, dentro de la tarjeta de la hoja (después de «Cuenta»). Las
  * pastillas van en un renglón que se desliza, y con «Otra» elegida se corre con «−» y «+» en el mismo
  * renglón: elegir no cambia el alto de la hoja. La ayuda reserva dos renglones por lo mismo.
+ *
+ * Vuelta 133: [cuotas] en `null` es «nadie eligió» (ninguna pastilla marcada): así la usan el aviso y el
+ * detalle, donde no elegir se guarda como «cuotas desconocidas». [base] es el prefijo de los tags y
+ * [margen] el margen de los lados (`null` dentro de una tarjeta que ya tiene el suyo).
  */
 @Composable
-internal fun FilaDeCuotas(
-    cuotas: Int,
+fun FilaDeCuotas(
+    cuotas: Int?,
     onCuotas: (Int) -> Unit,
     monto: Long,
     moneda: String,
     habilitada: Boolean = true,
+    base: String = TAG_FILA_DE_CUOTAS,
+    margen: Dp? = Medida.margenDePantalla,
+    conPregunta: Boolean = true,
 ) {
-    val esOtra = cuotas !in CUOTAS_FRECUENTES
-    Column(modifier = Modifier.fillMaxWidth().testTag(TAG_FILA_DE_CUOTAS)) {
-        Text(
-            PREGUNTA_DE_LAS_CUOTAS,
-            style = Movi.textos.cuerpo,
-            color = Movi.colores.texto,
-            modifier = Modifier.padding(horizontal = Medida.margenDePantalla, vertical = Espacio.xs),
-        )
+    val lados = if (margen != null) Modifier.padding(horizontal = margen) else Modifier
+    val esOtra = cuotas != null && cuotas !in CUOTAS_FRECUENTES
+    Column(modifier = Modifier.fillMaxWidth().testTag(base)) {
+        if (conPregunta) {
+            Text(
+                PREGUNTA_DE_LAS_CUOTAS,
+                style = Movi.textos.cuerpo,
+                color = Movi.colores.texto,
+                modifier = lados.padding(vertical = Espacio.xs),
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = Medida.altoDeFilaDePastillas)
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = Medida.margenDePantalla),
+                .then(lados),
             horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -117,7 +133,7 @@ internal fun FilaDeCuotas(
                     seleccionada = cuotas == n,
                     onClick = { if (habilitada) onCuotas(n) },
                     alto = AltoDeFiltro.Compacto,
-                    modifier = Modifier.testTag(tagDeLaPastillaDeCuotas(n)),
+                    modifier = Modifier.testTag(tagDeLaPastillaDeCuotas(n, base)),
                 )
             }
             PildoraDeFiltro(
@@ -125,26 +141,26 @@ internal fun FilaDeCuotas(
                 seleccionada = esOtra,
                 onClick = { if (habilitada && !esOtra) onCuotas(CUOTAS_AL_ELEGIR_OTRA) },
                 alto = AltoDeFiltro.Compacto,
-                modifier = Modifier.testTag(tagDeLaPastillaDeCuotas(null)),
+                modifier = Modifier.testTag(tagDeLaPastillaDeCuotas(null, base)),
             )
             if (esOtra) {
                 PildoraDeAccion(
                     texto = "−",
                     descripcion = "Una cuota menos",
-                    onClick = { onCuotas((cuotas - 1).coerceAtLeast(CUOTAS_AL_ELEGIR_OTRA)) },
-                    habilitada = habilitada && cuotas > CUOTAS_AL_ELEGIR_OTRA,
+                    onClick = { onCuotas(((cuotas ?: CUOTAS_AL_ELEGIR_OTRA) - 1).coerceAtLeast(CUOTAS_AL_ELEGIR_OTRA)) },
+                    habilitada = habilitada && (cuotas ?: 0) > CUOTAS_AL_ELEGIR_OTRA,
                     alto = AltoDePildora.Compacta,
                 )
                 PildoraDeAccion(
                     texto = "+",
                     descripcion = "Una cuota más",
-                    onClick = { onCuotas((cuotas + 1).coerceAtMost(MAXIMO_DE_CUOTAS)) },
-                    habilitada = habilitada && cuotas < MAXIMO_DE_CUOTAS,
+                    onClick = { onCuotas(((cuotas ?: CUOTAS_AL_ELEGIR_OTRA) + 1).coerceAtMost(MAXIMO_DE_CUOTAS)) },
+                    habilitada = habilitada && (cuotas ?: MAXIMO_DE_CUOTAS) < MAXIMO_DE_CUOTAS,
                     alto = AltoDePildora.Compacta,
                 )
             }
         }
-        val delMes = lineaDeLaCuotaDelMes(monto, cuotas, moneda)
+        val delMes = lineaDeLaCuotaDelMes(monto, cuotas ?: 1, moneda)
         Text(
             text = listOfNotNull(delMes, ayudaDeLasCuotas()).joinToString("\n"),
             style = Movi.textos.apoyo,
@@ -155,8 +171,9 @@ internal fun FilaDeCuotas(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
-                .padding(start = Medida.margenDePantalla, end = Medida.margenDePantalla, top = Espacio.xxs, bottom = Espacio.xs)
-                .testTag(TAG_AYUDA_DE_LAS_CUOTAS),
+                .then(lados)
+                .padding(top = Espacio.xxs, bottom = Espacio.xs)
+                .testTag(if (base == TAG_FILA_DE_CUOTAS) TAG_AYUDA_DE_LAS_CUOTAS else "$base:ayuda"),
         )
     }
 }

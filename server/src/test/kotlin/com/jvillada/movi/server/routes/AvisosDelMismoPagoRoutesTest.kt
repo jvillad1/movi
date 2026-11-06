@@ -317,6 +317,42 @@ class AvisosDelMismoPagoRoutesTest {
     }
 
     @Test
+    fun `vuelta 133 · confirmar el pago con una tarjeta guarda sus cuotas, y en otra cuenta las ignora`() = testApplication {
+        application { testModule() }
+        transaction {
+            Accounts.insert {
+                it[Accounts.id] = "tarjeta-$a"
+                it[userId] = a
+                it[name] = "Master 3684"
+                it[type] = "CREDIT_CARD"
+                it[balance] = 0L
+                it[currency] = "COP"
+            }
+        }
+        subir(a, deWallet, delSms, deLaApp)
+        val g = grupo(a, bandeja(a).first().grupoId!!)
+        val ids = g.miembros.map { it.id }
+        // Fuera de rango: 400, y no se anota nada.
+        val malo = confirmar(a, g.grupoId, ConfirmarElMismoPago(ids, evento = movimiento(a).copy(accountId = "tarjeta-$a", cuotas = 0)))
+        assertEquals(HttpStatusCode.BadRequest, malo.status)
+        assertEquals(0, movimientosDe(a))
+
+        val hecho = confirmar(a, g.grupoId, ConfirmarElMismoPago(ids, evento = movimiento(a).copy(accountId = "tarjeta-$a", cuotas = 24)))
+        assertEquals(HttpStatusCode.OK, hecho.status, hecho.bodyAsText())
+        assertEquals(24, transaction { Events.selectAll().where { Events.id eq "ev_panaderia" }.first()[Events.cuotas] })
+    }
+
+    @Test
+    fun `vuelta 133 · unas cuotas en un gasto de ahorros no se guardan`() = testApplication {
+        application { testModule() }
+        subir(a, deWallet, delSms, deLaApp)
+        val g = grupo(a, bandeja(a).first().grupoId!!)
+        val hecho = confirmar(a, g.grupoId, ConfirmarElMismoPago(g.miembros.map { it.id }, evento = movimiento(a).copy(cuotas = 12)))
+        assertEquals(HttpStatusCode.OK, hecho.status)
+        assertNull(transaction { Events.selectAll().where { Events.id eq "ev_panaderia" }.first()[Events.cuotas] })
+    }
+
+    @Test
     fun `el doble toque no crea dos movimientos`() = testApplication {
         application { testModule() }
         subir(a, deWallet, delSms, deLaApp)

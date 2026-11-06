@@ -10,6 +10,12 @@ import com.jvillada.movi.shared.model.CreditTerms
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.cuotasDesdeVigente
+import com.jvillada.movi.shared.model.CuotaPagada
+import com.jvillada.movi.shared.model.LaCuotaQueCambia
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.cuotaCambia
+import com.jvillada.movi.shared.model.cuotaDeEsteMes
+import com.jvillada.movi.server.time.AppClock
 import org.jetbrains.exposed.sql.JoinType
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
@@ -18,7 +24,15 @@ import org.jetbrains.exposed.sql.selectAll
  * Regla recurrente sintética para la cuota de un crédito. NO existe en recurring_rules:
  * se construye al vuelo desde credit_terms para entrar al mismo motor de DueDates.
  */
-fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
+fun virtualRuleFor(
+    terms: CreditTerms,
+    accountName: String,
+    /**
+     * Vuelta 133 · la última cuota pagada de verdad ([ultimaCuotaPagadaDe]), para un crédito de cuota que
+     * cambia: su monto es [cuotaDeEsteMes]. Sin ella (o en uno fijo), `installment`, como siempre.
+     */
+    ultimaCuotaPagada: CuotaPagada? = null,
+): RecurringRule =
     RecurringRule(
         id         = "$CREDIT_RULE_PREFIX${terms.accountId}",
         name       = "Cuota $accountName",
@@ -43,7 +57,9 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
         // `candidatosPuntuados`; no cambia, por sí solo, qué hace pagada hoy a una cuota o a una
         // tarjeta.
         category   = CUOTA_CATEGORY,
-        amount     = terms.installment,
+        // Vuelta 133: la cuota de este mes (fija: `installment`; la que cambia: la última pagada).
+        amount     = cuotaDeEsteMes(terms, ultimaCuotaPagada),
+        cuotaQueCambia = if (terms.cuotaCambia()) LaCuotaQueCambia(ultimaCuotaPagada) else null,
         // **Un crédito a un mes no es un compromiso mensual: es un pago y se acabó.** El dueño
         // tiene uno («Crédito Techo Gardenera», $10.000.000 a un plazo de 1 mes, que es su saldo
         // entero). El plazo vive en credit_terms y no viaja en la regla, así que sin este campo
@@ -87,10 +103,16 @@ fun virtualRuleFor(terms: CreditTerms, accountName: String): RecurringRule =
 
 /** Pares (regla virtual, lastRemindedPeriod) de todos los créditos del usuario. */
 suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String?>> = dbQuery {
-    Credits.join(Accounts, JoinType.INNER, Credits.accountId, Accounts.id)
+    val filas = Credits.join(Accounts, JoinType.INNER, Credits.accountId, Accounts.id)
         .selectAll()
         .where { Credits.userId eq userId }
         .map { row -> row.toCreditTerms() to row }
+    // Vuelta 133: solo si algún crédito tiene la cuota que cambia se leen los pagos (la misma franja que
+    // todo lo demás de Pagos), para estimar su cuota con la última pagada de verdad.
+    val pagos = if (filas.none { (terms, _) -> terms.cuotaCambia() }) emptyList()
+    else pagosDeDeudaAlrededorDe(userId, AppClock.today())
+    val settings = if (pagos.isEmpty()) PeriodSettings() else com.jvillada.movi.server.time.ajustesDelPeriodoSinSuspender(userId)
+    filas
         // Una LIBRANZA no entra al barrido de avisos: su cuota ya se pagó sola, retenida del
         // sueldo antes de que la plata llegara a la cuenta. Recordarle al dueño que «pague» algo
         // que el empleador ya descontó es pedirle una acción que no existe — y si la registrara
@@ -100,7 +122,9 @@ suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String
         // crédito, con `POST /api/credits/{id}/payroll-deduction`.
         .filter { (terms, _) -> entraAlBarridoDeAvisos(terms) }
         .map { (terms, row) ->
-            virtualRuleFor(terms, row[Accounts.name]) to row[Credits.lastRemindedPeriod]
+            val ultima = if (!terms.cuotaCambia()) null
+            else ultimaCuotaPagadaDe(virtualRuleFor(terms, row[Accounts.name]), pagos, settings = settings)
+            virtualRuleFor(terms, row[Accounts.name], ultima) to row[Credits.lastRemindedPeriod]
         }
 }
 

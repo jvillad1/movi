@@ -178,6 +178,8 @@ fun avisosPorConfirmar(
     fallaron: Set<String> = emptySet(),
     /** Vuelta 46: cabeza del pago → la categoría que el dueño eligió en su tarjeta de Por revisar. */
     categoriasElegidas: Map<String, String> = emptyMap(),
+    /** Vuelta 133: cabeza del pago → las cuotas que el dueño eligió en su tarjeta de Por revisar. */
+    cuotasElegidas: Map<String, Int> = emptyMap(),
 ): AvisosPorConfirmar {
     // Vuelta 51: los de los últimos 30 días. Los antiguos esperan aparte («Más antiguos»), con su «Ignorar».
     val pagos = pagosRecientesPorRevisar(mensajes, ahora)
@@ -190,7 +192,7 @@ fun avisosPorConfirmar(
     val nombres = leidos.mapNotNull { leido -> leido?.merchant?.takeIf { it.isNotBlank() }?.let(::nombreParaMostrar) }.distinct()
     val confirmables = if (propuestas == null) emptyList() else pagos
         .filter { it.id !in fallaron }
-        .mapNotNull { loQueMoviEntendio(it, mensajes, propuestas, cuentas, ahora, categoriasElegidas[it.id]).anotacion }
+        .mapNotNull { loQueMoviEntendio(it, mensajes, propuestas, cuentas, ahora, categoriasElegidas[it.id], cuotasElegidas[it.id]).anotacion }
         // Vuelta 85: un ingreso no va en el lote (ver `entraEnElLote`); su fila lo confirma igual.
         .filter { entraEnElLote(it.leido) }
     return AvisosPorConfirmar(

@@ -168,6 +168,8 @@ data class PagoDelPeriodo(
     val pagadoEnElPeriodo: Long? = null,
     /** Vuelta 72 · la cuenta del movimiento que tilda esta fila (`OccurrenceState.cuentaDelPago`), o `null`. */
     val cuentaDelPago: String? = null,
+    /** Vuelta 133 · la cuota de un crédito que cambia ([RecurringRule.cuotaQueCambia]): «unos $X». `null` en lo demás. */
+    val cuotaQueCambia: LaCuotaQueCambia? = null,
     /**
      * Vuelta 72 (revisión) · **lo que le falta al mínimo del extracto**, en pesos, solo en la fila de la
      * tarjeta que vence en la fecha de pago de ese extracto ([RecurringRule.minimoDelExtracto]); `null` en
@@ -482,6 +484,7 @@ private fun filaDelPago(
         ?.takeIf { (it.monedaDelPago ?: pago.rule.currency) == pago.rule.currency }
         ?.pagadoEnElPeriodo,
     cuentaDelPago = ocurrencia?.takeIf { it.occurred }?.cuentaDelPago,
+    cuotaQueCambia = pago.rule.cuotaQueCambia,
 )
 
 /** El mínimo del extracto de [regla] si [vence] es su fecha de pago (y la regla es una tarjeta en pesos). */

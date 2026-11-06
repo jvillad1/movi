@@ -1,5 +1,7 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.cuotaCambia
+import com.jvillada.movi.server.reminders.ultimaCuotaPagadaDe
 import com.jvillada.movi.server.balance.computeBalances
 import com.jvillada.movi.server.balance.loadNonVoidedEventsIn
 import com.jvillada.movi.server.balance.toAccount
@@ -470,8 +472,13 @@ private suspend fun cuotasPorConfirmar(uid: String, hoy: LocalDate, ahora: Long)
     }
     if (creditos.isEmpty()) return emptyList()
     val settings = ajustesDePeriodoDe(uid)
-    val reglas = creditos.map { (terms, nombre) -> virtualRuleFor(terms, nombre) to terms }
-    val saldados = periodosSaldados(reglas.map { it.first }, cargarPagosDeDeuda(uid, hoy), settings = settings)
+    val pagos = cargarPagosDeDeuda(uid, hoy)
+    // Vuelta 133: la cuota que se propone es la de este mes (la que cambia: la última pagada de verdad).
+    val reglas = creditos.map { (terms, nombre) ->
+        val ultima = if (terms.cuotaCambia()) ultimaCuotaPagadaDe(virtualRuleFor(terms, nombre), pagos, settings = settings) else null
+        virtualRuleFor(terms, nombre, ultima) to terms
+    }
+    val saldados = periodosSaldados(reglas.map { it.first }, pagos, settings = settings)
     return dbQuery {
         val descartados = descartadosDe(uid)
         val cuentas = Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() }.associateBy { it.id }

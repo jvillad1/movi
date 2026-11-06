@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.credits
 
+import com.jvillada.movi.shared.model.conLaCuotaQueCambiaLimpia
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.Casilla
@@ -185,6 +186,11 @@ fun CreditTermsSheet(
     // como abono a capital (~$25.500/mes de deriva). Aparte del seguro a propósito: llamarlos
     // «seguro» sería mentir contra el papel del banco. Ver `CreditTerms.otrosCargosMensuales`.
     var otrosCargos by remember { mutableStateOf(existingTerms?.otrosCargosMensuales) }
+    // Vuelta 133 · «¿Tu cuota es siempre la misma?» (ver `LaCuotaQueCambiaEnLaHoja.kt`): Sí por defecto.
+    var tipoDeCuota by remember { mutableStateOf(existingTerms?.tipoDeCuota ?: com.jvillada.movi.shared.model.TipoDeCuota.FIJA) }
+    // Con coma, como se escribe en Colombia (el campo acepta las dos y guarda con punto).
+    var puntosSobreElIbr by remember { mutableStateOf(existingTerms?.puntosSobreElIndice?.toString()?.removeSuffix(".0")?.replace('.', ',') ?: "") }
+    var alCambiarLaTasa by remember { mutableStateOf(existingTerms?.alCambiarLaTasa) }
     var dayOfMonth by remember { mutableStateOf(existingTerms?.dayOfMonth?.toString() ?: "") }
     // F23: aceptaba cualquier cosa como fecha — el filtro de abajo (solo dígitos y guiones) más
     // isValidCreditDate son la validación real hasta que exista un selector de calendario
@@ -243,7 +249,10 @@ fun CreditTermsSheet(
         (termMonths.toIntOrNull() ?: 0) > 0 &&
         (installment ?: 0L) > 0L &&
         (dayOfMonth.toIntOrNull() in 1..31) &&
-        isValidCreditDate(startDate)
+        isValidCreditDate(startDate) &&
+        // Vuelta 133: unos puntos escritos tienen que tener sentido (la misma regla que el server).
+        (tipoDeCuota != com.jvillada.movi.shared.model.TipoDeCuota.TASA_VARIABLE || puntosSobreElIbr.isBlank() ||
+            puntosSobreElIbr.replace(',', '.').toDoubleOrNull()?.let { it in 0.0..com.jvillada.movi.shared.model.MAXIMO_DE_PUNTOS_SOBRE_EL_INDICE } == true)
     // Las cuentas a las que puede entrar la plata de un desembolso. Se filtran del selector y no
     // solo de la validación, mismo criterio que [transferableAccounts]: ofrecer una cuenta para
     // después decir que no se puede es peor que no ofrecerla.
@@ -393,7 +402,14 @@ fun CreditTermsSheet(
                     debitoAutomaticoDesde = if (debitoVisible && seDebitaSolo) cuentaDelDebito else null,
                     // `null` = no lo toques; `""` = lo quitó; un id = ese tercero.
                     destinoConocidoId = com.jvillada.movi.ui.recurrentes.destinoParaElWire(destinoDeLaCuota, quitoElDestinoDeLaCuota),
-                )
+                    // Vuelta 133: la cuota que cambia. Viaja siempre (volver a «Sí» la apaga); los datos
+                    // de la tasa variable, solo con ella (`conLaCuotaQueCambiaLimpia`, lo mismo que el server).
+                    tipoDeCuota = tipoDeCuota,
+                    // La hoja pregunta por el IBR; un «Otro» que ya estaba guardado no se reescribe.
+                    indiceDeLaTasa = existingTerms?.indiceDeLaTasa ?: com.jvillada.movi.shared.model.IndiceDeLaTasa.IBR,
+                    puntosSobreElIndice = puntosSobreElIbr.replace(',', '.').toDoubleOrNull(),
+                    alCambiarLaTasa = alCambiarLaTasa,
+                ).conLaCuotaQueCambiaLimpia()
                 if (editing == null && newAccountMode) {
                     // Alta atómica server-side: cuenta + deuda inicial + términos —**y el
                     // desembolso, si lo hay**— en una sola operación. Ola 16: eso último es el
@@ -655,6 +671,23 @@ fun CreditTermsSheet(
                 ayuda = "En el extracto suele decir «otros conceptos».",
                 masAyuda = "Algunos créditos cobran algo más dentro de la cuota que no es interés, " +
                     "ni seguro, ni abono. Escríbelo aquí para que Movi no lo cuente como abono a tu deuda.",
+            )
+            // Vuelta 133: después de lo que va adentro de la cuota, cómo se mueve la cuota.
+            PreguntaDeLaCuotaQueCambia(
+                tipo = tipoDeCuota,
+                onTipo = { tipoDeCuota = it },
+                alCambiar = alCambiarLaTasa,
+                onAlCambiar = { alCambiarLaTasa = it },
+                habilitada = !saving,
+                campoDeLosPuntos = {
+                    Box(Modifier.testTag(TAG_PUNTOS_SOBRE_EL_IBR)) {
+                        Campo(
+                            puntosSobreElIbr, { puntosSobreElIbr = filterRateInput(it) },
+                            rotulo = PUNTOS_SOBRE_EL_IBR, ejemplo = "8,5",
+                            teclado = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        )
+                    }
+                },
             )
             // F23/F24: solo dígitos y guiones — sin selector de calendario todavía
             // (pendiente, ver KDoc de isValidCreditDate más abajo).

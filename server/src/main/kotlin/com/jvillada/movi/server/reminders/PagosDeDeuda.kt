@@ -353,6 +353,37 @@ fun pagadoALaTarjetaEnElPeriodo(
     return if (delPeriodo.isEmpty()) null else delPeriodo.sumOf { it.amount }
 }
 
+/**
+ * Vuelta 133 · **la última cuota que se pagó de verdad** de la regla sintética de un crédito: la cuota
+ * más reciente que [pagosDeDeudaPorPeriodo] da por saldada y, de ella, la plata que salió de la cuenta
+ * ([plataQueSalio]: la cuota entera, seguros incluidos). Para [com.jvillada.movi.shared.model.cuotaDeEsteMes]
+ * de un crédito de cuota que cambia. `null` si no hay, o si [regla] no es de un crédito.
+ *
+ * Mira la misma franja que el resto de los pagos de deuda ([pagosDeDeudaAlrededorDe]): quien la llama
+ * pasa los mismos [pagos], así Pagos, la caja y la ficha estiman con la misma cuota.
+ */
+fun ultimaCuotaPagadaDe(
+    regla: RecurringRule,
+    pagos: List<FinancialEvent>,
+    graceDays: Int = DEFAULT_GRACE_DAYS,
+    zone: ZoneId = AppClock.zone,
+    settings: PeriodSettings = PeriodSettings(),
+): com.jvillada.movi.shared.model.CuotaPagada? {
+    if (!regla.id.startsWith(com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX)) return null
+    val cuenta = cuentaDeLaDeudaDe(regla.id) ?: return null
+    val categoria = categoriaQueSalda(regla.id) ?: return null
+    // Revisión de la vuelta 133: **la cuota entera del último período, no su último movimiento**. Una cuota
+    // pagada en dos partes ($600.000 + $662.300) se estimaba en $662.300 y el mes siguiente se restaba
+    // $600.000 de menos. Se suman todos los pagos que saldan ese período, como `pagadoALaTarjetaEnElPeriodo`.
+    val deLaDeuda = pagos.filter { it.accountId == cuenta && it.category == categoria && it.type == TransactionType.INCOME }
+    val porPeriodo = deLaDeuda.groupBy { periodoQueSalda(regla, epochMillisToAppDate(it.timestamp, zone), graceDays, settings, zone) }
+    val (periodo, delPeriodo) = porPeriodo.maxByOrNull { it.key } ?: return null
+    val salieron = delPeriodo.map { plataQueSalio(it, pagos) }
+    val moneda = salieron.first().currency
+    val monto = salieron.filter { it.currency == moneda }.sumOf { it.amount }
+    return com.jvillada.movi.shared.model.CuotaPagada(monto = monto, periodo = periodo)
+}
+
 /** Lo mismo que [pagosDeDeudaPorPeriodo] pero en la forma que espera `dueDateFor`: solo periodos. */
 fun periodosSaldados(
     rules: List<RecurringRule>,

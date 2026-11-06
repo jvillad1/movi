@@ -22,7 +22,7 @@ class LaCompraConTarjetaTest {
         assertTrue(cuotasValidas(MAXIMO_DE_CUOTAS))
         assertFalse(cuotasValidas(0))
         assertFalse(cuotasValidas(MAXIMO_DE_CUOTAS + 1))
-        assertEquals(listOf(1, 3, 6, 12, 24, 36), CUOTAS_FRECUENTES)
+        assertEquals(listOf(1, 3, 6, 12, 24, 36, 48, 60), CUOTAS_FRECUENTES, "vuelta 133: 48 y 60 de una")
     }
 
     private fun gasto(monto: Long) = ParteDelReparto(

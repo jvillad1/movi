@@ -56,6 +56,7 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDate
@@ -313,6 +314,43 @@ class ExtractoDeCreditoRoutesTest {
         val octubre = assertNotNull(pagarLaCuota(dia(2026, 10, 15), "tr-oct").desglose)
         assertEquals(MotivoDelDesglose.AMORTIZA, octubre.motivo)
         assertEquals(estimadoSobre(40_710_555L - 452_697L), octubre.interes)
+    }
+
+    // ── Vuelta 133 · la tasa de un extracto en un crédito de cuota fija o que cambia ────────────────
+
+    @Test
+    fun `vuelta 133 · en un credito de cuota fija una tasa distinta se pregunta y no se cambia`() = testApplication {
+        application { testModule() }
+        LectorDePapeles.actual = LectorFalso(
+            ResumenDelExtractoDeCredito(numero = "290109695", tasaEa = 12.4, fechaDePago = "2026-09-15", fechaDeCorte = "2026-08-20"),
+        )
+        val p = assertNotNull(json.decodeFromString(StatementParseResult.serializer(), subir(conCreditos = true).bodyAsText()).extractoDeCredito)
+        assertTrue(!p.cuotaCambia)
+        assertTrue(com.jvillada.movi.shared.model.tasaDistintaEnUnCreditoFijo(p))
+        assertTrue(
+            com.jvillada.movi.shared.model.renglonesDelExtractoDeCredito(p).any { it.startsWith("La tasa de este extracto es 12,4 % E.A.; ¿tu crédito es de tasa variable?") },
+            com.jvillada.movi.shared.model.renglonesDelExtractoDeCredito(p).toString(),
+        )
+        assertTrue(!com.jvillada.movi.shared.model.hayAlgoQueActualizar(p.copy(resumen = p.resumen.copy(fechaDePago = null))), "solo la tasa no es algo que actualizar")
+        // Y si igual se manda, la tasa del crédito fijo no se mueve.
+        val terms = assertNotNull(json.decodeFromString(CreditSummary.serializer(), aceptar(p.resumen).bodyAsText()).terms)
+        assertEquals(11.27, terms.rateEa)
+    }
+
+    @Test
+    fun `vuelta 133 · en un credito de tasa variable actualizar pone la tasa del extracto`() = testApplication {
+        application { testModule() }
+        transaction {
+            Credits.update({ Credits.accountId eq credito }) { it[tipoDeCuota] = "TASA_VARIABLE" }
+        }
+        LectorDePapeles.actual = LectorFalso(
+            ResumenDelExtractoDeCredito(numero = "290109695", tasaEa = 12.4, fechaDePago = "2026-09-15", fechaDeCorte = "2026-08-20"),
+        )
+        val p = assertNotNull(json.decodeFromString(StatementParseResult.serializer(), subir(conCreditos = true).bodyAsText()).extractoDeCredito)
+        assertTrue(p.cuotaCambia)
+        assertTrue(!com.jvillada.movi.shared.model.tasaDistintaEnUnCreditoFijo(p))
+        val terms = assertNotNull(json.decodeFromString(CreditSummary.serializer(), aceptar(p.resumen).bodyAsText()).terms)
+        assertEquals(12.4, terms.rateEa, "la tasa vigente es la del extracto")
     }
 
     @Test

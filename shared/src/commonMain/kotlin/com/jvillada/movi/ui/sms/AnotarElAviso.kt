@@ -49,6 +49,12 @@ internal fun movimientoDelAviso(
     textoDelAviso: String,
     esComprobante: Boolean,
     id: String = newId("ev"),
+    /**
+     * Vuelta 133 · a cuántas cuotas fue la compra con tarjeta, si el dueño lo dijo («¿A cuántas cuotas?»
+     * en la tarjeta de Por revisar o en Revisar aviso). `null` = no se sabe, como siempre. Viaja en el
+     * movimiento: `POST /api/events` (o la confirmación del pago entero) lo valida y lo guarda.
+     */
+    cuotas: Int? = null,
 ): FinancialEvent = movimientoConfirmadoDelSms(
     // Mismo motivo que en QuickAddScreen — ver newId().
     id = id,
@@ -58,7 +64,7 @@ internal fun movimientoDelAviso(
     momento = momento,
     textoDelSms = textoDelAviso,
     origen = if (esComprobante) EventSource.OCR else EventSource.SMS,
-)
+).copy(cuotas = cuotas)
 
 /**
  * **Anota [evento] y confirma el aviso con él** —el camino de un movimiento suelto, el de siempre de

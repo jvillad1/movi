@@ -794,6 +794,16 @@ interface WalletRepository {
     suspend fun updateEventRepeats(id: String, repeats: Boolean): FinancialEvent
 
     /**
+     * Vuelta 133 · **a cuántas cuotas fue una compra con tarjeta ya anotada** (`PUT /api/events/{id}/cuotas`).
+     * Solo las cuotas: ni monto, ni fecha, ni categoría. Lanza [ApiException] con 400 (fuera de 1..72),
+     * 404 (no existe, es de otro o está anulado) y 422 (no es un gasto de una tarjeta de crédito).
+     *
+     * En el teléfono, un movimiento que todavía no subió las guarda donde esperan sus cuotas de Agregar
+     * (`CuotasPorSubir`); uno ya subido va al server (pide red), porque la base local no tiene la columna.
+     */
+    suspend fun updateEventCuotas(id: String, cuotas: Int): FinancialEvent = noLoTiene("updateEventCuotas")
+
+    /**
      * **Confirmar un movimiento que entró solo** (`PUT /api/events/{id}/confirm`): pasa de
      * «Por confirmar» a confirmado.
      *

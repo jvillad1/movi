@@ -24,6 +24,7 @@ import com.jvillada.movi.shared.model.OccurrenceState
 import com.jvillada.movi.shared.model.RecurringRule
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.UpcomingPayment
+import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
@@ -314,6 +315,58 @@ class ReminderRoutesTest {
         val body = res.bodyAsText()
         assertTrue(body.contains("credit_acc-loan-up"), "expected virtual credit rule in: $body")
         assertTrue(body.contains("Cuota Crédito Vehículo"))
+    }
+
+    /**
+     * Revisión de la vuelta 133 · de punta a punta: un crédito de tasa variable con su cuota de hace 15 días
+     * pagada en dos partes entra a `/api/payments/upcoming` con la cuota estimada (las dos partes sumadas) y la
+     * marca `cuotaQueCambia`; el mismo crédito fijo sigue con su cuota pactada.
+     */
+    @Test
+    fun `vuelta 133 · upcoming trae la cuota de este mes de un credito de tasa variable`() = testApplication {
+        application { testModule() }
+        val loan = "acc-loan-variable"
+        val pago = appDateToEpochMillis(hoy.minusDays(15))
+        transaction {
+            Accounts.insert {
+                it[id] = loan; it[userId] = userAId
+                it[name] = "Libre inversión 9695"; it[type] = "LOAN"
+                it[balance] = 0; it[currency] = "COP"
+            }
+            Credits.insert {
+                it[accountId] = loan; it[userId] = userAId
+                it[bank] = "Bancolombia"; it[principal] = 50_000_000
+                it[rateEa] = 18.0; it[termMonths] = 72
+                it[installment] = 1_200_000; it[dayOfMonth] = hoy.minusDays(15).dayOfMonth.coerceAtMost(28)
+                it[startDate] = "2024-01-10"; it[tipoDeCuota] = "TASA_VARIABLE"
+            }
+            listOf("a" to 600_000L, "b" to 662_300L).forEach { (parte, monto) ->
+                Events.insert {
+                    it[Events.id] = "ev-v133-sale-$parte"; it[Events.userId] = userAId; it[Events.accountId] = accountOwnedByA
+                    it[Events.type] = "EXPENSE"; it[Events.amount] = monto; it[Events.category] = CUOTA_CATEGORY
+                    it[Events.description] = "Cuota"; it[Events.timestamp] = pago; it[Events.transferId] = "tr-v133-$parte"
+                }
+                Events.insert {
+                    it[Events.id] = "ev-v133-baja-$parte"; it[Events.userId] = userAId; it[Events.accountId] = loan
+                    it[Events.type] = "INCOME"; it[Events.amount] = monto / 2; it[Events.category] = CUOTA_CATEGORY
+                    it[Events.description] = "Cuota"; it[Events.timestamp] = pago; it[Events.transferId] = "tr-v133-$parte"
+                }
+            }
+        }
+        val tokenA = mintToken(userAId, userAEmail)
+        val res = client.get("/api/payments/upcoming") { header(HttpHeaders.Authorization, "Bearer $tokenA") }
+        val pagos = Json { ignoreUnknownKeys = true }.decodeFromString<List<UpcomingPayment>>(res.bodyAsText())
+        val cuota = pagos.single { it.rule.id == "credit_$loan" }
+        assertEquals(1_262_300L, cuota.rule.amount, "la cuota estimada es la última pagada entera (las dos partes)")
+        assertEquals(1_262_300L, cuota.rule.cuotaQueCambia?.anterior?.monto)
+
+        // El mismo crédito, de cuota fija: la pactada, y sin la marca.
+        transaction { Credits.update({ Credits.accountId eq loan }) { it[tipoDeCuota] = null } }
+        val fija = Json { ignoreUnknownKeys = true }.decodeFromString<List<UpcomingPayment>>(
+            client.get("/api/payments/upcoming") { header(HttpHeaders.Authorization, "Bearer $tokenA") }.bodyAsText(),
+        ).single { it.rule.id == "credit_$loan" }
+        assertEquals(1_200_000L, fija.rule.amount)
+        assertEquals(null, fija.rule.cuotaQueCambia)
     }
 
     // ── remindMe: la casilla «Recordarme unos días antes» ─────────────────────

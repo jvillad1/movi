@@ -190,7 +190,11 @@ internal fun hechosDelCredito(c: CreditoParaContexto): String = buildString {
     } else {
         appendLine("- Tasa: ${porcentaje(c.tasaEa, 2)} EA (${porcentaje(tasaMensualDeUnaEA(c.tasaEa) * 100, 2)} mensual)")
     }
-    appendLine("- Cuota: ${pesos(c.cuota)} el día ${c.dia}; plazo pactado ${c.plazoMeses} meses")
+    // Revisión de la vuelta 133: una cuota que cambia es una estimación, y los hechos exactos lo dicen igual
+    // que el renglón del contexto (`renglonDelCredito`): el verificador de cifras toma esto como verdad.
+    val porQueCambia = c.tipoDeCuota?.let { com.jvillada.movi.shared.model.porQueCambiaLaCuota(it) }
+    if (porQueCambia != null) appendLine("- Cuota: NO es fija (${porQueCambia.replaceFirstChar { it.lowercase() }}); la de este mes es de unos ${pesos(c.cuota)} (${c.deDondeSaleLaCuota}), el día ${c.dia}; plazo pactado ${c.plazoMeses} meses")
+    else appendLine("- Cuota: ${pesos(c.cuota)} el día ${c.dia}; plazo pactado ${c.plazoMeses} meses")
     val seguro = c.seguroMensual?.takeIf { it > 0L } ?: 0L
     val otros = c.otrosCargosMensuales?.takeIf { it > 0L } ?: 0L
     // «Seguros» en plural y sin apellido: el campo suma todos (vida, incendio, terremoto). Ver
@@ -259,7 +263,7 @@ private fun hechosDeLaCuenta(cuenta: Account, datos: DatosParaLosHechos): String
     cuenta.condicionadaA?.let { appendLine("- NO es plata disponible: solo se puede usar para $it") }
     val cuotasQuePaga = datos.periodo.creditos.filter { it.loPagaCuentaPropia == cuenta.name }
     if (cuotasQuePaga.isNotEmpty()) {
-        appendLine("- De esta cuenta sale la cuota de: " + cuotasQuePaga.joinToString("; ") { "«${it.cuenta}» (${pesos(it.cuota)} al mes)" })
+        appendLine("- De esta cuenta sale la cuota de: " + cuotasQuePaga.joinToString("; ") { "«${it.cuenta}» (${if (it.tipoDeCuota != null) "unos " else ""}${pesos(it.cuota)} al mes)" })
     }
     val gastos = datos.periodo.gastos.filter { it.cuenta == cuenta.name }
     if (gastos.isNotEmpty()) {
