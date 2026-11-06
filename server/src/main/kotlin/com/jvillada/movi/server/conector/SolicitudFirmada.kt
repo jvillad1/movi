@@ -27,8 +27,8 @@ import javax.crypto.spec.SecretKeySpec
 internal object SolicitudFirmada {
     private const val PREFIJO = "mvc_s1."
 
-    /** Lo más largo que se acepta de un valor firmado (el `state` y el `client_id` caben de sobra). */
-    private const val LARGO_MAXIMO = 3_000
+    /** Lo más largo que se acepta de un valor firmado: el tope del formulario (un `state` de 500 lleno de escapes cabe). */
+    private const val LARGO_MAXIMO = 8 * 1024
 
     @Serializable
     private data class Contenido(val c: String, val r: String, val p: String, val s: String? = null, val sc: String, val v: Long)
@@ -40,8 +40,12 @@ internal object SolicitudFirmada {
     internal var claveParaPruebas: ByteArray? = null
 
     private val claveDelEntorno: ByteArray by lazy {
-        System.getenv("CONECTOR_SECRETO_DE_SOLICITUDES")?.takeIf { it.length >= 32 }?.toByteArray(Charsets.UTF_8)
-            ?: JwtConfig.pimienta("conector:solicitud")
+        val crudo = System.getenv("CONECTOR_SECRETO_DE_SOLICITUDES")
+        if (crudo != null && crudo.length < 32) {
+            org.slf4j.LoggerFactory.getLogger("ConectorDeClaude")
+                .warn("CONECTOR_SECRETO_DE_SOLICITUDES tiene menos de 32 caracteres: se ignora y se deriva de JWT_SECRET")
+        }
+        crudo?.takeIf { it.length >= 32 }?.toByteArray(Charsets.UTF_8) ?: JwtConfig.pimienta("conector:solicitud")
     }
 
     private fun clave(): ByteArray = claveParaPruebas ?: claveDelEntorno

@@ -342,6 +342,8 @@ internal fun Transaction.conexionesActivas(uid: String, ahora: Long): List<Conex
                 (ConcesionesDelConector.versionDeSesion eq version)
         }
         .filter { it[ConcesionesDelConector.id] in conRefresco }
+        // M-f · la vida máxima de un año: una concesión vencida por edad ya no conecta y no se lista.
+        .filter { ahora - it[ConcesionesDelConector.creadaEn] <= LasConcesiones.VIDA_MAXIMA_MS }
         .map {
             ConexionDelConector(
                 id = it[ConcesionesDelConector.id],
@@ -357,7 +359,8 @@ internal fun Transaction.conexionesActivas(uid: String, ahora: Long): List<Conex
 /**
  * **El barrido diario del conector** (M6 de la revisión), en el mismo bucle que la retención de la observabilidad
  * (`startReminderScheduler`): códigos y tokens vencidos, llamadas de más de 90 días, y las concesiones que nadie
- * usó en 90 días, que pasaron su vida máxima o que se revocaron hace más de 90 días (con sus tokens y códigos).
+ * usó en 90 días o que se revocaron hace más de 90 días (con sus tokens y códigos). Una que pasó su vida máxima no
+ * se borra por eso: ya no sirve (`concesionVigente`) y se va 90 días después de su último uso.
  * Devuelve cuántas filas se fueron. Ya no hay solicitudes guardadas (van firmadas) ni clientes DCR que limpiar
  * (son a lo sumo siete, ver `idDelClienteDcr`).
  */

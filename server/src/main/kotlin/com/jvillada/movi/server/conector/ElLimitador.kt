@@ -5,7 +5,8 @@ package com.jvillada.movi.server.conector
  *
  * El `RateLimiter` de la app guarda cada clave una hora y sin tope de cantidad: está bien detrás de un balde por IP,
  * pero el conector recibe claves de afuera (un `client_id`, una IP de un `/64`). Este limitador es del conector y
- * **nunca guarda más de [maxLlaves] claves**: al pasarse, desaloja la que se usó hace más tiempo (LRU). Desalojar el
+ * **nunca guarda más de [maxLlaves] claves** (del orden de 25–30 MB en el peor caso): al pasarse, desaloja la que se
+ * usó hace más tiempo (LRU). Desalojar el
  * balde de alguien solo puede dejarle pasar unos pedidos de más, y delante siempre está el balde por IP.
  */
 internal class LimitadorAcotado(private val maxLlaves: Int) {
@@ -47,7 +48,10 @@ internal class LimitadorAcotado(private val maxLlaves: Int) {
     fun olvidar() = baldes.clear()
 }
 
-/** Diez mil claves: unos pocos MB como mucho, pase lo que pase. */
+/**
+ * Diez mil claves. El peor caso son 10.000 claves con hasta 1.200 marcas cada una (el tope más alto, el de las IP de
+ * Anthropic) —unas 120 por clave en la práctica—: del orden de 25–30 MB. Acotado, pase lo que pase.
+ */
 internal const val MAX_LLAVES_DEL_LIMITADOR = 10_000
 
 internal val limitadorDelConector = LimitadorAcotado(MAX_LLAVES_DEL_LIMITADOR)

@@ -75,7 +75,8 @@ preguntó ni lo que se contestó.
   `https://claude.ai/oauth/claude-code-client-metadata`— o uno de `CONECTOR_CIMD_PERMITIDOS`. Se baja por https,
   con un tope de 5 s para toda la lectura y 16 KB, en cuatro hilos propios (nunca los de la base), una lectura a la
   vez. Un documento bueno se vuelve a pedir a los 10 minutos y, si en ese momento claude.ai no contesta, se sigue
-  usando el último bueno; solo un documento que no sirve (o un 404) se recuerda como falla, 5 minutos. Los dos se
+  usando el último bueno; también si contesta un 404 o una página HTML (con un WARN). Solo sin un documento bueno se
+  recuerda la falla, 5 minutos. Los dos se
   comprobaron el 6-nov-2026 con el `HttpClient` de Java: contestan su JSON, sin desafío de Cloudflare (desde la
   Mac del dueño; falta verlo desde Railway).
 - **DCR idempotente**: el `client_id` sale de los retornos declarados, así que registrar lo mismo da el mismo
@@ -95,12 +96,16 @@ preguntó ni lo que se contestó.
 - **Vida de una conexión**: **un año** desde que se conectó, se use o no; después hay que volver a entrar desde
   Claude (la pantalla «Movi en Claude» lo dice). Sin uso, se acaba sola a los 30 días (vence el refresco). El barrido
   diario borra las conexiones con 90 días sin uso o revocadas hace 90 días, y las llamadas de más de 90 días.
-- **Límites**: 60 llamadas por minuto por conexión en `/mcp` (429 con `Retry-After: 60`). En `/oauth/token` y
-  `/oauth/revoke`, primero la forma del `client_id` (si no es un CIMD de Claude ni un id de DCR, `invalid_client`),
-  después 120 por minuto por IP (el `/64` en IPv6), y 1.000 por minuto por cliente y 20 por conexión **solo** para
-  pedidos con una credencial que existe y es de ese cliente. `/oauth/authorize` 60 por minuto por IP, el login 30 por
-  IP cada 5 minutos más el balde por correo de `/api/auth/login`, `/oauth/register` 30 por minuto por IP. Todos esos
-  baldes viven en un limitador propio de como mucho 10.000 claves.
+- **Límites**: 60 llamadas por minuto por conexión en `/mcp` (429 con `Retry-After: 60`), y 60 respuestas 401 por
+  minuto por IP (las IP de Anthropic, 1.200): pasado eso, `/mcp` contesta 429 a esa IP sin ir a la base. En
+  `/oauth/token` y `/oauth/revoke`, primero la forma del `client_id` (si no es un CIMD de Claude ni un id de DCR,
+  `invalid_client`), después 120 por minuto por IP (el `/64` en IPv6; 1.200 para el rango de salida de Anthropic,
+  `160.79.104.0/21`, más `CONECTOR_RANGOS_DE_ANTHROPIC`, con un WARN si alguna recibe un 429), y 20 por conexión
+  **solo** para pedidos con una credencial vigente de ese cliente (sin usar o sin rotar, sin revocar, sin vencer). No
+  hay balde por cliente: con CIMD el `client_id` es el mismo para todos los usuarios de Claude, y un balde así lo
+  llenaba cualquiera con su propia cuenta. `/oauth/authorize` 60 por minuto por IP, el login 30 por
+  IP cada 5 minutos más el balde por correo de `/api/auth/login`, `/oauth/register` 30 por minuto por IP (300 para las de Anthropic); el registro es idempotente y dos iguales a la vez dan el mismo cliente. Todos esos
+  baldes viven en un limitador propio de como mucho 10.000 claves (del orden de 25–30 MB en el peor caso).
 - **Sin chequeo de `Origin` en `/mcp`**, a propósito: la spec lo pide contra el DNS rebinding, que sirve para
   colarse en un servidor que confía en cookies o en la red local. `/mcp` exige un token en cada pedido y no lee
   ninguna cookie, así que una página que lograra mandarle un pedido no tiene con qué autenticarse. Tampoco se
@@ -155,3 +160,9 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST $B/oauth/revoke -d token=$ACCES
 ```
 
 Al terminar, para el server por su puerto: `lsof -ti :8080 | xargs kill`.
+
+## Fuera de esta vuelta
+
+- El `RateLimiter` de la app (el del login por correo, `login:email:`, que el conector comparte con `/api/auth/login`)
+  no tiene tope de claves. Un atacante con muchos `/64` de IPv6 podría crear millones por hora. Ya pasaba con
+  `/api/auth/login` antes del conector; queda para otra vuelta.

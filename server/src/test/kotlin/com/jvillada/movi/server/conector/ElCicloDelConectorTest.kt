@@ -216,6 +216,12 @@ class ElCicloDelConectorTest {
             }
         }
         assertEquals(HttpStatusCode.Unauthorized, with(c) { mcp(acceso, "ping") }.status)
+        // M-f · y «Movi en Claude» ya no la lista (antes seguía hasta que vencía su último refresco).
+        val lista = c.json.decodeFromString(
+            com.jvillada.movi.shared.model.ConectorDeClaude.serializer(),
+            client.get("/api/conector") { with(c.a) { como(c.a.duenoA) } }.bodyAsText(),
+        )
+        assertTrue(lista.conexiones.isEmpty(), "${lista.conexiones}")
         assertEquals(HttpStatusCode.BadRequest, with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to refresco, "client_id" to CIMD_DE_CLAUDE)) }.status)
     }
 
