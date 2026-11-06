@@ -21,6 +21,7 @@ import com.jvillada.movi.data.ClaveDeLectura
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.rememberLectura
 import com.jvillada.movi.shared.model.DetalleDelEspacio
+import com.jvillada.movi.shared.model.SegurosQuePagas
 import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
@@ -39,6 +40,9 @@ import com.jvillada.movi.ui.dashboard.heroBalance
 import com.jvillada.movi.ui.espacios.TITULO_DE_PERSONAS
 import com.jvillada.movi.ui.destinos.FilaDePersonasYComercios
 import com.jvillada.movi.ui.espacios.fraseDelSaldo
+import com.jvillada.movi.ui.seguros.ICONO_DE_TUS_SEGUROS
+import com.jvillada.movi.ui.seguros.TITULO_TUS_SEGUROS
+import com.jvillada.movi.ui.seguros.subtituloDeLaFilaDeSeguros
 import kotlinx.coroutines.CancellationException
 
 /** El título de la cuarta pestaña (vuelta 38). Ver [MasScreen]. */
@@ -60,6 +64,8 @@ const val SUBTITULO_DEL_CUADRE: String = "Contra lo que dice el banco"
 const val TAG_LO_TUYO: String = "tu:lo-tuyo"
 const val TAG_COLUMNA_DE_LO_TUYO: String = "tu:columna-de-lo-tuyo"
 const val TAG_COLUMNA_DE_LOS_AJUSTES: String = "tu:columna-de-los-ajustes"
+/** Vuelta 132: la fila «Tus seguros» de «Lo tuyo». */
+const val TAG_FILA_TUS_SEGUROS: String = "tu:tus-seguros"
 
 /**
  * **¿«Tú» va en dos columnas en un panel de [anchoDelPanel]?** (ya sin el rail): lo tuyo a la
@@ -105,6 +111,7 @@ fun resumenDePersonas(detalles: List<DetalleDelEspacio>?): ResumenDePersonas {
  *   abre Patrimonio, con sus cuentas, sus deudas, «Entre cuentas» y los bienes;
  * - **Personas** (antes Espacios) con el saldo pendiente si lo hay ([resumenDePersonas]);
  * - **Personas y comercios** (vuelta 73): las cuentas y llaves de otros, con sus nombres;
+ * - **Tus seguros** (vuelta 132): lo que ya pagas en seguros al mes, o «Mira cuáles pagas»;
  * - **Cuadre de saldos**: tus cuentas contra el banco, con su modo «Tarjetas».
  *
  * Las lecturas son las de siempre: las cuentas y los apartados por el caché de lecturas (lo último que
@@ -120,6 +127,18 @@ internal fun LoTuyo(onNavigate: (Screen) -> Unit) {
     LaunchedEffect(refresco) {
         espacios = try {
             Repositories.wallets.getEspacios().map { Repositories.wallets.getDetalleDelEspacio(it.id) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
+    }
+    // Vuelta 132: «Tus seguros», con lo que pagas al mes (sin la lectura, qué hay adentro). Se lee aparte y
+    // sin caché de lecturas: tras «No es un seguro» la cifra de Tú tiene que ser la nueva.
+    var seguros by remember { mutableStateOf<SegurosQuePagas?>(null) }
+    LaunchedEffect(refresco) {
+        seguros = try {
+            Repositories.wallets.getSeguros()
         } catch (e: CancellationException) {
             throw e
         } catch (_: Throwable) {
@@ -153,6 +172,15 @@ internal fun LoTuyo(onNavigate: (Screen) -> Unit) {
             Separador()
             // Vuelta 73: «Personas y comercios» vive acá, al lado de Grupos (antes, al final de un grupo).
             FilaDePersonasYComercios(destinos = destinos, onClick = { onNavigate(Screen.Destinos()) })
+            Separador()
+            Fila(
+                titulo = TITULO_TUS_SEGUROS,
+                subtitulo = subtituloDeLaFilaDeSeguros(seguros),
+                inicio = { IconoEnCirculo(ICONO_DE_TUS_SEGUROS, tono = TonoDeIcono.Neutro) },
+                final = { Chevron() },
+                onClick = { onNavigate(Screen.TusSeguros) },
+                modifier = Modifier.testTag(TAG_FILA_TUS_SEGUROS),
+            )
             Separador()
             Fila(
                 titulo = FILA_CUADRE_DE_SALDOS,

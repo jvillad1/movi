@@ -268,6 +268,12 @@ sealed class Screen {
     data object CuadreDeSaldos : Screen()
 
     /**
+     * Vuelta 132 · **«Tus seguros»**: lo que ya pagas en seguros (el de la cuota de cada crédito y los
+     * cargos de pólizas), sin vender nada. Se abre desde Tú → «Lo tuyo» y desde Buscar.
+     */
+    data object TusSeguros : Screen()
+
+    /**
      * **El cuadre de saldos con [cuentaId] preseleccionada** (vuelta de diseño 23): la misma pantalla
      * que [CuadreDeSaldos], con esa cuenta arriba. La abre «Cuadrar efectivo» en el detalle de un
      * efectivo en negativo.
@@ -411,7 +417,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     is Screen.Plan, Screen.Budgets, Screen.Periodos, is Screen.DetalleDePeriodo -> NavTab.PLAN
     // Vuelta 38: lo que eran las pestañas Patrimonio y Espacios, y lo que era Ajustes, vive en «Tú».
     Screen.Tu, Screen.Mas,
-    Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos, is Screen.CuadrarLaCuenta,
+    Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos, is Screen.CuadrarLaCuenta, Screen.TusSeguros,
     Screen.Espacios, is Screen.Espacio, is Screen.Destinos,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos, Screen.Documentos, Screen.Compartir,
     Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio, Screen.FallosYUso, Screen.TopeDeMoviAi -> NavTab.TU
