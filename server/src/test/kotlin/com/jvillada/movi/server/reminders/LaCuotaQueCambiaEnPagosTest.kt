@@ -73,4 +73,12 @@ class LaCuotaQueCambiaEnPagosTest {
         assertEquals(1_200_000L, sinPagos.amount)
         assertNull(assertNotNull(sinPagos.cuotaQueCambia).anterior)
     }
+
+    @Test
+    fun `una cuota pagada en dos partes cuenta entera`() {
+        val enPartes = pago(LocalDate.of(2026, 9, 5), 1_240_000, "sep") +
+            pago(LocalDate.of(2026, 10, 3), 600_000, "oct1") + pago(LocalDate.of(2026, 10, 5), 662_300, "oct2")
+        val ultima = ultimaCuotaPagadaDe(virtualRuleFor(terms.copy(tipoDeCuota = TipoDeCuota.UVR), libre.name), enPartes)
+        assertEquals(CuotaPagada(1_262_300, "2026-10"), ultima, "las dos partes de octubre, no solo la última")
+    }
 }
