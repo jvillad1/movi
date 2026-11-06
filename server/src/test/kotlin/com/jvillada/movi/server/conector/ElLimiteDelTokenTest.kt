@@ -161,5 +161,8 @@ class ElLimiteDelTokenTest {
             assertEquals(HttpStatusCode.Unauthorized, mcpDesde("160.79.104.20", "mvc_a_" + "f".repeat(42) + (i % 10)).status, "pedido $i")
         }
         assertEquals(HttpStatusCode.OK, mcpDesde("160.79.104.20", acceso).status)
+        // H2 · lo mismo desde el otro rango de salida: 61 falsos (más que el tope de una IP cualquiera) y el válido pasa.
+        repeat(61) { assertEquals(HttpStatusCode.Unauthorized, mcpDesde("153.61.208.9", "mvc_a_" + "g".repeat(43)).status) }
+        assertEquals(HttpStatusCode.OK, mcpDesde("153.61.208.9", acceso).status)
     }
 }

@@ -90,6 +90,12 @@ class LasReglasDelConectorTest {
         assertTrue(esIpDeAnthropic("160.79.111.255"))
         assertFalse(esIpDeAnthropic("160.79.112.0"))
         assertFalse(esIpDeAnthropic("160.79.103.255"))
+        // H2 · el segundo rango de salida publicado.
+        assertTrue(esIpDeAnthropic("153.61.208.0"))
+        assertTrue(esIpDeAnthropic("153.61.223.255"))
+        assertFalse(esIpDeAnthropic("153.61.224.0"), "153.61.224.0/22 es de entrada")
+        assertFalse(esIpDeAnthropic("153.61.207.255"))
+        assertEquals("153.61.208.0/20", rangoDeAnthropic("153.61.210.7"))
         assertFalse(esIpDeAnthropic("8.8.8.8"))
         assertFalse(esIpDeAnthropic("claude.ai"))
         assertFalse(esIpDeAnthropic("2001:db8::1"))

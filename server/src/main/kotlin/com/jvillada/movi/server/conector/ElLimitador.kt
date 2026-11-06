@@ -69,14 +69,17 @@ internal fun claveDeIp(ip: String): String {
 }
 
 /**
- * **Las IP de salida de Anthropic** (claude.com/docs/connectors/building/authentication, «Network reference»):
+ * **Las IP de salida de Anthropic**, las dos que publica platform.claude.com/docs/en/api/ip-addresses («Outbound IP
+ * addresses», las que usa al llamar a servidores MCP externos); la «Network reference» de
+ * claude.com/docs/connectors/building/authentication nombra la primera y enlaza a esa página. `153.61.224.0/22` es de
+ * **entrada**, no de salida: no va.
  * de ahí llegan `/oauth/token`, `/oauth/revoke` y `/oauth/register` de TODOS los usuarios de Claude, así que esas IP
  * tienen un tope más alto ([LIMITE_DE_TOKEN_DE_ANTHROPIC], [LIMITE_DE_REGISTRO_DE_ANTHROPIC]) y un 429 a una de ellas
  * deja un WARN. No una exención total: si Claude reintentara en bucle, el balde es lo único que cuida la base.
  * `CONECTOR_RANGOS_DE_ANTHROPIC` (CIDR separados por comas) agrega otros, por ejemplo uno de IPv6 si Anthropic lo
  * publica.
  */
-internal val RANGOS_DE_ANTHROPIC: List<String> = listOf("160.79.104.0/21")
+internal val RANGOS_DE_ANTHROPIC: List<String> = listOf("160.79.104.0/21", "153.61.208.0/20")
 
 internal const val LIMITE_DE_TOKEN_DE_ANTHROPIC = 1_200
 internal const val LIMITE_DE_REGISTRO_DE_ANTHROPIC = 300
