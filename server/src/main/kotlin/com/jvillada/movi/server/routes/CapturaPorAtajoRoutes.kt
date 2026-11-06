@@ -31,6 +31,12 @@ import com.jvillada.movi.shared.model.RUTA_VIEJA_DEL_ATAJO_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES
+import com.jvillada.movi.shared.model.ARCHIVO_CON_TILDE_DEL_ATAJO_DE_NOTIFICACIONES
+import com.jvillada.movi.shared.model.TIPO_DE_MENSAJE
+import com.jvillada.movi.shared.model.TIPO_DE_NOTIFICACION
+import com.jvillada.movi.shared.model.origenDeLaNotificacionPorAtajo
+import com.jvillada.movi.shared.model.textoDeLaNotificacionDelAtajo
 import com.jvillada.movi.shared.model.marcaDelRemitente
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -74,6 +80,9 @@ import java.util.UUID
  *    guarda como un aviso con su texto legible ([textoDelPagoConApplePay]). Nada se anota solo. Vuelta 127:
  *    antes del filtro, una notificación de Nu (la automatización «Notificación» de la app Nu) se reconoce por
  *    su forma (`notificacionDeNuDelAtajo`) y se guarda como la sube un Android, con «Atajo · Notificación · Nu».
+ *    Vuelta 137: `tipo` = `notificacion` (el atajo «Movi - Avisar una notificacion», atado solo a disparadores
+ *    «Notificación» de las apps de banco que elige el dueño) guarda lo de cualquier banco que traiga un monto
+ *    que Movi lee ([guardarLaNotificacion]); `mensaje` sigue con la regla estricta de un SMS.
  *
  * **El código nunca va en una URL ni en un log**: viaja en `Authorization: Bearer <código>`
  * (`CallLogging` imprime la ruta y el status, no las cabeceras), y ninguna línea de log de este archivo
@@ -186,9 +195,12 @@ private fun idDelAtajo(uid: String, texto: String, tiempo: String): String =
  * instala con el nombre del archivo. La ruta vieja de la vuelta 111 (`movi-mensaje.shortcut`) sigue sirviendo
  * el mismo archivo, con el nombre nuevo.
  */
-private val ATAJOS_QUE_SE_SIRVEN: Map<String, String> = mapOf(
+internal val ATAJOS_QUE_SE_SIRVEN: Map<String, String> = mapOf(
     ARCHIVO_DEL_ATAJO_DE_MENSAJES to ARCHIVO_DEL_ATAJO_DE_MENSAJES,
     RUTA_VIEJA_DEL_ATAJO_DE_MENSAJES.substringAfterLast('/') to ARCHIVO_DEL_ATAJO_DE_MENSAJES,
+    // Vuelta 137: el de notificaciones, con su nombre ASCII y, por si se escribe a mano, con tilde.
+    ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES to ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES,
+    ARCHIVO_CON_TILDE_DEL_ATAJO_DE_NOTIFICACIONES to ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES,
     ARCHIVO_DEL_ATAJO_DE_APPLE_PAY to ARCHIVO_DEL_ATAJO_DE_APPLE_PAY,
     RUTA_VIEJA_DEL_ATAJO_DE_APPLE_PAY.substringAfterLast('/') to ARCHIVO_DEL_ATAJO_DE_APPLE_PAY,
 )
@@ -222,6 +234,7 @@ internal suspend fun codigoDeCapturaDe(uid: String): CodigoDeCaptura {
         ultimoUso = fila?.get(CodigosDeCaptura.ultimoUso),
         atajoDeMensajes = hayAtajoFirmado(ARCHIVO_DEL_ATAJO_DE_MENSAJES),
         atajoDeApplePay = hayAtajoFirmado(ARCHIVO_DEL_ATAJO_DE_APPLE_PAY),
+        atajoDeNotificaciones = hayAtajoFirmado(ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES),
     )
 }
 
@@ -308,7 +321,7 @@ internal suspend fun atajosDescartadosDe(uid: String, ahora: Long): ResumenDeAta
 
 /**
  * De qué clase era lo que mandó el atajo, para el tracking: un SMS (`AVISO`), un pago con Apple Pay
- * (`GASTO`) o —vuelta 127— una notificación de Nu (`NOTIFICACION`).
+ * (`GASTO`) o —vuelta 127— una notificación de Nu (`NOTIFICACION`; desde la 137, de cualquier banco).
  */
 private enum class ClaseDeLaCaptura { AVISO, GASTO, NOTIFICACION }
 
@@ -371,8 +384,10 @@ private suspend fun guardarElAvisoDelAtajo(uid: String, texto: String, origen: S
  * | sin `Authorization: Bearer <código>`, o con un código que no existe o fue revocado | 401 |
  * | lo de arriba, más de [MAX_FALLIDOS_POR_MINUTO_POR_IP] veces desde la misma dirección ([ipDelPedido]) | 429 |
  * | más de [MAX_AVISOS_POR_MINUTO_POR_CODIGO] con el mismo código | 429 |
- * | no es JSON, o no trae `tipo` (`mensaje` o `transaccion`) | 400 |
+ * | no es JSON, o no trae `tipo` (`mensaje`, `notificacion` o `transaccion`) | 400 |
  * | una notificación de Nu (vuelta 127, `notificacionDeNuDelAtajo`) | 202, guardada como «Atajo · Notificación · Nu» |
+ * | `notificacion` (vuelta 137) con un monto que Movi lee | 202, guardada como «Atajo · Notificación · <banco>» |
+ * | `notificacion` sin monto | 202, **no se guarda**: se cuenta como `SIN_FORMA_DE_AVISO` |
  * | un mensaje que no pasa el filtro de bancos, o que llegó vacío | 202, **no se guarda**: solo se cuenta |
  * | ya estaba (el mismo aviso dos veces) | 202 |
  * | guardado | 202 |
@@ -411,9 +426,10 @@ private suspend fun atajoRoute(call: ApplicationCall, ahora: Long) {
     Observabilidad.registrarCapturaActiva(uid, "ATAJO", ahora)
 
     val (estado, respuesta) = when (aviso.tipo) {
-        "mensaje", "sms" -> guardarElMensaje(uid, aviso, ahora)
+        TIPO_DE_MENSAJE, "sms" -> guardarElMensaje(uid, aviso, ahora)
+        TIPO_DE_NOTIFICACION, "notificación" -> guardarLaNotificacion(uid, aviso, ahora)
         "transaccion", "transacción", "pago", "applepay" -> guardarElPago(uid, aviso, ahora)
-        else -> HttpStatusCode.BadRequest to RespuestaDelAtajo(false, "El tipo tiene que ser «mensaje» o «transaccion».")
+        else -> HttpStatusCode.BadRequest to RespuestaDelAtajo(false, "El tipo tiene que ser «mensaje», «notificacion» o «transaccion».")
     }
     call.respond(estado, respuesta)
 }
@@ -443,12 +459,7 @@ private suspend fun guardarElMensaje(uid: String, aviso: AvisoDelAtajo, ahora: L
     // un Android y el rótulo «Atajo · Notificación · Nu»: el parser, el mismo pago y el dedupe la leen como
     // la de un Android. Un remitente personal nunca: una notificación no trae remitente.
     if (!esUnRemitentePersonal(aviso.remitente)) {
-        notificacionDeNuDelAtajo(texto)?.let { notificacion ->
-            val (id, guardado) = guardarElAvisoDelAtajo(uid, notificacion, ORIGEN_DE_NU_POR_ATAJO, ahora)
-            registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", ClaseDeLaCaptura.NOTIFICACION, avisoId = id, ahora)
-            return HttpStatusCode.Accepted to
-                if (guardado) RespuestaDelAtajo(true, id = id) else RespuestaDelAtajo(false, "Esa notificación ya estaba en la bandeja.")
-        }
+        guardarSiEsDeNu(uid, texto, ahora)?.let { return it }
     }
     // **La regla del teléfono, en `:core`.** Lo que no es de un banco (o viene de un número personal) no se
     // guarda ni se lee más: solo se cuenta, con su motivo (vuelta 114: lo que nombra un banco sin la forma de
@@ -467,6 +478,68 @@ private suspend fun guardarElMensaje(uid: String, aviso: AvisoDelAtajo, ahora: L
     registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", ClaseDeLaCaptura.AVISO, avisoId = id, ahora)
     return HttpStatusCode.Accepted to
         if (guardado) RespuestaDelAtajo(true, id = id) else RespuestaDelAtajo(false, "Ese mensaje ya estaba en la bandeja.")
+}
+
+/**
+ * Vuelta 127 · **una notificación de Nu** (`notificacionDeNuDelAtajo`): se guarda con el texto que sube un
+ * Android y «Atajo · Notificación · Nu». `null` si no tiene una forma de Nu. La usan los dos tipos: `mensaje`
+ * (como la tiene configurada Caro desde la 127) y `notificacion` (vuelta 137), primero que todo.
+ */
+private suspend fun guardarSiEsDeNu(uid: String, texto: String, ahora: Long): Pair<HttpStatusCode, RespuestaDelAtajo>? {
+    val notificacion = notificacionDeNuDelAtajo(texto) ?: return null
+    val (id, guardado) = guardarElAvisoDelAtajo(uid, notificacion, ORIGEN_DE_NU_POR_ATAJO, ahora)
+    registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", ClaseDeLaCaptura.NOTIFICACION, avisoId = id, ahora)
+    return HttpStatusCode.Accepted to
+        if (guardado) RespuestaDelAtajo(true, id = id) else RespuestaDelAtajo(false, "Esa notificación ya estaba en la bandeja.")
+}
+
+/**
+ * Vuelta 137 · **¿Se guarda la notificación que mandó el atajo de notificaciones?** Si trae un monto que Movi
+ * sabe leer: el MISMO lector del parser ([montoYMonedaDelTexto]: «$», «COP» o «USD» delante, «por 27.500»,
+ * «Recibiste 999.999,99» —como Nu escribe la plata que llega, sin «$»— o «640.000,00 COP»). Así lo que se
+ * guarda es lo que `parseSms` puede proponer. `null` si se guarda; si no, [MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO]
+ * (una clave, «tu tarjeta fue bloqueada», una promoción sin cifra). Un remitente personal nunca: un atajo armado a
+ * mano podría mandar uno, y una notificación de app no lo trae.
+ *
+ * No se pide que empiece por un banco: **la garantía es el disparador**, que el dueño ata solo a las apps de sus
+ * bancos (como la lista de paquetes de Android).
+ */
+internal fun porQueNoSeGuardaLaNotificacionDelAtajo(remitente: String?, texto: String): MotivoDelAtajoDescartado? = when {
+    esUnRemitentePersonal(remitente) -> MotivoDelAtajoDescartado.NO_ES_DEL_BANCO
+    montoYMonedaDelTexto(texto) == null -> MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO
+    else -> null
+}
+
+/**
+ * Vuelta 137 · `tipo` = `notificacion`: primero Nu ([guardarSiEsDeNu], su texto normalizado y su rótulo); si
+ * no, lo que trae un monto ([porQueNoSeGuardaLaNotificacionDelAtajo]) se guarda con el texto «título: cuerpo»
+ * ([textoDeLaNotificacionDelAtajo]) y «Atajo · Notificación · <banco>» ([origenDeLaNotificacionPorAtajo]). De
+ * ahí, el camino de siempre: `SmsDedupe`, `queEsEsteMensaje` y «Por revisar». Nada se anota solo.
+ */
+private suspend fun guardarLaNotificacion(uid: String, aviso: AvisoDelAtajo, ahora: Long): Pair<HttpStatusCode, RespuestaDelAtajo> {
+    val texto = aviso.texto?.take(MAX_TEXTO_DEL_AVISO)?.let(::textoDeLaNotificacionDelAtajo)
+    if (texto == null) {
+        contarAtajoDescartado(uid, MotivoDelAtajoDescartado.VACIO, ahora)
+        registrarLaCaptura(uid, "VACIO", ClaseDeLaCaptura.NOTIFICACION, avisoId = null, ahora)
+        return HttpStatusCode.Accepted to RespuestaDelAtajo(false, "La notificación llegó vacía.")
+    }
+    if (!esUnRemitentePersonal(aviso.remitente)) {
+        guardarSiEsDeNu(uid, aviso.texto.take(MAX_TEXTO_DEL_AVISO), ahora)?.let { return it }
+    }
+    porQueNoSeGuardaLaNotificacionDelAtajo(aviso.remitente, texto)?.let { motivo ->
+        contarAtajoDescartado(uid, motivo, ahora)
+        registrarLaCaptura(uid, motivo.name, ClaseDeLaCaptura.NOTIFICACION, avisoId = null, ahora)
+        val porQue = if (motivo == MotivoDelAtajoDescartado.SIN_FORMA_DE_AVISO) {
+            "La notificación no trae un monto: no se guardó."
+        } else {
+            "No es una notificación de un banco: no se guardó."
+        }
+        return HttpStatusCode.Accepted to RespuestaDelAtajo(false, porQue)
+    }
+    val (id, guardado) = guardarElAvisoDelAtajo(uid, texto, origenDeLaNotificacionPorAtajo(texto), ahora)
+    registrarLaCaptura(uid, if (guardado) "GUARDADO" else "YA_ESTABA", ClaseDeLaCaptura.NOTIFICACION, avisoId = id, ahora)
+    return HttpStatusCode.Accepted to
+        if (guardado) RespuestaDelAtajo(true, id = id) else RespuestaDelAtajo(false, "Esa notificación ya estaba en la bandeja.")
 }
 
 private suspend fun guardarElPago(uid: String, aviso: AvisoDelAtajo, ahora: Long): Pair<HttpStatusCode, RespuestaDelAtajo> {

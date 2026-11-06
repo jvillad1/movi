@@ -23,6 +23,9 @@ ahí.
 **Qué se firma y qué no:**
 - «Movi - Avisar un mensaje» se firma y se sirve: solo usa la entrada del atajo como texto (el contenido
   del mensaje que le pasa la automatización), un texto con el código y «Obtener contenido de URL».
+- «Movi - Avisar una notificacion» (vuelta 137) se firma y se sirve: es el de mensajes con `tipo` =
+  «notificacion». Se ata solo a disparadores «Notificación» de las apps de banco que el dueño elige, y el
+  server guarda lo que trae un monto (sin pedir que empiece por el banco). Sin tilde: es el nombre del archivo.
 - «Movi - Pago con Apple Pay» queda **sin firmar** y no se sirve: para mandar el comercio, el monto y la
   tarjeta tiene que leer propiedades de la transacción de Wallet, cuyos nombres internos no están
   documentados ni se pueden probar en una Mac. La app enseña a armarlo a mano (tres toques en el iPhone).
@@ -47,8 +50,10 @@ SALIDA_PLIST = RAIZ / "scripts/atajos"
 FIRMAR_APPLE_PAY = False
 
 # Los nombres de los atajos: son los nombres de los archivos firmados, y Atajos los instala con ese nombre.
-# Iguales a NOMBRE_DEL_ATAJO_DE_MENSAJES y NOMBRE_DEL_ATAJO_DE_APPLE_PAY de core/.../CapturaPorAtajo.kt.
+# Iguales a NOMBRE_DEL_ATAJO_DE_MENSAJES, NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES y NOMBRE_DEL_ATAJO_DE_APPLE_PAY de
+# core/.../CapturaPorAtajo.kt.
 NOMBRE_DE_MENSAJES = "Movi - Avisar un mensaje"
+NOMBRE_DE_NOTIFICACIONES = "Movi - Avisar una notificacion"
 NOMBRE_DE_APPLE_PAY = "Movi - Pago con Apple Pay"
 
 # El carácter con que Atajos marca dónde va una variable dentro de un texto.
@@ -129,11 +134,11 @@ def accion_del_codigo(uuid_):
             "WFWorkflowActionParameters": {"UUID": uuid_, "CustomOutputName": "Código de Movi", "WFTextActionText": ""}}
 
 
-def accion_del_envio(url, uuid_del_codigo, cuerpo):
+def accion_del_envio(url, uuid_del_codigo, cuerpo, semilla="#envio"):
     return {
         "WFWorkflowActionIdentifier": "is.workflow.actions.downloadurl",
         "WFWorkflowActionParameters": {
-            "UUID": str(uuid.uuid5(uuid.NAMESPACE_URL, url + "#envio")).upper(),
+            "UUID": str(uuid.uuid5(uuid.NAMESPACE_URL, url + semilla)).upper(),
             "WFURL": url,
             "WFHTTPMethod": "POST",
             "WFHTTPBodyType": "JSON",
@@ -189,6 +194,23 @@ def atajo_de_mensajes(base):
             ("tipo", texto_plano("mensaje")),
             ("texto", texto_con(OBJ, [entrada_del_atajo()])),
         ]),
+    ]
+    return atajo(acciones, indice_del_codigo=1, sin_entrada_pregunta_texto=True)
+
+
+def atajo_de_notificaciones(base):
+    # Vuelta 137: el de mensajes con otro tipo. La entrada es lo que le pasa la automatización «Notificación».
+    url = base.rstrip("/") + RUTA_DE_LA_CAPTURA
+    codigo = str(uuid.uuid5(uuid.NAMESPACE_URL, url + "#codigo-notificacion")).upper()
+    acciones = [
+        comentario(NOMBRE_DE_NOTIFICACIONES + ". Manda a Movi la notificación de la app del banco que le pasa la "
+                   "automatización «Notificación». Átalo solo a las apps de tus bancos: Movi guarda las que traen "
+                   "un monto y descarta las demás sin guardarlas. Nada se anota sin que lo confirmes."),
+        accion_del_codigo(codigo),
+        accion_del_envio(url, codigo, [
+            ("tipo", texto_plano("notificacion")),
+            ("texto", texto_con(OBJ, [entrada_del_atajo()])),
+        ], semilla="#envio-notificacion"),
     ]
     return atajo(acciones, indice_del_codigo=1, sin_entrada_pregunta_texto=True)
 
@@ -278,6 +300,7 @@ def main():
     resultado = 0
     for nombre, visible, armar, se_firma in [
         ("movi-mensaje", NOMBRE_DE_MENSAJES, atajo_de_mensajes, True),
+        ("movi-notificacion", NOMBRE_DE_NOTIFICACIONES, atajo_de_notificaciones, True),
         ("movi-apple-pay", NOMBRE_DE_APPLE_PAY, atajo_de_apple_pay, FIRMAR_APPLE_PAY),
     ]:
         plist = carpeta_plist / f"{nombre}.plist"
