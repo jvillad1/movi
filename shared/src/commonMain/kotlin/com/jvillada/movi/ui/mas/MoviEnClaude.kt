@@ -39,6 +39,7 @@ import com.jvillada.movi.ui.components.ConfirmarEnHoja
 import com.jvillada.movi.ui.components.HeaderLeading
 import com.jvillada.movi.ui.components.MinScreenHeader
 import com.jvillada.movi.ui.components.NoSePudoLeer
+import com.jvillada.movi.ui.components.rememberListaConElTeclado
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
@@ -145,6 +146,8 @@ fun MoviEnClaudeScreen(
     Column(modifier = Modifier.fillMaxSize().background(Movi.colores.fondo)) {
         MinScreenHeader(title = TITULO_MOVI_EN_CLAUDE, leading = HeaderLeading.Back(fallback = Screen.Tu))
         LazyColumn(
+            // La lista de la pantalla: el teclado la mueve en la web (DesplazarConElTeclado.kt).
+            state = rememberListaConElTeclado(),
             contentPadding = PaddingValues(horizontal = Medida.margenDePantalla, vertical = Medida.dentroDeSeccion),
             verticalArrangement = Arrangement.spacedBy(Medida.dentroDeSeccion),
             modifier = Modifier.weight(1f),
