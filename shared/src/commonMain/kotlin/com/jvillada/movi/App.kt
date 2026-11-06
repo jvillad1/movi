@@ -517,6 +517,7 @@ fun App() {
                 Screen.Documentos        -> DocumentosScreen(navigate)
                 Screen.Compartir         -> CompartirScreen(navigate)
                 Screen.LoQueMoviSabe     -> LoQueMoviSabeScreen(navigate)
+                Screen.MoviEnClaude      -> com.jvillada.movi.ui.mas.MoviEnClaudeScreen(navigate)
                 Screen.EditarInicio      -> EditarInicioScreen(navigate)
                 Screen.BorrarLaCuenta    -> BorrarLaCuentaScreen(navigate)
                 Screen.PrimerosPasos     -> PrimerosPasosScreen(navigate)

@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.model
 
+import com.jvillada.movi.shared.time.epochMillisToAppDate
 import kotlinx.serialization.Serializable
 
 /**
@@ -32,3 +33,16 @@ data class ConexionDeClaude(
 
 /** El comando de Claude Code para agregar el conector. */
 fun comandoDeClaudeCode(url: String): String = "claude mcp add --transport http movi $url"
+
+private val MESES_DE_LA_CONEXION = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+/**
+ * **La línea de una conexión**: «claude.ai · conectado el 6 nov · último uso hace 2 h», o «… · todavía no leyó
+ * nada». Pura (la pantalla y las pruebas la llaman con el mismo [ahora]).
+ */
+fun lineaDeLaConexion(c: ConexionDeClaude, ahora: Long): String {
+    val dia = epochMillisToAppDate(c.conectadaEn)
+    val conectado = "conectado el ${dia.dayOfMonth} ${MESES_DE_LA_CONEXION[dia.monthNumber - 1]}"
+    val uso = c.ultimoUso?.let { "último uso ${haceCuantoLlegoElAviso(it, ahora)}" } ?: "todavía no leyó nada"
+    return listOf(c.host.takeIf { it.isNotBlank() }, conectado, uso).filterNotNull().joinToString(" · ")
+}

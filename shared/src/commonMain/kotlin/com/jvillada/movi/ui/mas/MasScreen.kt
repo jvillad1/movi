@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.Gavel
 import androidx.compose.material.icons.rounded.PrivacyTip
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.Savings
@@ -391,6 +392,15 @@ fun MasScreen(
                         inicio = { IconoDeAjuste(Icons.Rounded.Visibility) },
                         final = { Chevron() },
                         onClick = { puertaDeLaIa.abrir() },
+                    )
+                    Separador()
+                    // Vuelta 135 · el conector de Movi para Claude: la dirección, el paso a paso y las conexiones.
+                    FilaQueLleva(
+                        TITULO_MOVI_EN_CLAUDE,
+                        Icons.Rounded.Link,
+                        Screen.MoviEnClaude,
+                        onNavigate,
+                        subtitulo = SUBTITULO_MOVI_EN_CLAUDE,
                     )
                     Separador()
                     // Ola 3 · «Editar inicio»: es del dueño (se guarda en el server).
@@ -926,7 +936,7 @@ private fun FilaQueLleva(
  * Solo «Borrar mi cuenta» va en peligro.
  */
 @Composable
-private fun IconoDeAjuste(icono: ImageVector) {
+internal fun IconoDeAjuste(icono: ImageVector) {
     IconoEnCirculo(icono, tono = TonoDeIcono.Neutro)
 }
 
