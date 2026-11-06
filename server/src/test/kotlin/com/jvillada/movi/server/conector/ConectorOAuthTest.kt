@@ -105,6 +105,7 @@ class ConectorOAuthTest {
         assertTrue("Permitir que Claude lea tus datos de Movi" in html, html)
         assertTrue("<span class=\"host\">claude.ai</span>" in html, html)
         assertTrue(PantallaDeConsentimiento.QUE_PODRA_HACER in html)
+        assertTrue("Sigue solo si tú empezaste a conectar Movi desde tu Claude. Si alguien te mandó este enlace, ciérralo." in html)
         assertTrue("frame-ancestors 'none'" in res.headers["Content-Security-Policy"]!!)
         assertEquals("DENY", res.headers["X-Frame-Options"])
         assertEquals("no-store", res.headers[HttpHeaders.CacheControl])

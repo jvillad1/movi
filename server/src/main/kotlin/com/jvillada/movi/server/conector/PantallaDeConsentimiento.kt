@@ -20,6 +20,12 @@ internal object PantallaDeConsentimiento {
 
     const val QUE_PODRA_HACER = "Claude podrá leer tus cuentas, movimientos y pagos. No podrá anotar, borrar ni mover plata."
     const val DONDE_SE_DESCONECTA = "Puedes desconectarlo cuando quieras en Movi: Tú → Movi en Claude."
+
+    /**
+     * N6 de la re-revisión: alguien puede empezar la conexión en SU cuenta de Claude y mandarle este enlace al dueño.
+     * La página es la de verdad; lo único que la delata es que el dueño no tocó «Conectar».
+     */
+    const val SOLO_SI_TU_EMPEZASTE = "Sigue solo si tú empezaste a conectar Movi desde tu Claude. Si alguien te mandó este enlace, ciérralo."
     const val CREDENCIALES_MALAS = "El correo o la contraseña no coinciden."
     const val DEMASIADOS_INTENTOS = "Demasiados intentos. Espera unos minutos y vuelve a intentarlo."
 
@@ -74,7 +80,8 @@ $cuerpo
             buildString {
                 append("<h1>Permitir que ${esc(nombreDelCliente)} lea tus datos de Movi</h1>")
                 append("<div class=\"tarjeta\">")
-                append("<p>Después de permitirlo, vuelves a <span class=\"host\">${esc(hostDelRetorno)}</span>.</p>")
+                append("<p><strong>${esc(SOLO_SI_TU_EMPEZASTE)}</strong></p>")
+                append("<p class=\"apoyo\">Después de permitirlo, vuelves a <span class=\"host\">${esc(hostDelRetorno)}</span>.</p>")
                 append("<p class=\"apoyo\">${esc(QUE_PODRA_HACER)}</p>")
                 append("<p class=\"apoyo\">${esc(DONDE_SE_DESCONECTA)}</p>")
                 append("</div>")
