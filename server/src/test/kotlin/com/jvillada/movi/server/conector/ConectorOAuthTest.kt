@@ -261,21 +261,87 @@ class ConectorOAuthTest {
     // ── CIMD y DCR ─────────────────────────────────────────────────────────────────────────────
 
     @Test
-    fun `un CIMD que dice otro client_id, o un retorno fuera de su lista, se rechaza`() = testApplication {
+    fun `un CIMD que dice otro client_id, con secreto o con un retorno que no es de Claude se rechaza`() = testApplication {
         with(c) { montar() }
-        val falso = "https://claude.ai.example/oauth/metadata"
-        c.documentos[falso] = """{"client_id":"https://otro.example/x","redirect_uris":["https://claude.ai.example/cb"]}"""
-        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = falso, redirectUri = "https://claude.ai.example/cb")).status)
-        val conSecreto = "https://cliente.example/con-secreto"
-        c.documentos[conSecreto] = """{"client_id":"$conSecreto","redirect_uris":["https://cliente.example/cb"],"token_endpoint_auth_method":"client_secret_basic"}"""
-        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = conSecreto, redirectUri = "https://cliente.example/cb")).status)
-        val raro = "https://cliente.example/raro"
+        val falso = "https://claude.ai/oauth/falso"
+        c.documentos[falso] = """{"client_id":"https://otro.example/x","redirect_uris":["$RETORNO_DE_CLAUDE"]}"""
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = falso)).status)
+        val conSecreto = "https://claude.ai/oauth/con-secreto"
+        c.documentos[conSecreto] = """{"client_id":"$conSecreto","redirect_uris":["$RETORNO_DE_CLAUDE"],"token_endpoint_auth_method":"client_secret_basic"}"""
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = conSecreto)).status)
+        val raro = "https://claude.ai/oauth/raro"
         c.documentos[raro] = """{"client_id":"$raro","redirect_uris":["movi://cb"]}"""
         assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = raro, redirectUri = "movi://cb")).status)
+        // I1: aunque esté en claude.ai y se llame «Claude», un retorno ajeno no vale.
+        val ajeno = "https://claude.ai/oauth/ajeno"
+        c.documentos[ajeno] = """{"client_id":"$ajeno","client_name":"Claude","redirect_uris":["https://atacante.example/cb"]}"""
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = ajeno, redirectUri = "https://atacante.example/cb")).status)
         // Uno que no existe (el lector no lo encuentra).
-        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = "https://nadie.example/cimd")).status)
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = "https://claude.ai/nadie")).status)
         // Un http no es CIMD.
         assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = "http://claude.ai/oauth/x")).status)
+    }
+
+    @Test
+    fun `un CIMD de un host que no es de Claude no se descarga nunca`() = testApplication {
+        with(c) { montar() }
+        val pedidos = mutableListOf<String>()
+        lectorDeCimd = LectorDeCimd { url -> pedidos += url; c.documentos[url] }
+        val ajeno = "https://evil.example/cimd"
+        c.documentos[ajeno] = """{"client_id":"$ajeno","client_name":"Claude","redirect_uris":["$RETORNO_DE_CLAUDE"]}"""
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = ajeno)).status)
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = "https://claude.ai.evil.example/x")).status)
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = "https://claude.ai:8443/oauth/x")).status)
+        assertTrue(pedidos.isEmpty(), "no se bajó nada: $pedidos")
+    }
+
+    @Test
+    fun `un CIMD que no contesta no cuelga la autorizacion, y la falla se recuerda`() = testApplication {
+        with(c) { montar() }
+        var lecturas = 0
+        lectorDeCimd = LectorDeCimd { lecturas++; kotlinx.coroutines.delay(10 * 60_000L); null }
+        val lento = "https://claude.ai/oauth/lento"
+        val antes = System.currentTimeMillis()
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = lento)).status)
+        val tardo = System.currentTimeMillis() - antes
+        assertTrue(tardo in TOPE_DEL_CIMD_MS until TOPE_DEL_CIMD_MS + 2_000, "contestó en $tardo ms")
+        // La segunda vez contesta de la memoria, sin volver a bajar nada.
+        val antes2 = System.currentTimeMillis()
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = lento)).status)
+        assertTrue(System.currentTimeMillis() - antes2 < 1_000)
+        assertEquals(1, lecturas)
+    }
+
+    @Test
+    fun `un cliente que dice llamarse Claude con un retorno ajeno no se registra ni se muestra como Claude`() = testApplication {
+        with(c) { montar() }
+        val reg = client.post("/oauth/register") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"client_name":"Claude","redirect_uris":["https://claude-ai-connect.example/cb"]}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, reg.status)
+        // Un nombre engañoso con un retorno de Claude Code se muestra como lo que es: Claude Code en tu computadora.
+        val loopback = client.post("/oauth/register") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"client_name":"Bancolombia","redirect_uris":["http://localhost/callback"]}""")
+        }
+        assertEquals(HttpStatusCode.Created, loopback.status)
+        val id = c.json.parseToJsonElement(loopback.bodyAsText()).jsonObject["client_id"]!!.jsonPrimitive.content
+        val html = client.get(c.urlDeAutorizar(clientId = id, redirectUri = "http://localhost:4321/callback")).bodyAsText()
+        assertTrue("Permitir que Claude Code lea tus datos de Movi" in html, html)
+        assertFalse("Bancolombia" in html)
+    }
+
+    @Test
+    fun `un retorno larguisimo se rechaza con 400, no con 500`() = testApplication {
+        with(c) { montar() }
+        val largo = "http://localhost:1/callback" + "x".repeat(600)
+        assertEquals(HttpStatusCode.BadRequest, client.get(c.urlDeAutorizar(clientId = CIMD_DE_CLAUDE_CODE, redirectUri = largo)).status)
+        val reg = client.post("/oauth/register") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"redirect_uris":["https://claude.ai/api/mcp/auth_callback${"x".repeat(600)}"]}""")
+        }
+        assertEquals(HttpStatusCode.BadRequest, reg.status)
     }
 
     @Test

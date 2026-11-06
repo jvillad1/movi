@@ -178,7 +178,7 @@ private suspend fun ApplicationCall.autorizar(p: Parameters) {
     }
     p["resource"]?.let { if (it.trimEnd('/') != ConfigDelConector.urlDelMcp) return volverCon("invalid_target", "el recurso es ${ConfigDelConector.urlDelMcp}") }
 
-    val nombre = nombreDelCliente(cliente, redirectUri)
+    val nombre = nombreDelCliente(redirectUri)
     val ahora = System.currentTimeMillis()
     val solicitud = dbQuery {
         guardarSolicitud(
@@ -331,7 +331,7 @@ private suspend fun ApplicationCall.registrar() {
         ?: return mal("invalid_client_metadata", "el cuerpo es un objeto JSON")
     val uris = (objeto["redirect_uris"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
     if (uris.isEmpty() || uris.size > MAX_REDIRECT_URIS || uris.any { !redirectValidoParaDeclarar(it) }) {
-        return mal("invalid_redirect_uri", "redirect_uris: https, o http a localhost/127.0.0.1")
+        return mal("invalid_redirect_uri", "redirect_uris: solo https://claude.ai/api/mcp/auth_callback o http://localhost|127.0.0.1:<puerto>/callback")
     }
     val metodo = (objeto["token_endpoint_auth_method"] as? JsonPrimitive)?.contentOrNull
     if (metodo != null && metodo != "none") return mal("invalid_client_metadata", "solo clientes públicos (token_endpoint_auth_method=none)")

@@ -2,6 +2,12 @@ package com.jvillada.movi.server.conector
 
 import com.jvillada.movi.server.db.ClientesDelConector
 import com.jvillada.movi.server.db.dbQuery
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.future.await
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -14,33 +20,64 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.ByteBuffer
 import java.time.Duration
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CompletionStage
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.Flow
 
 /**
  * # Vuelta 135 · Quién pide permiso: los clientes del conector
  *
- * Claude se presenta de dos maneras, y Movi acepta las dos:
+ * **El conector es solo para Claude** (revisión de seguridad de la vuelta 135, C1 e I1). Claude se presenta de
+ * dos maneras, y Movi acepta las dos, pero solo si el cliente es de Claude:
  *
- * - **CIMD** (Client ID Metadata Document): el `client_id` es una URL https —la de Claude es
- *   `https://claude.ai/oauth/…`— que se baja y dice cómo se llama el cliente y a qué direcciones se le puede
- *   devolver el código. Es lo que Claude prefiere y no deja nada en la base.
+ * - **CIMD** (Client ID Metadata Document): el `client_id` es una URL https **en `claude.ai` o `claude.com`**
+ *   ([HOSTS_DE_CIMD], más los de `CONECTOR_HOSTS_DE_CIMD`), que se baja y dice a qué direcciones se le puede
+ *   devolver el código. Nunca se descarga nada de un host cualquiera.
  * - **DCR** (RFC 7591): el cliente se registra en `POST /oauth/register` y recibe un `client_id` nuestro.
  *
- * En los dos casos el cliente es **público** (sin secreto): lo que lo ata es PKCE y que el código solo se
- * devuelve a una dirección declarada, con coincidencia exacta (salvo el puerto de un loopback de Claude Code).
+ * En los dos casos las únicas direcciones de retorno que valen son las de Claude: [RETORNOS_DE_CLAUDE] (la web,
+ * el escritorio y el teléfono) y un loopback `http://localhost|127.0.0.1:<puerto>/callback` (Claude Code). Así el
+ * código de autorización nunca puede ir a otro host, aunque un cliente se llame «Claude».
+ *
+ * El cliente es **público** (sin secreto): lo que lo ata es PKCE y la dirección de retorno.
  */
 internal data class ClienteDelConector(
     val clientId: String,
-    /** Lo que el cliente dice que se llama. Dato de afuera: limpio, recortado, y nunca la única señal. */
+    /** Lo que el cliente dice que se llama. Dato de afuera: se guarda limpio y **nunca se muestra** (ver [nombreDelCliente]). */
     val nombreDeclarado: String,
     val redirectUris: List<String>,
     val esCimd: Boolean,
 )
 
+/** Los hosts cuyos documentos CIMD se aceptan. `CONECTOR_HOSTS_DE_CIMD` (separados por comas) agrega otros. */
+internal val HOSTS_DE_CIMD: Set<String> = setOf("claude.ai", "claude.com")
+
+/**
+ * **Las direcciones de retorno de Claude** que no son loopback. La documentación de conectores de Claude da una
+ * sola, la de claude.ai (sirve a la web, el escritorio, el teléfono y Cowork); no documenta una en claude.com, así
+ * que no se agrega.
+ */
+internal val RETORNOS_DE_CLAUDE: List<String> = listOf("https://claude.ai/api/mcp/auth_callback")
+
+/** El camino del retorno de Claude Code por loopback. */
+internal const val CAMINO_DEL_LOOPBACK = "/callback"
+
+/** Lo más largo que puede ser un retorno, pedido o declarado. Las de Claude pesan menos de 50. */
+internal const val LARGO_MAXIMO_DEL_RETORNO = 300
+
+internal val hostsDeCimdPermitidos: Set<String> by lazy {
+    HOSTS_DE_CIMD + System.getenv("CONECTOR_HOSTS_DE_CIMD").orEmpty()
+        .split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+}
+
 /**
  * **Lee el documento de un cliente CIMD.** Inyectable para las pruebas: ninguna toca la red (como
- * `LectorDeCorreosRecibidos`). `null` = no se pudo leer (no existe, timeout, demasiado grande, host privado).
+ * `LectorDeCorreosRecibidos`). `null` = no se pudo leer (no existe, demasiado grande, host privado). El tope de
+ * tiempo no depende del lector: lo pone [resolverCliente] alrededor de la llamada.
  */
 fun interface LectorDeCimd {
     suspend fun leer(url: String): String?
@@ -49,42 +86,45 @@ fun interface LectorDeCimd {
 /** Lo más que se acepta de un documento CIMD. Uno de verdad pesa menos de 1 KB. */
 internal const val MAX_BYTES_DEL_CIMD = 16 * 1024
 
+/** El tope de toda la lectura de un CIMD: conexión, cabeceras **y cuerpo**. */
+internal const val TOPE_DEL_CIMD_MS = 5_000L
+
 /**
- * El lector de verdad. Tres cuidados, porque es una URL que manda un desconocido y el server la va a buscar:
+ * **Los hilos del lector de CIMD**: cuatro, propios. Nunca `Dispatchers.IO`, que es de donde vive `dbQuery`: un
+ * documento que llega de a un byte por minuto no puede dejar al resto del server sin base.
+ */
+private val hilosDelCimd = Executors.newFixedThreadPool(4) { r ->
+    Thread(r, "movi-cimd").apply { isDaemon = true }
+}
+internal val dispatcherDelCimd: CoroutineDispatcher = hilosDelCimd.asCoroutineDispatcher()
+
+/**
+ * El lector de verdad:
  *
- * - **Solo https y nunca un host privado** (loopback, red local, link-local, multicast, ULA): sin esto, el
- *   `client_id` sería una forma de que el server de Movi le pegue a `http://169.254.169.254` o a la base. El host
- *   se resuelve antes y se rechaza si **alguna** de sus direcciones es privada. Queda una ventana (el DNS podría
- *   cambiar entre la resolución y la conexión); es aceptable para un GET sin credenciales cuyo cuerpo solo se
- *   lee como JSON.
- * - **Sin redirecciones**: una redirección es otra URL que nadie validó.
- * - **Tope de tiempo y de tamaño**: 5 s y [MAX_BYTES_DEL_CIMD].
+ * - **Asíncrono y con tope de todo**: `sendAsync` no bloquea ningún hilo mientras espera, y [bajarConTope] corta
+ *   la operación entera (cabeceras y cuerpo) a los [TOPE_DEL_CIMD_MS]. `HttpRequest.timeout` solo cubre hasta las
+ *   cabeceras: con él solo, un cuerpo que gotea dejaba un hilo bloqueado horas (C1 de la revisión).
+ * - **Solo https al puerto 443 y nunca un host privado**. El host ya es uno de [hostsDeCimdPermitidos]; además se
+ *   resuelve y se rechaza si alguna dirección es privada. Queda la ventana del DNS entre la resolución y la
+ *   conexión, mitigada por https con validación del certificado.
+ * - **Sin redirecciones** y con [MAX_BYTES_DEL_CIMD] de tope: el cuerpo se lee por partes y se corta al pasarse.
  */
 internal object LectorDeCimdPorRed : LectorDeCimd {
     private val cliente: HttpClient = HttpClient.newBuilder()
         .followRedirects(HttpClient.Redirect.NEVER)
-        .connectTimeout(Duration.ofSeconds(5))
+        .connectTimeout(Duration.ofMillis(TOPE_DEL_CIMD_MS))
+        .executor(hilosDelCimd)
         .build()
 
-    override suspend fun leer(url: String): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        runCatching {
-            val uri = URI(url)
-            if (uri.scheme != "https" || !hostEsPublico(uri.host)) return@runCatching null
-            val pedido = HttpRequest.newBuilder(uri)
-                .timeout(Duration.ofSeconds(5))
-                .header("Accept", "application/json")
-                .GET()
-                .build()
-            val respuesta = cliente.send(pedido, HttpResponse.BodyHandlers.ofInputStream())
-            if (respuesta.statusCode() != 200) {
-                respuesta.body().close()
-                return@runCatching null
-            }
-            respuesta.body().use { cuerpo ->
-                val bytes = cuerpo.readNBytes(MAX_BYTES_DEL_CIMD + 1)
-                if (bytes.size > MAX_BYTES_DEL_CIMD) null else bytes.decodeToString()
-            }
-        }.getOrNull()
+    override suspend fun leer(url: String): String? {
+        val uri = runCatching { URI(url) }.getOrNull() ?: return null
+        if (uri.scheme != "https" || (uri.port != -1 && uri.port != 443)) return null
+        if (uri.host?.lowercase() !in hostsDeCimdPermitidos) return null
+        // La resolución del DNS corre en los hilos propios y se espera sin bloquear: si el DNS no contesta, el
+        // tope de `resolverCliente` corta la espera (el hilo queda ocupado, pero es uno de cuatro, no de la base).
+        val publico = CompletableFuture.supplyAsync({ hostEsPublico(uri.host) }, hilosDelCimd).await()
+        if (!publico) return null
+        return bajarConTope(cliente, uri, TOPE_DEL_CIMD_MS, MAX_BYTES_DEL_CIMD)
     }
 
     internal fun hostEsPublico(host: String?): Boolean {
@@ -95,54 +135,134 @@ internal object LectorDeCimdPorRed : LectorDeCimd {
 
     private fun esPrivada(a: InetAddress): Boolean {
         if (a.isLoopbackAddress || a.isSiteLocalAddress || a.isLinkLocalAddress || a.isAnyLocalAddress || a.isMulticastAddress) return true
-        val b = a.address
-        // IPv6 ULA (fc00::/7) y IPv4 de CGNAT (100.64.0.0/10), que `isSiteLocalAddress` no cubre.
-        if (b.size == 16 && (b[0].toInt() and 0xFE) == 0xFC) return true
-        if (b.size == 4 && (b[0].toInt() and 0xFF) == 100 && (b[1].toInt() and 0xC0) == 64) return true
-        return false
+        val b = a.address.map { it.toInt() and 0xFF }
+        if (b.size == 4) {
+            return (b[0] == 100 && (b[1] and 0xC0) == 64) || // 100.64.0.0/10 (CGNAT)
+                (b[0] == 198 && (b[1] and 0xFE) == 18) || // 198.18.0.0/15
+                (b[0] == 192 && b[1] == 0 && b[2] == 0) || // 192.0.0.0/24
+                (b[0] and 0xF0) == 240 // 240.0.0.0/4
+        }
+        return (b[0] and 0xFE) == 0xFC || // fc00::/7 (ULA)
+            (b[0] == 0xFE && (b[1] and 0xC0) == 0xC0) || // fec0::/10
+            (b[0] == 0x00 && b[1] == 0x64 && b[2] == 0xFF && b[3] == 0x9B) // 64:ff9b::/96 (NAT64)
     }
+}
+
+/**
+ * **Baja [uri] con un tope de tiempo para todo y un tope de tamaño para el cuerpo.** `null` si no llega a tiempo,
+ * no es 200 o pesa más de [maxBytes]. Al vencer cancela el pedido. No bloquea hilos: el cuerpo llega por partes a
+ * un suscriptor que corta al pasarse.
+ */
+internal suspend fun bajarConTope(cliente: HttpClient, uri: URI, topeMs: Long, maxBytes: Int): String? {
+    val pedido = HttpRequest.newBuilder(uri)
+        .timeout(Duration.ofMillis(topeMs))
+        .header("Accept", "application/json")
+        .GET()
+        .build()
+    val manejador = HttpResponse.BodyHandler<String?> { info ->
+        if (info.statusCode() != 200) HttpResponse.BodySubscribers.replacing<String?>(null) else CuerpoConTope(maxBytes)
+    }
+    val futuro = cliente.sendAsync(pedido, manejador)
+    return try {
+        withTimeout(topeMs) { futuro.await() }.body()
+    } catch (_: TimeoutCancellationException) {
+        futuro.cancel(true)
+        null
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        futuro.cancel(true)
+        throw e
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/** El cuerpo, por partes, cortado al pasar de [maxBytes] (devuelve `null`). */
+private class CuerpoConTope(private val maxBytes: Int) : HttpResponse.BodySubscriber<String?> {
+    private val resultado = CompletableFuture<String?>()
+    private val partes = java.io.ByteArrayOutputStream()
+    private var suscripcion: Flow.Subscription? = null
+
+    override fun getBody(): CompletionStage<String?> = resultado
+    override fun onSubscribe(subscription: Flow.Subscription) {
+        suscripcion = subscription
+        subscription.request(Long.MAX_VALUE)
+    }
+    override fun onNext(item: List<ByteBuffer>) {
+        for (b in item) {
+            val bytes = ByteArray(b.remaining()).also { b.get(it) }
+            partes.write(bytes)
+            if (partes.size() > maxBytes) {
+                suscripcion?.cancel()
+                resultado.complete(null)
+                return
+            }
+        }
+    }
+    override fun onError(throwable: Throwable) { resultado.complete(null) }
+    override fun onComplete() { resultado.complete(partes.toByteArray().decodeToString()) }
 }
 
 /** El lector que usan las rutas; las pruebas lo cambian por uno que no toca la red. */
 @Volatile
 internal var lectorDeCimd: LectorDeCimd = LectorDeCimdPorRed
 
-/** Diez minutos de memoria por documento: Claude lo pide en `/authorize` y otra vez nunca. */
+/** Un documento bueno se recuerda 10 minutos; una falla, 5 (así repetir un `client_id` malo no vuelve a bajar nada). */
 private const val VIDA_DEL_CIMD_EN_MEMORIA_MS = 10L * 60 * 1000
-private val cimdEnMemoria = ConcurrentHashMap<String, Pair<Long, ClienteDelConector>>()
-
+private const val VIDA_DE_UNA_FALLA_EN_MEMORIA_MS = 5L * 60 * 1000
 private const val MAX_CIMD_EN_MEMORIA = 500
 
-internal fun olvidarLosCimdEnMemoria() = cimdEnMemoria.clear()
+/** `null` como valor = una falla recordada. */
+private val cimdEnMemoria = ConcurrentHashMap<String, Pair<Long, ClienteDelConector?>>()
+
+/** Una sola lectura a la vez por `client_id`: los que llegan mientras tanto esperan la misma. */
+private val cimdEnCurso = ConcurrentHashMap<String, CompletableDeferred<ClienteDelConector?>>()
+
+internal fun olvidarLosCimdEnMemoria() {
+    cimdEnMemoria.clear()
+    cimdEnCurso.clear()
+}
 
 private val jsonDelCimd = Json { ignoreUnknownKeys = true }
 
 /**
- * ¿Es un `client_id` con forma de URL CIMD? https, con host y con camino (la spec lo exige), sin fragmento, sin
- * usuario, sin `.`/`..` en el camino, y de un largo razonable.
+ * ¿Es un `client_id` CIMD que Movi acepta? https al puerto 443, en uno de [hostsDeCimdPermitidos], con camino
+ * (la spec lo exige), sin fragmento, sin usuario, sin `.`/`..` y de un largo razonable.
  */
 internal fun esClientIdCimd(clientId: String): Boolean {
     if (clientId.length > 500 || !clientId.startsWith("https://")) return false
     val uri = runCatching { URI(clientId) }.getOrNull() ?: return false
     val camino = uri.rawPath.orEmpty()
-    return !uri.host.isNullOrBlank() && uri.rawFragment == null && uri.rawUserInfo == null &&
+    return uri.host?.lowercase() in hostsDeCimdPermitidos && (uri.port == -1 || uri.port == 443) &&
+        uri.rawFragment == null && uri.rawUserInfo == null &&
         camino.length > 1 && camino.split('/').none { it == "." || it == ".." }
 }
 
 /**
- * **El cliente de [clientId]**, o `null` si no existe o su documento no sirve. Un `client_id` https es CIMD; lo
- * demás se busca entre los registrados por DCR.
+ * **El cliente de [clientId]**, o `null` si no existe o no sirve. Un `client_id` https es CIMD (solo de Claude);
+ * lo demás se busca entre los registrados por DCR. La lectura del CIMD tiene tope de [TOPE_DEL_CIMD_MS] pase lo
+ * que pase con el lector, se hace una sola vez a la vez por `client_id`, y su resultado (bueno o malo) se recuerda.
  */
 internal suspend fun resolverCliente(clientId: String, ahora: Long = System.currentTimeMillis()): ClienteDelConector? {
     if (clientId.isBlank() || clientId.length > 500) return null
     if (clientId.startsWith("https://")) {
         if (!esClientIdCimd(clientId)) return null
-        cimdEnMemoria[clientId]?.let { (cuando, cliente) -> if (ahora - cuando < VIDA_DEL_CIMD_EN_MEMORIA_MS) return cliente }
-        val documento = lectorDeCimd.leer(clientId) ?: return null
-        val cliente = clienteDelDocumentoCimd(clientId, documento) ?: return null
-        // Un tope para que una lluvia de `client_id` distintos no llene la memoria (cada uno costó un GET válido).
+        cimdEnMemoria[clientId]?.let { (cuando, cliente) ->
+            val vida = if (cliente != null) VIDA_DEL_CIMD_EN_MEMORIA_MS else VIDA_DE_UNA_FALLA_EN_MEMORIA_MS
+            if (ahora - cuando < vida) return cliente
+        }
+        val nuevo = CompletableDeferred<ClienteDelConector?>()
+        val enCurso = cimdEnCurso.putIfAbsent(clientId, nuevo)
+        if (enCurso != null) return runCatching { withTimeout(TOPE_DEL_CIMD_MS) { enCurso.await() } }.getOrNull()
+        val cliente = try {
+            val documento = runCatching { withTimeout(TOPE_DEL_CIMD_MS) { lectorDeCimd.leer(clientId) } }.getOrNull()
+            documento?.let { clienteDelDocumentoCimd(clientId, it) }
+        } finally {
+            cimdEnCurso.remove(clientId, nuevo)
+        }
+        // Un tope para que una lluvia de `client_id` distintos no llene la memoria.
         if (cimdEnMemoria.size >= MAX_CIMD_EN_MEMORIA) cimdEnMemoria.clear()
         cimdEnMemoria[clientId] = ahora to cliente
+        nuevo.complete(cliente)
         return cliente
     }
     return dbQuery {
@@ -160,7 +280,7 @@ internal suspend fun resolverCliente(clientId: String, ahora: Long = System.curr
 
 /**
  * **Lee y valida un documento CIMD.** Tiene que decir que es ese mismo `client_id` (si no, cualquiera podría
- * servir el documento de otro), traer al menos una `redirect_uri` válida, y ser de un cliente público: con
+ * servir el documento de otro), traer al menos una `redirect_uri` de Claude, y ser de un cliente público: con
  * `token_endpoint_auth_method` distinto de `none` no se acepta, porque Movi no verifica secretos ni firmas.
  */
 internal fun clienteDelDocumentoCimd(clientId: String, documento: String): ClienteDelConector? {
@@ -175,37 +295,40 @@ internal fun clienteDelDocumentoCimd(clientId: String, documento: String): Clien
     return ClienteDelConector(clientId, nombreLimpio(nombre), uris, esCimd = true)
 }
 
-internal const val MAX_REDIRECT_URIS = 10
+internal const val MAX_REDIRECT_URIS = 5
 
-/**
- * ¿Se puede declarar esta dirección de retorno? Absoluta, sin fragmento ni usuario, de largo razonable, y https
- * —o http solo a un loopback, que es lo que usa Claude Code—. Nada de esquemas propios (`movi://`): ningún cliente
- * de Claude los usa y son la puerta clásica de un robo de código en el teléfono.
- */
-internal fun redirectValidoParaDeclarar(uri: String): Boolean {
-    if (uri.length > 500) return false
+/** ¿Es un loopback de Claude Code? `http://localhost|127.0.0.1[:puerto]/callback`, sin consulta ni fragmento. */
+internal fun esRetornoLoopback(uri: String): Boolean {
+    if (uri.length > LARGO_MAXIMO_DEL_RETORNO) return false
     val u = runCatching { URI(uri) }.getOrNull() ?: return false
-    if (!u.isAbsolute || u.rawFragment != null || u.rawUserInfo != null || u.host.isNullOrBlank()) return false
-    return u.scheme == "https" || (u.scheme == "http" && esLoopback(u.host))
+    val host = u.host?.lowercase()
+    return u.scheme == "http" && (host == "localhost" || host == "127.0.0.1") && u.rawUserInfo == null &&
+        u.rawPath == CAMINO_DEL_LOOPBACK && u.rawQuery == null && u.rawFragment == null
 }
 
 /**
- * **¿Se le puede devolver el código a [pedido]?** Coincidencia exacta con una declarada. La única excepción es la
- * de RFC 8252 §7.3 para Claude Code: un `http://localhost/callback` (o 127.0.0.1) declarado acepta cualquier
- * puerto, porque Claude Code abre uno libre cada vez. Mismo esquema, mismo host, mismo camino y misma consulta.
+ * **¿Es una dirección de retorno de Claude?** Una de [RETORNOS_DE_CLAUDE] tal cual, o un loopback de Claude Code
+ * ([esRetornoLoopback]). Es lo único que se puede declarar (DCR y CIMD) y lo único a lo que se devuelve un código.
+ */
+internal fun redirectValidoParaDeclarar(uri: String): Boolean =
+    uri.length <= LARGO_MAXIMO_DEL_RETORNO && (uri in RETORNOS_DE_CLAUDE || esRetornoLoopback(uri))
+
+/**
+ * **¿Se le puede devolver el código a [pedido]?** Tiene que ser una dirección de Claude ([redirectValidoParaDeclarar])
+ * y coincidir con una declarada: exacta, salvo el puerto de un loopback (RFC 8252 §7.3; Claude Code abre uno libre
+ * cada vez), con el mismo host y el mismo camino.
  */
 internal fun redirectPermitido(declaradas: List<String>, pedido: String): Boolean {
+    if (!redirectValidoParaDeclarar(pedido)) return false
     if (pedido in declaradas) return true
-    val p = runCatching { URI(pedido) }.getOrNull() ?: return false
-    if (p.scheme != "http" || !esLoopback(p.host) || p.rawFragment != null || p.rawUserInfo != null) return false
+    if (!esRetornoLoopback(pedido)) return false
+    val p = URI(pedido)
     return declaradas.any { d ->
-        val u = runCatching { URI(d) }.getOrNull() ?: return@any false
-        u.scheme == "http" && u.host.equals(p.host, ignoreCase = true) &&
-            u.rawPath.orEmpty() == p.rawPath.orEmpty() && u.rawQuery == p.rawQuery
+        esRetornoLoopback(d) && URI(d).host.equals(p.host, ignoreCase = true)
     }
 }
 
-/** Un nombre que viene de afuera, para guardarlo y mostrarlo: sin caracteres de control, colapsado y cortado. */
+/** Un nombre que viene de afuera, para guardarlo: sin caracteres de control, colapsado y cortado. */
 internal fun nombreLimpio(crudo: String?): String =
     crudo.orEmpty()
         .filter { it.category != CharCategory.FORMAT }
@@ -216,22 +339,9 @@ internal fun nombreLimpio(crudo: String?): String =
         .take(60)
 
 /**
- * **Cómo se llama el cliente en la pantalla de consentimiento y en «Movi en Claude».** El nombre que declara un
- * cliente lo escribe él, así que solo «Claude» y «Claude Code» se dicen por el **dueño de la dirección**: un CIMD
- * servido desde `claude.ai`, o un retorno a `https://claude.ai/…` (el código solo puede llegar ahí). Lo demás va
- * con su nombre limpio, o con el host si no dijo ninguno; la pantalla de consentimiento muestra siempre, además,
- * el host al que vuelve.
+ * **Cómo se llama el cliente en la pantalla de consentimiento y en «Movi en Claude»**: por la dirección a la que
+ * vuelve el código, **nunca por el nombre que el cliente dice tener** (I1 de la revisión: un DCR «Claude» con su
+ * propio retorno se llevaba el código). `https://claude.ai/…` es «Claude»; un loopback, «Claude Code».
  */
-internal fun nombreDelCliente(cliente: ClienteDelConector, redirectUri: String): String {
-    val hostDelId = if (cliente.esCimd) runCatching { URI(cliente.clientId).host?.lowercase() }.getOrNull() else null
-    val hostDelRetorno = runCatching { URI(redirectUri).host?.lowercase() }.getOrNull()
-    fun esDeAnthropic(host: String?) = host != null && (host == "claude.ai" || host == "claude.com" || host.endsWith(".claude.ai"))
-    val dice = cliente.nombreDeclarado
-    return when {
-        esDeAnthropic(hostDelId) && cliente.clientId.contains("claude-code", ignoreCase = true) -> "Claude Code"
-        esDeAnthropic(hostDelId) -> "Claude"
-        esDeAnthropic(hostDelRetorno) -> "Claude"
-        dice.isNotBlank() -> dice
-        else -> hostDelRetorno ?: "Un cliente de MCP"
-    }.take(60)
-}
+internal fun nombreDelCliente(redirectUri: String): String =
+    if (esRetornoLoopback(redirectUri)) "Claude Code" else "Claude"
