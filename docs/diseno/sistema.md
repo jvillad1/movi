@@ -5559,3 +5559,21 @@ Una pantalla de información sobre plata de terceros (`ui/seguros/TusSegurosScre
 - **Una pregunta de varias respuestas en una hoja**: `RotuloDeCampo` + pastillas `PildoraDeFiltro` en un
   `FlowRow` que baja de renglón («¿Tu cuota es siempre la misma?» · Sí · No, cambia; el porqué; «¿Cambia la
   cuota o el plazo?»). Sí por defecto, ningún amarillo nuevo.
+
+## Vuelta 134 · Una cifra estimada se dice estimada en todos lados
+
+- **Una regla, una pieza.** Si una cifra es una estimación lo decide `laCifraDelPagoEsEstimada` (`:core`: la cuota
+  pendiente de un crédito que cambia) y se pinta con `ds/CifraEstimada`: «unos» en `apoyo` y `textoMedio` delante
+  de la `Cifra`, en un renglón que se parte (`FlowRow`): a 360 dp con la letra a ×1,456, al lado de un botón, la
+  cifra baja entera al renglón de abajo en vez de achicarse de más o salirse de su caja. Sin estimación, la `Cifra`
+  tal cual, sin nada alrededor. La usan «Próximo pago», el widget «Falta por pagar», `TarjetaDePropuesta`
+  (`cifraEstimada`) y la campana; la fila de Pagos hace lo mismo con `MontoDeFila`. Los textos planos (el aviso del
+  teléfono, la página compartida) usan `conUnosSiEsEstimada`.
+- **El nombre de una factura llega a cuatro renglones** en la fila de Pagos: «Cuota Libre inversión 9695» a ×1,456
+  necesita cuatro al lado de «Anotar pago».
+- **Una pregunta de dos índices son dos pastillas**: «¿Sobre qué índice?» · IBR · Otro índice, como el resto de la
+  hoja del crédito; el campo de los puntos dice sobre cuál. Los decimales se escriben y se ven con coma («8,5»).
+- **Lo que depende de una lectura que llega tarde se decide con lo que ya se sabe.** El renglón de las cuotas del
+  detalle se decide con las cuentas que el Inicio ya leyó, o con las cuotas que el movimiento trae: lo que se ve
+  al abrir es lo que queda (nada salta más de 8 dp).
+
