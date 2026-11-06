@@ -24,6 +24,8 @@ class EligeLaCategoria(
     val onTodas: () -> Unit,
     /** Vuelta 51: la que entendió Movi, para marcarla en las pastillas si el dueño no eligió otra. */
     val actual: String? = null,
+    /** Categorías del número: la línea que explica por qué van primero; con ella, las pastillas arrancan abiertas. */
+    val delNumero: String? = null,
 )
 
 /**

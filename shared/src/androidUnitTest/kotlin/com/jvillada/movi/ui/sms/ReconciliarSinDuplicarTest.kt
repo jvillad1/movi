@@ -7,6 +7,8 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -213,7 +215,7 @@ class ReconciliarSinDuplicarTest {
 
         // Vuelta 57: fuera de edición el comercio es un texto; tocar la fila abre el campo.
         abrirElComercio()
-        composeRule.onNode(hasSetTextAction()).performTextReplacement("Tostao")
+        composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(TAG_CONFIRMA_O_AJUSTA_COMERCIO)), useUnmergedTree = true).performTextReplacement("Tostao")
         composeRule.waitForIdle()
         tocar("Confirmar")
 
@@ -229,7 +231,7 @@ class ReconciliarSinDuplicarTest {
         montar(Repo())
 
         abrirElComercio()
-        composeRule.onNode(hasSetTextAction()).performTextReplacement("   ")
+        composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(TAG_CONFIRMA_O_AJUSTA_COMERCIO)), useUnmergedTree = true).performTextReplacement("   ")
         composeRule.waitForIdle()
         tocar("Confirmar")
 

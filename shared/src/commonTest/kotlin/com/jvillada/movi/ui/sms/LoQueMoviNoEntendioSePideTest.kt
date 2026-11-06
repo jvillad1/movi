@@ -2,6 +2,7 @@ package com.jvillada.movi.ui.sms
 
 import com.jvillada.movi.shared.model.Account
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.CategoriaDelNumero
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.PropuestaDelAviso
 import com.jvillada.movi.shared.model.PropuestasDeLaBandeja
@@ -90,5 +91,19 @@ class LoQueMoviNoEntendioSePideTest {
         // Sin una cuenta que el aviso nombre, falta también la cuenta: va a Revisar aviso.
         val otra = Account("x", "Davivienda", AccountType.SAVINGS, 0L, "COP")
         assertFalse(loQueMoviEntendio(sms, listOf(sms), propuestas, listOf(otra), ahora = 0L).faltaSoloLaCategoria)
+    }
+
+    @Test
+    fun `elegir la categoria en la tarjeta quita las del numero y el aviso entra al lote`() {
+        val delNumero = listOf(CategoriaDelNumero("Parqueadero", 3), CategoriaDelNumero("Gasolina", 2))
+        val conNumero = PropuestasDeLaBandeja(
+            propuestas = listOf(PropuestaDelAviso("pana", leido = leido("Otros").copy(categoriasDelNumero = delNumero))),
+            categoriasDelDueno = listOf("Comida", "Papelería"),
+        )
+        val elegida = loQueMoviEntendio(sms, listOf(sms), conNumero, listOf(cuenta), ahora = 0L, categoriaElegida = "Papelería")
+        assertTrue(assertNotNull(elegida.anotacion).leido.categoriasDelNumero.isEmpty())
+
+        val lote = avisosPorConfirmar(listOf(sms), conNumero, listOf(cuenta), ahora = 0L, categoriasElegidas = mapOf("pana" to "Papelería"))
+        assertEquals(listOf("Papelería"), lote.confirmables.map { it.categoria })
     }
 }
