@@ -201,6 +201,17 @@ fun difiereDelEsperado(esperado: Long, real: Long): Boolean = esperado != real
  * que el resto de esta pantalla desde que el «Flujo libre» mintió dos veces: sin el dato, no se
  * dice.
  */
+/** Re-revisión de la vuelta 136 · la banda de «se parece al monto» del amarillo de «Sí, fue este»: ±5 % (la del abono, vuelta 63; elegida). */
+const val BANDA_DEL_MONTO_QUE_SE_PARECE: Int = 5
+
+/**
+ * **¿[real] se parece a [esperado]?** (re-revisión de la vuelta 136): a ±[BANDA_DEL_MONTO_QUE_SE_PARECE] %. Decide el
+ * color de «Sí, fue este» en la hoja de una factura; el aviso «No es el monto que anotaste» sigue comparando exacto
+ * ([difiereDelEsperado]). Sin un esperado comparable (una regla en 0) cuenta como parecido. Pura, con enteros.
+ */
+fun montoQueSeParece(esperado: Long, real: Long): Boolean =
+    esperado <= 0L || kotlin.math.abs(real - esperado) * 100L <= esperado * BANDA_DEL_MONTO_QUE_SE_PARECE
+
 fun avisaMontoDistinto(esperado: Long, montoEsSaldo: Boolean, real: Long, monedaReal: String = "COP"): Boolean =
     // Lo esperado es en pesos. Comparar 20 dólares contra $80.000 daba «no es el monto que
     // anotaste» sobre un pago en dólares normal — mismo criterio que la tarjeta: sin un esperado

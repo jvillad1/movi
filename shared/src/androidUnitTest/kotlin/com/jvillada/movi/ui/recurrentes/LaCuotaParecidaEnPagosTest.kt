@@ -249,7 +249,7 @@ class LaCuotaParecidaEnPagosTest {
         )
         val agua = PagoDelPeriodo(
             ruleId = "rr_agua", nombre = "Agua", monto = 100_000L, pagado = false, diasParaVencer = -6,
-            vence = "2026-10-22", periodoDelSello = "2026-10", categoria = "Servicios", candidatos = listOf(candidato("ev-agua", 100_000L)),
+            vence = "2026-10-22", periodoDelSello = "2026-10", categoria = "Servicios", candidatos = listOf(candidato("ev-agua", 98_000L)),
         )
         val gas = PagoDelPeriodo(
             ruleId = "rr_gas", nombre = "Gas", monto = 60_000L, pagado = false, diasParaVencer = -2,

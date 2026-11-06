@@ -142,6 +142,15 @@ class UnaSolaFilaDeFacturaReglasTest {
         assertTrue(lo(vencida.copy(monto = 4_000_000), otroMonto, conPropuesta = true).candidatoConOtroMonto)
         assertEquals(PrincipalDeLaHoja.NINGUNA, principalDeLaHoja(lo(vencida.copy(monto = 4_000_000), otroMonto, conPropuesta = true)))
         assertEquals(PrincipalDeLaHoja.EL_CANDIDATO, principalDeLaHoja(lo(vencida.copy(monto = 4_000_000), tanqueo, conPropuesta = true)))
+        // Re-revisión (2): a ±5 % es amarillo (+4 %), más allá con borde (+8 %).
+        val regla = vencida.copy(monto = 100_000)
+        assertEquals(PrincipalDeLaHoja.EL_CANDIDATO, principalDeLaHoja(lo(regla, tanqueo.copy(amount = 104_000), conPropuesta = true)))
+        assertEquals(PrincipalDeLaHoja.NINGUNA, principalDeLaHoja(lo(regla, tanqueo.copy(amount = 108_000), conPropuesta = true)))
+        assertEquals(PrincipalDeLaHoja.EL_CANDIDATO, principalDeLaHoja(lo(regla, tanqueo.copy(amount = 98_000), conPropuesta = true)))
+        // El aviso sigue exacto: $98.000 contra $100.000 lo dice, aunque vaya en amarillo.
+        assertTrue(avisoDeMontoDistinto(100_000, false, tanqueo.copy(amount = 98_000)) != null)
+        assertTrue(montoQueSeParece(100_000, 105_000))
+        assertFalse(montoQueSeParece(100_000, 105_001))
         assertEquals(ANOTAR_ESTE_ABONO, etiquetaDeAnotarLaFactura(porVencer.copy(haciaDeuda = "acc_carro")))
         assertEquals(ETIQUETA_ANOTAR, etiquetaDeAnotarLaFactura(porVencer))
     }

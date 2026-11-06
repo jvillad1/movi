@@ -90,11 +90,13 @@ internal data class LoDeLaFactura(
     val evidencia: String?,
 ) {
     /**
-     * Revisión de la 136 (duda 1): la propuesta no es el monto de la factura ([avisoDeMontoDistinto]). Entonces
-     * «Sí, fue este» va con borde: hay que revisarlo antes de confirmar.
+     * Revisión de la 136 (duda 1): la propuesta se aleja del monto de la factura más del ±5 % ([montoQueSeParece];
+     * re-revisión: con el peso exacto casi ninguna factura real tenía amarillo). Entonces «Sí, fue este» va con
+     * borde: hay que revisarlo antes de confirmar. Una tarjeta (saldo) o un pago en otra moneda no se comparan.
      */
     val candidatoConOtroMonto: Boolean
-        get() = propuesta != null && avisoDeMontoDistinto(pago.monto, pago.montoEsSaldo, propuesta) != null
+        get() = propuesta != null && avisoDeMontoDistinto(pago.monto, pago.montoEsSaldo, propuesta) != null &&
+            !montoQueSeParece(pago.monto, propuesta.amount)
 
     /** El movimiento por el que Movi pregunta, si hay uno. */
     val candidato: FinancialEvent? get() = propuesta ?: parecido?.gasto
