@@ -91,5 +91,10 @@ private fun montoConMoneda(rule: RecurringRule): String {
         "USD" -> "US$" + monto
         else  -> rule.currency + " " + monto
     }
-    return if (rule.montoEsSaldo) "saldo $texto" else texto
+    // Revisión 2 de la vuelta 133: como el correo, la cuota de un crédito que cambia es una estimación.
+    return when {
+        rule.montoEsSaldo -> "saldo $texto"
+        rule.cuotaQueCambia != null -> "unos $texto"
+        else -> texto
+    }
 }
