@@ -16,6 +16,8 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -119,6 +121,24 @@ internal fun loDeLaFactura(
         noSuma = if (enElTotal) porQueNoSuma(pago) else null,
         evidencia = evidenciaDeLaFila(pago),
     )
+}
+
+/**
+ * Revisión de la 136 (M3) · **la hoja de la factura, fuera de la lista perezosa.** Pagos pinta sus filas en
+ * items de una `LazyColumn`; la hoja que abre una fila no es un renglón y no debe vivir en el item (con él se
+ * iría). Quien monta la lista guarda esto en su estado y la pinta con sus otras hojas
+ * (`HojasDelTableroDeRecurrentes`): [abierta] es la factura abierta ([claveDeLaFactura]) y [contenido] la hoja
+ * que arma [SeccionChecklistDelPeriodo] con lo que sabe.
+ */
+class HojaDeLaFacturaFuera {
+    var abierta: String? by androidx.compose.runtime.mutableStateOf(null)
+    internal var contenido: (@Composable () -> Unit)? by androidx.compose.runtime.mutableStateOf(null)
+
+    /** Pinta la hoja abierta, si la hay. */
+    @Composable
+    fun Pintar() {
+        if (abierta != null) contenido?.invoke()
+    }
 }
 
 /** La clave de una factura en la lista: su regla y su vencimiento (una regla puede salir en dos períodos). */

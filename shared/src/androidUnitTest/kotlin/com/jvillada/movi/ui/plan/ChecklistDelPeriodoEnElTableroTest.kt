@@ -1,5 +1,7 @@
 package com.jvillada.movi.ui.plan
 
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import com.jvillada.movi.ui.recurrentes.abrirLaFactura
 import com.jvillada.movi.ui.recurrentes.TAG_FILA_DE_FACTURA
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -281,6 +283,18 @@ class ChecklistDelPeriodoEnElTableroTest {
         tocar(subtitulo)
         // Vuelta 136: la hoja de la factura lleva «Editar el pago fijo», que abre la regla.
         esperarTexto("Editar el pago fijo")
+        // Revisión (M3): la hoja no vive en un item de la lista perezosa: se pinta con las demás del tablero.
+        val hojas = composeRule.onAllNodes(hasTestTag(com.jvillada.movi.ui.recurrentes.TAG_HOJA_DE_LA_FACTURA), useUnmergedTree = true)
+        assertEquals(1, hojas.fetchSemanticsNodes().size)
+        assertEquals(
+            0,
+            composeRule.onAllNodes(
+                hasTestTag(com.jvillada.movi.ui.recurrentes.TAG_HOJA_DE_LA_FACTURA) and
+                    hasAnyAncestor(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsActions.ScrollToIndex)),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().size,
+            "la hoja está fuera de la LazyColumn",
+        )
         tocar("Editar el pago fijo")
 
         esperarTexto("Editar recurrente")

@@ -279,6 +279,11 @@ fun SeccionChecklistDelPeriodo(
      * fija por período (ver `GruposPlegadosDeFacturas`). Otro período arranca con su propio defecto.
      */
     claveDelPeriodo: String = "",
+    /**
+     * Revisión de la 136 (M3) · dónde va la hoja de una factura: en el estado de quien monta la lista, que la
+     * pinta fuera de su `LazyColumn` ([HojaDeLaFacturaFuera.Pintar]). `null`: aquí mismo (una lista suelta).
+     */
+    hojaFuera: HojaDeLaFacturaFuera? = null,
 ) {
     // ── El momento de celebrar (Ola 1 · «Que Movi se sienta viva») ──────────────────────────────
     // Cuando el dueño completa la lista —pasa de «falta 1» a «todo pagado» por algo que hizo acá:
@@ -335,8 +340,11 @@ fun SeccionChecklistDelPeriodo(
         extractosDeTarjetas = extractosDeTarjetas,
         enElTotal = enElTotal,
     )
-    // Vuelta 136: la factura cuya hoja está abierta (regla + vencimiento), o `null`.
-    var facturaAbierta by rememberSaveable { mutableStateOf<String?>(null) }
+    // Vuelta 136: la factura cuya hoja está abierta (regla + vencimiento), o `null`. Revisión (M3): con
+    // [hojaFuera], vive en el estado de quien monta la lista, no en este item.
+    var abiertaAqui by rememberSaveable { mutableStateOf<String?>(null) }
+    val facturaAbierta: String? = if (hojaFuera != null) hojaFuera.abierta else abiertaAqui
+    fun abrirLaFactura(clave: String?) { if (hojaFuera != null) hojaFuera.abierta = clave else abiertaAqui = clave }
     @Composable
     fun FilaDe(pago: PagoDelPeriodo, enElTotal: Boolean = true) {
         val lo = loDe(pago, enElTotal)
@@ -345,7 +353,7 @@ fun SeccionChecklistDelPeriodo(
             pago = pago,
             estado = lo.estado,
             extracto = lo.extracto,
-            onAbrir = { facturaAbierta = claveDeLaFactura(pago) },
+            onAbrir = { abrirLaFactura(claveDeLaFactura(pago)) },
         )
         // Vuelta 80: la propuesta «¿Usar siempre Nu para Carro?» ya no cuelga de la fila: va arriba de
         // la lista, como una propuesta de Movi ([PropuestasDeLaCuentaDeLaRegla]).
@@ -367,7 +375,7 @@ fun SeccionChecklistDelPeriodo(
                 boton = lo.candidato?.let(::enlaceDeLaPropuestaLejana) ?: etiquetaDeAnotar(pago.esIngreso),
                 principal = lo.parecido != null && !lo.conPropuesta,
                 habilitado = !lo.enVuelo,
-                onClick = { facturaAbierta = claveDeLaFactura(pago) },
+                onClick = { abrirLaFactura(claveDeLaFactura(pago)) },
             )
         }
     }
@@ -540,13 +548,13 @@ fun SeccionChecklistDelPeriodo(
             ?: anteriores.firstOrNull { claveDeLaFactura(it) == clave }?.let { it to false }
     }
     // Si la factura ya no está (otro período, se pausó), la hoja no queda pendiente de reabrirse sola.
-    LaunchedEffect(abierta == null, cargando) { if (abierta == null && !cargando) facturaAbierta = null }
-    if (abierta != null) {
-        val (pago, enElTotal) = abierta
+    LaunchedEffect(abierta == null, cargando) { if (abierta == null && !cargando) abrirLaFactura(null) }
+    val hoja: (@Composable () -> Unit)? = abierta?.let { (pago, enElTotal) ->
+        {
         val lo = loDe(pago, enElTotal)
         HojaDeLaFactura(
             lo = lo,
-            onCerrar = { facturaAbierta = null },
+            onCerrar = { abrirLaFactura(null) },
             onAnotar = { acciones.onAnotarMovimiento(pago) },
             onConfirmar = { id -> acciones.onConfirmar(pago, id) },
             onNoFueEste = { id -> acciones.onNoFueEste(pago, id) },
@@ -561,6 +569,13 @@ fun SeccionChecklistDelPeriodo(
             etiquetaDeAbrir = etiquetaDeAbrir(pago.ruleId),
             onCargarMinimo = onCargarMinimo?.let { cargar -> { cargar(pago) } },
         )
+        }
+    }
+    if (hojaFuera == null) {
+        hoja?.invoke()
+    } else {
+        // Revisión de la 136 (M3): la hoja se pinta con las demás de quien monta la lista, fuera del item.
+        androidx.compose.runtime.SideEffect { hojaFuera.contenido = hoja }
     }
 }
 

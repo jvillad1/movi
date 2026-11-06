@@ -404,6 +404,9 @@ class EstadoDelTableroDeRecurrentes internal constructor(
      * ya lee Actividad (`getEventsByDay`, que sale del teléfono primero); si no está, no se abre nada.
      */
     internal var movimientoAbierto by mutableStateOf<FinancialEvent?>(null)
+
+    /** Revisión de la vuelta 136 (M3): la hoja de una factura, que se pinta con las demás, fuera de la lista. */
+    internal val hojaDeLaFactura = com.jvillada.movi.ui.recurrentes.HojaDeLaFacturaFuera()
     internal var cuentasDelMovimiento by mutableStateOf<List<Account>>(emptyList())
 
     internal fun abrirMovimiento(eventId: String) {
@@ -1078,6 +1081,7 @@ fun LazyListScope.tableroDeRecurrentes(
             SeccionChecklistDelPeriodo(
                 checklist = checklistConAbonos,
                 claveDelPeriodo = periodoVisible.toString(),
+                hojaFuera = estado.hojaDeLaFactura,
                 anteriores = anteriores,
                 cargando = !estado.recurrentesNoSePudieronLeer && !(estado.vencimientosOk && estado.ocurrenciasOk),
                 pudoLeer = !estado.recurrentesNoSePudieronLeer,
@@ -1370,6 +1374,8 @@ const val TITULO_RECORDATORIOS_SIN_CANAL: String = "Tus recordatorios no llegan"
  */
 @Composable
 fun HojasDelTableroDeRecurrentes(estado: EstadoDelTableroDeRecurrentes, onNavigate: (Screen) -> Unit = {}) {
+    // Revisión de la vuelta 136 (M3): la hoja de una factura de «Tus facturas del período».
+    estado.hojaDeLaFactura.Pintar()
     // Vuelta 40: «Movimiento del 25 oct» de una factura pagada — la hoja de siempre del movimiento.
     estado.movimientoAbierto?.let { evento ->
         val tipos = estado.cuentasDelMovimiento.associate { it.id to it.type }
