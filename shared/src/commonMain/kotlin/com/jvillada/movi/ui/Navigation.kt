@@ -246,6 +246,11 @@ sealed class Screen {
      */
     data object LoQueMoviSabe : Screen()
     /**
+     * Vuelta 135 · **«Movi en Claude»**: la dirección del conector para pegar en Claude, el paso a paso, el comando de
+     * Claude Code y las conexiones activas con «Desconectar». Ficha de Ajustes, como [LoQueMoviSabe].
+     */
+    data object MoviEnClaude : Screen()
+    /**
      * **«Editar inicio»** (Ola 3 · Hoy en una mirada): qué secciones de Hoy se ven y en qué orden. Se
      * abre desde el botón del final de Hoy y desde Ajustes → Perfil. Ficha de Ajustes, como
      * [LoQueMoviSabe]: no marca pestaña, pero la barra sigue abajo.
@@ -420,7 +425,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
     Screen.Accounts, Screen.Credits, Screen.SalidaDeDeudas, Screen.CuadreDeSaldos, is Screen.CuadrarLaCuenta, Screen.TusSeguros,
     Screen.Espacios, is Screen.Espacio, is Screen.Destinos,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos, Screen.Documentos, Screen.Compartir,
-    Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio, Screen.FallosYUso, Screen.TopeDeMoviAi -> NavTab.TU
+    Screen.LoQueMoviSabe, Screen.MoviEnClaude, Screen.BorrarLaCuenta, Screen.EditarInicio, Screen.FallosYUso, Screen.TopeDeMoviAi -> NavTab.TU
     // El detalle hereda la pestaña de la pantalla donde vive la cuenta — así resaltar y
     // «volver» no pueden contradecirse. Las dos (Cuentas y Créditos) son Tú.
     is Screen.AccountDetail -> navTabFor(homeScreenFor(screen.group))
@@ -439,7 +444,7 @@ fun navTabFor(screen: Screen): NavTab? = when (screen) {
 fun esDeAjustes(screen: Screen): Boolean = when (screen) {
     Screen.Mas, is Screen.AIChat,
     Screen.CapturaDelBanco, Screen.Categorias, Screen.PrimerosPasos,
-    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.BorrarLaCuenta, Screen.EditarInicio,
+    Screen.Documentos, Screen.Compartir, Screen.LoQueMoviSabe, Screen.MoviEnClaude, Screen.BorrarLaCuenta, Screen.EditarInicio,
     Screen.FallosYUso, Screen.TopeDeMoviAi -> true
     else -> false
 }

@@ -41,6 +41,10 @@ application {
 
 dependencies {
     implementation(project(":core"))
+    // Vuelta 135 · el conector de Claude llama `planDelCredito` y `mesDeLaPrimeraCuota` de `:core` tal cual las
+    // llama la pantalla de Créditos, y su firma lleva `kotlinx.datetime.LocalDate`. `:core` ya la trae (la misma
+    // versión del catálogo); acá solo se hace visible al compilar, no agrega nada al JAR.
+    implementation(libs.kotlinx.datetime)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.content.negotiation)

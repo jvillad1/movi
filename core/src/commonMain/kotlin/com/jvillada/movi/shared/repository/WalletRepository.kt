@@ -1240,6 +1240,16 @@ interface WalletRepository {
     suspend fun revocarCodigoDeCaptura(): Unit =
         throw UnsupportedOperationException("Este repositorio no revoca códigos de captura")
 
+    /**
+     * Vuelta 135 · `GET /api/conector`: la dirección del conector de Movi para Claude y las conexiones activas.
+     * `null` = no se sabe (un repositorio que no habla con el server).
+     */
+    suspend fun getConectorDeClaude(): com.jvillada.movi.shared.model.ConectorDeClaude? = null
+
+    /** `DELETE /api/conector/conexiones/{id}`: «Desconectar». Revoca el acceso de esa conexión de inmediato. */
+    suspend fun desconectarDeClaude(id: String): Unit =
+        throw UnsupportedOperationException("Este repositorio no desconecta a Claude")
+
     /** `GET /api/captura/descartados`: lo que mandaron los atajos y no se guardó, contado por motivo. `null` = no se sabe. */
     suspend fun getAtajosDescartados(): com.jvillada.movi.shared.model.ResumenDeAtajosDescartados? = null
     suspend fun importStatement(decision: ImportDecision)

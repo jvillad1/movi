@@ -185,6 +185,8 @@ internal val PANTALLAS_BUSCABLES: List<PantallaBuscable> = listOf(
     PantallaBuscable("Compartir", TITULO_DE_TU, Screen.Compartir, listOf("enlace")),
     PantallaBuscable("Movi AI", TITULO_DE_TU, Screen.AIChat(), listOf("asistente", "preguntar")),
     PantallaBuscable("Lo que Movi sabe de ti", TITULO_DE_TU, Screen.LoQueMoviSabe, listOf("memoria")),
+    // Vuelta 135: el conector de Movi para Claude.
+    PantallaBuscable(com.jvillada.movi.ui.mas.TITULO_MOVI_EN_CLAUDE, TITULO_DE_TU, Screen.MoviEnClaude, listOf("claude", "conector", "mcp", "claude code")),
     PantallaBuscable("Editar inicio", TITULO_DE_TU, Screen.EditarInicio, listOf("hoy", "secciones", "orden", "ocultar")),
     PantallaBuscable(tituloDeCapturaDelBanco, TITULO_DE_TU, Screen.CapturaDelBanco, listOf("captura del banco", "mensajes del banco", "sms", "notificaciones", "banco mudo", "correo")),
     PantallaBuscable("Lo anulado", TITULO_DE_TU, Screen.Anulados(), listOf("anulados", "restaurar", "deshacer")),

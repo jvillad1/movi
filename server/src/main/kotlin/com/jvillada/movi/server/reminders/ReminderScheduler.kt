@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.reminders
 
+import com.jvillada.movi.server.conector.limpiarElConector
 import com.jvillada.movi.server.routes.arranqueDeLaFila
 import com.jvillada.movi.server.routes.frecuenciaDeLaFila
 import com.jvillada.movi.server.routes.primerVencimientoDeLaFila
@@ -48,6 +49,13 @@ fun Application.startReminderScheduler() {
             runCatching { com.jvillada.movi.server.observabilidad.Observabilidad.borrarLoViejo(System.currentTimeMillis()) }
                 .onSuccess { if (it > 0) log.info("Observabilidad: $it filas de más de 90 días borradas") }
                 .onFailure { log.warn("Observabilidad: la retención de 90 días falló: ${it.message}") }
+            // Vuelta 135 · el conector de Claude: lo vencido, los clientes DCR sin uso, las llamadas de más de 90
+            // días y las concesiones sin uso en 90 días (ver `limpiarElConector`).
+            runCatching {
+                com.jvillada.movi.server.db.dbQuery { limpiarElConector(System.currentTimeMillis()) }
+            }
+                .onSuccess { if (it > 0) log.info("Conector: $it filas viejas borradas") }
+                .onFailure { log.warn("Conector: la limpieza diaria falló: ${it.message}") }
             delay(24 * 3_600_000L)
         }
     }
