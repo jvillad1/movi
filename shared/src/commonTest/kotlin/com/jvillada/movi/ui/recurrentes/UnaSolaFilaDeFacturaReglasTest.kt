@@ -79,7 +79,7 @@ class UnaSolaFilaDeFacturaReglasTest {
     @Test
     fun `la cifra de una cuota que cambia dice unos, y una tarjeta su saldo`() {
         val cuota = porVencer.copy(ruleId = "credit_acc", cuotaQueCambia = LaCuotaQueCambia())
-        assertEquals(CifraDeLaFactura("\$53.077", antes = ROTULO_DE_LA_CUOTA_ESTIMADA), cifraDeLaFactura(cuota, null))
+        assertEquals(CifraDeLaFactura("\$53.077", estimada = true), cifraDeLaFactura(cuota, null))
         assertEquals(CifraDeLaFactura("\$53.077", despues = "saldo"), cifraDeLaFactura(porVencer.copy(montoEsSaldo = true), null))
         assertEquals(CifraDeLaFactura("\$4.000.000"), cifraDeLaFactura(pagada, null))
     }

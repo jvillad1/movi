@@ -107,9 +107,12 @@ data class SinMargenParaElDiaADia(
     val diaADia: String,
     val semana: String,
     val hoy: String,
-    val pesan: List<Pair<String, Long>>,
+    val pesan: List<PagoQuePesa>,
     val verTodos: String?,
 )
+
+/** Vuelta 134 · un pago de «Lo que más pesa»: su nombre con la fecha, su monto y si es una estimación («unos»). */
+data class PagoQuePesa(val nombre: String, val monto: Long, val estimada: Boolean = false)
 
 /** El rótulo de la fila del período sin margen. */
 const val DIA_A_DIA_DEL_PERIODO: String = "Día a día del período"
@@ -146,7 +149,7 @@ fun sinMargenParaElDiaADia(
         pesan = faltan.take(PAGOS_QUE_MAS_PESAN).map { pago ->
             val cuando = runCatching { LocalDate.parse(pago.vence) }.getOrNull()
                 ?.let { " · ${com.jvillada.movi.shared.model.fechaCortaDeLaPregunta(it)}" }.orEmpty()
-            "${pago.nombre}$cuando" to pago.monto
+            PagoQuePesa("${pago.nombre}$cuando", pago.monto, com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago))
         },
         verTodos = when (faltan.size) {
             0 -> null

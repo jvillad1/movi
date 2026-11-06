@@ -185,9 +185,6 @@ fun lineaDelMinimo(pago: PagoDelPeriodo): String? {
 /** El tag de esa línea. */
 const val TAG_FALTA_DEL_MINIMO: String = "pagos:falta-del-minimo"
 
-/** Vuelta 133 · lo que va antes del monto de una cuota que cambia: es una estimación. */
-const val ROTULO_DE_LA_CUOTA_ESTIMADA: String = "unos"
-
 /** Vuelta 133 · el tag de «La de octubre fue $Y» en la fila. */
 const val TAG_CUOTA_ANTERIOR_DE_LA_FILA: String = "pagos:cuota-anterior"
 
@@ -415,21 +412,20 @@ fun fechaDeLaFactura(pago: PagoDelPeriodo): String =
 
 /**
  * **La cifra de una factura y lo que la acompaña** (vuelta 136): «unos» antes del monto de una cuota que
- * cambia sin pagar (vuelta 133), y después «saldo» si el monto de una tarjeta es su saldo o «extracto» si es
- * lo facturado al corte (vuelta 62). La misma en la fila y en la hoja. Pura.
+ * cambia sin pagar ([estimada], la regla única `laCifraDelPagoEsEstimada` de la vuelta 134, que la pinta
+ * `ConUnos`), y después «saldo» si el monto de una tarjeta es su saldo o «extracto» si es lo facturado al
+ * corte (vuelta 62). La misma en la fila y en la hoja. Pura.
  *
- * @property antes lo que va antes del monto, o `null`.
- * @property despues lo que va después, o `null`.
+ * @property despues lo que va después del monto, o `null`.
  */
-data class CifraDeLaFactura(val texto: String, val antes: String? = null, val despues: String? = null)
+data class CifraDeLaFactura(val texto: String, val estimada: Boolean = false, val despues: String? = null)
 
 /** Ver [CifraDeLaFactura]. Pura. */
 fun cifraDeLaFactura(pago: PagoDelPeriodo, extracto: ExtractoDeLaTarjeta?): CifraDeLaFactura = when {
     // Vuelta 62: lo que pide el extracto, no el saldo entero.
     extracto != null -> CifraDeLaFactura(montoDelExtracto(extracto.facturado, extracto.moneda), despues = ROTULO_DEL_EXTRACTO)
-    // Vuelta 133: la cuota que cambia es una estimación, y se dice («unos $X»).
-    !pago.hecho && pago.cuotaQueCambia != null ->
-        CifraDeLaFactura(textoDelMontoDelChecklist(pago), antes = ROTULO_DE_LA_CUOTA_ESTIMADA)
+    // Vuelta 133/134: la cuota que cambia es una estimación, y se dice («unos $X»), con la regla única.
+    com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago) -> CifraDeLaFactura(textoDelMontoDelChecklist(pago), estimada = true)
     // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.
     !pago.hecho && pago.montoEsSaldo -> CifraDeLaFactura(textoDelMontoDelChecklist(pago), despues = "saldo")
     else -> CifraDeLaFactura(textoDelMontoDelChecklist(pago))
@@ -511,9 +507,11 @@ private fun CifraYFechaDeLaFactura(cifra: CifraDeLaFactura, fecha: String) {
 /** El monto de [cifra] con lo que va antes y después, en la variante [variante]. Fila y hoja. */
 @Composable
 internal fun CifraConRotulosDeLaFactura(cifra: CifraDeLaFactura, variante: VarianteDeCifra) {
-    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-        cifra.antes?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1) }
-        MontoDeFila(cifra.texto, color = Movi.colores.texto, variante = variante)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
+        // Vuelta 134: «unos» se arma en un solo lugar (`ConUnos`).
+        com.jvillada.movi.ui.components.ds.ConUnos(estimada = cifra.estimada) {
+            MontoDeFila(cifra.texto, color = Movi.colores.texto, variante = variante)
+        }
         cifra.despues?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1) }
     }
 }

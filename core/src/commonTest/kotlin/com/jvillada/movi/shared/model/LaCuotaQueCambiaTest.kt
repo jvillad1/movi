@@ -68,6 +68,28 @@ class LaCuotaQueCambiaTest {
         assertNull(antes.tipoDeCuota)
     }
 
+    /**
+     * Vuelta 134 (M-9) · **con cifras fijas, no la función contra sí misma.** La prueba de arriba compara
+     * `planDelCredito` con `planDeUnaDeuda`: una regresión dentro de `planDeUnaDeuda` con `tipo = null` le
+     * pasaría a los dos lados. Estas cifras salen de la amortización francesa a mano: 12 % EA es
+     * 0,9488793 % al mes; el primer mes, 12.000.000 × eso = $113.866 de interés y $951.134 a capital, y
+     * con $1.065.000 al mes la deuda se acaba en 12 cuotas con $751.481 de intereses.
+     */
+    @Test
+    fun `un credito viejo sin los campos da el plan de antes, con cifras fijas`() {
+        for (t in listOf(terms, terms.copy(tipoDeCuota = TipoDeCuota.FIJA))) {
+            val plan = assertNotNull(planDelCredito(credito(t, ultima = pagadaEnOctubre)))
+            assertEquals(1_065_000L, plan.cuota)
+            assertEquals(113_866L, plan.interes)
+            assertEquals(951_134L, plan.capital)
+            assertEquals(12, plan.mesesHastaLaUltimaCuota)
+            assertEquals(751_481L, plan.interesPorPagar)
+            assertEquals(ComoVaLaDeuda.AMORTIZA, plan.comoVa)
+            assertNull(plan.cuotaAlFinal, "una cuota fija no dice hacia dónde va")
+            assertNull(plan.cuotaEnUnAno)
+        }
+    }
+
     @Test
     fun `abono constante · la cuota baja cada mes y los capitales suman lo prestado`() {
         val t = terms.copy(tipoDeCuota = TipoDeCuota.ABONO_CONSTANTE)
@@ -197,5 +219,21 @@ class LaCuotaQueCambiaTest {
         assertTrue(esCuotaQueSeComparaConLaPactada(terms))
         assertTrue(!esCuotaQueSeComparaConLaPactada(terms.copy(tipoDeCuota = TipoDeCuota.UVR)))
         assertTrue(!esCuotaQueSeComparaConLaPactada(terms.copy(tipoDeCuota = TipoDeCuota.ABONO_CONSTANTE)))
+    }
+
+    // ── Vuelta 134 (M-2) · una sola regla para decir «unos» ─────────────────────────────────────
+
+    @Test
+    fun `la cifra de un pago es estimada solo si es la cuota pendiente de un credito que cambia`() {
+        val cuota = PagoDelPeriodo(
+            ruleId = "credit_acc_libre", nombre = "Cuota Libre inversión", monto = 1_080_500, pagado = false,
+            diasParaVencer = 3, cuotaQueCambia = LaCuotaQueCambia(pagadaEnOctubre),
+        )
+        assertTrue(laCifraDelPagoEsEstimada(cuota))
+        assertTrue(!laCifraDelPagoEsEstimada(cuota.copy(pagado = true)), "pagada, la cifra es lo que salió de verdad")
+        assertTrue(!laCifraDelPagoEsEstimada(cuota.copy(cuotaQueCambia = null)), "una cuota fija se dice tal cual")
+        assertEquals("unos \$1.080.500", conUnosSiEsEstimada("\$1.080.500", estimada = true))
+        assertEquals("\$1.080.500", conUnosSiEsEstimada("\$1.080.500", estimada = false))
+        assertEquals("unos \$1.080.500", cuotaEnPalabras(terms.copy(tipoDeCuota = TipoDeCuota.UVR), pagadaEnOctubre))
     }
 }

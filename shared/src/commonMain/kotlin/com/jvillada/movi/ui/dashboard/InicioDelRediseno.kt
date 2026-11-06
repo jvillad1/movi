@@ -396,6 +396,8 @@ data class PropuestaDelInicio(
     val accion: String,
     val alTocar: AccionDeLaPropuesta,
     val cifra: Long? = null,
+    /** Vuelta 134: [cifra] es una estimación (la cuota de un crédito que cambia) y se dice «unos». */
+    val cifraEstimada: Boolean = false,
     val moneda: String = "COP",
     val cuerpo: String? = null,
     val accionSecundaria: String? = null,
@@ -502,6 +504,7 @@ private fun propuestaDePago(data: DashboardData): PropuestaDelInicio? {
         tipo = TipoDePropuesta.PAGO,
         titulo = "${pago.nombre} $cuando",
         cifra = cifra,
+        cifraEstimada = com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago),
         moneda = pago.moneda,
         cuerpo = when {
             conCandidatos -> "Movi encontró movimientos que podrían ser este pago"

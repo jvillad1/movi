@@ -17,6 +17,9 @@ import com.jvillada.movi.shared.model.TRANSFER_CATEGORY
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.group
 import com.jvillada.movi.shared.model.palabrasClave
+import com.jvillada.movi.server.credits.toCreditTerms
+import com.jvillada.movi.server.reminders.ultimasCuotasPagadasDe
+import com.jvillada.movi.shared.model.cuotaCambia
 import kotlin.math.roundToLong
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNotNull
@@ -29,11 +32,37 @@ data class DeudaDelDueno(
     val cuenta: Account,
     /** El banco que escribió el dueño en las condiciones del crédito («Banco de Occidente»). */
     val banco: String? = null,
-    /** La cuota mensual, para desempatar dos créditos del mismo banco. */
+    /**
+     * La cuota de este mes, para desempatar dos créditos del mismo banco. Vuelta 134 (M-8): la de
+     * [com.jvillada.movi.shared.model.cuotaDeEsteMes] —en un crédito que cambia, la última pagada de verdad—,
+     * no la pactada: con abono constante la pactada se aleja cada mes y el aviso dejaba de reconocerse.
+     */
     val cuota: Long? = null,
+    /** Vuelta 134 (M-8): [cuota] es una estimación (el crédito cambia): se reconoce de cerca, no exacta. */
+    val cuotaEstimada: Boolean = false,
     /** La paga otro (`paidBy`) o es una libranza: no sale por PSE de una cuenta suya. */
     val noLaPagaEl: Boolean = false,
 )
+
+/**
+ * Vuelta 134 (M-8) · **el crédito cuya cuota es [monto]**, entre [candidatas] del mismo banco, en dos pasos:
+ *
+ * 1. **Exacto, como siempre**: si alguna cuota es [monto] al peso, decide eso (una o ninguna si son dos). Un
+ *    crédito de cuota fija se reconoce exactamente como antes de la vuelta 133, aunque al lado haya uno que
+ *    cambia con una cuota parecida (revisión 134, I-1: Vehículo 4083 en $980.000 fijo y Libre inversión 9695
+ *    en unos $1.080.500; un aviso de $980.000 sigue siendo el Vehículo).
+ * 2. **De cerca, solo si nadie calzó exacto y solo entre los que cambian**: a
+ *    ±[com.jvillada.movi.shared.model.MARGEN_DE_LA_CUOTA_QUE_SE_PARECE] % de la de este mes, la cercanía de
+ *    «¿Es la cuota de X?» (`montoSeAcercaALaCuota`): la estimación es la del mes pasado y la de este casi
+ *    nunca da igual al peso.
+ */
+internal fun cuotaQueReconoce(candidatas: List<DeudaDelDueno>, monto: Long): DeudaDelDueno? {
+    val exactas = candidatas.filter { it.cuota == monto }
+    if (exactas.isNotEmpty()) return exactas.singleOrNull()
+    return candidatas
+        .filter { d -> d.cuotaEstimada && d.cuota?.let { com.jvillada.movi.shared.model.montoSeAcercaALaCuota(monto, it) } == true }
+        .singleOrNull()
+}
 
 /** Una regla recurrente del dueño, reducida a lo que sirve para saber de qué cuenta sale. */
 data class ReglaDelDueno(val nombre: String, val cuentaId: String?, val tipo: TransactionType)
@@ -102,10 +131,11 @@ fun loQueMoviSabeDelPago(
     val porId = cuentas.associateBy { it.id }
 
     val deuda: Account? = when (parsed.category) {
-        CUOTA_CATEGORY -> unaSola(
-            deudas.filter { !it.noLaPagaEl && it.cuenta.type == AccountType.LOAN && it.cuenta.currency == parsed.currency }
-                .filter { nombra("${it.cuenta.name} ${it.banco.orEmpty()}", marca) },
-        ) { it.cuota == parsed.amount.roundToLong() }?.cuenta
+        CUOTA_CATEGORY -> deudas
+            .filter { !it.noLaPagaEl && it.cuenta.type == AccountType.LOAN && it.cuenta.currency == parsed.currency }
+            .filter { nombra("${it.cuenta.name} ${it.banco.orEmpty()}", marca) }
+            .let { candidatas -> candidatas.singleOrNull() ?: cuotaQueReconoce(candidatas, parsed.amount.roundToLong()) }
+            ?.cuenta
         CARD_PAYMENT_CATEGORY -> cuentas
             .filter { it.type == AccountType.CREDIT_CARD && it.currency == parsed.currency && nombra(it.name, marca) }
             .singleOrNull()
@@ -201,10 +231,6 @@ fun pagosPorPseDe(avisos: List<Pair<String, String>>, eventos: List<FinancialEve
         .eachCount()
 }
 
-/** Uno solo; con varios, el único que cumple [desempate]; si no, ninguno. */
-private fun <T> unaSola(candidatas: List<T>, desempate: (T) -> Boolean): T? =
-    candidatas.singleOrNull() ?: candidatas.filter(desempate).singleOrNull()
-
 /** «Coomeva» nombra a «Coomeva Medicina Prepagada»; «Celular» no nombra a «Colombia Telecomunicaciones». */
 private fun reglaNombraALaEmpresa(nombreDeLaRegla: String, marcaDeLaEmpresa: List<String>): Boolean {
     val marcaDeLaRegla = marcaDe(nombreDeLaRegla)
@@ -231,13 +257,17 @@ private fun origenDeLosPagosA(deuda: Account, eventos: List<FinancialEvent>, ori
 fun Transaction.loQueMoviSabeDelPagoDe(uid: String, parsed: ParsedSms): ParsedSms {
     val cuentas = Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() }
     val porId = cuentas.associateBy { it.id }
-    val conCondiciones = Credits.selectAll().where { Credits.userId eq uid }.mapNotNull { fila ->
-        val cuenta = porId[fila[Credits.accountId]] ?: return@mapNotNull null
+    // Vuelta 134 (M-8): la cuota de este mes, de la misma función que Pagos (en uno que cambia, la última pagada).
+    val condiciones = Credits.selectAll().where { Credits.userId eq uid }
+        .mapNotNull { fila -> porId[fila[Credits.accountId]]?.let { it to fila.toCreditTerms() } }
+    val ultimas = ultimasCuotasPagadasDe(uid, condiciones.map { (cuenta, terms) -> terms to cuenta.name })
+    val conCondiciones = condiciones.map { (cuenta, terms) ->
         DeudaDelDueno(
             cuenta = cuenta,
-            banco = fila[Credits.bank],
-            cuota = fila[Credits.installment],
-            noLaPagaEl = fila[Credits.paidBy] != null || fila[Credits.payrollDeduction] == true,
+            banco = terms.bank,
+            cuota = com.jvillada.movi.shared.model.cuotaDeEsteMes(terms, ultimas[terms.accountId]),
+            cuotaEstimada = terms.cuotaCambia(),
+            noLaPagaEl = terms.paidBy != null || terms.payrollDeduction,
         )
     }
     // Un crédito sin condiciones cargadas igual se reconoce por su nombre.

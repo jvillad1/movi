@@ -151,7 +151,7 @@ class UnaSolaFilaDeFacturaTest {
         for (estado in listOf("Vence el 22 nov", "Venció hace 3 días", "¿Es el de \$4.000.000?", "Pagado · 25 oct", "Abono planeado · el día 15", "Se cobra sola el 10")) {
             assertTrue(composeRule.onAllNodesWithText(estado, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "«$estado»")
         }
-        assertTrue(composeRule.onAllNodesWithText(ROTULO_DE_LA_CUOTA_ESTIMADA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "«unos» antes de la cuota estimada")
+        assertTrue(composeRule.onAllNodesWithTag(com.jvillada.movi.ui.components.ds.TAG_UNOS_DE_LA_CIFRA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty(), "«unos» antes de la cuota estimada")
         // Ni botones ni «⋯» en la fila.
         for (boton in listOf(ETIQUETA_ANOTAR, ETIQUETA_SI_FUE_ESTE, ETIQUETA_QUITAR_LA_MARCA)) {
             assertTrue(composeRule.onAllNodesWithText(boton, useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "«$boton» no está en la fila")

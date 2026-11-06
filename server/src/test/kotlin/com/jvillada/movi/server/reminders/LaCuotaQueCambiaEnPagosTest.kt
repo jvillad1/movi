@@ -81,4 +81,50 @@ class LaCuotaQueCambiaEnPagosTest {
         val ultima = ultimaCuotaPagadaDe(virtualRuleFor(terms.copy(tipoDeCuota = TipoDeCuota.UVR), libre.name), enPartes)
         assertEquals(CuotaPagada(1_262_300, "2026-10"), ultima, "las dos partes de octubre, no solo la última")
     }
+
+    /**
+     * Vuelta 134 (N-3) · un giro repartido en dos partes que pagan las cuotas atrasadas de septiembre y
+     * octubre del mismo crédito: las dos partes llevan la misma fecha y se escribieron juntas (el mismo
+     * `createdAt`, como las escribe `escribirLasPartes`), así que caen en el mismo período. Sumarlas daba una
+     * «cuota» de $2.524.600; es una cuota de $1.262.300 pagada dos veces.
+     */
+    @Test
+    fun `un giro que paga dos cuotas atrasadas del mismo credito no duplica la estimacion`() {
+        val dia = LocalDate.of(2026, 10, 20)
+        val escritas = 1_793_000_000_000L
+        val giro = (pago(dia, 1_262_300, "parte1") + pago(dia, 1_262_300, "parte2")).map { it.copy(createdAt = escritas) }
+        val uvr = terms.copy(tipoDeCuota = TipoDeCuota.UVR)
+        val ultima = ultimaCuotaPagadaDe(virtualRuleFor(uvr, libre.name), pago(LocalDate.of(2026, 9, 5), 1_240_000, "sep") + giro)
+        assertEquals(CuotaPagada(1_262_300, "2026-10", pagadoEnElPeriodo = 2_524_600, cuotasEnElPeriodo = 2), ultima, "dos partes del mismo pago son dos cuotas, no una del doble")
+
+        // Lo mismo con las partes de un movimiento dividido (`repartoDe`), aunque no compartan el instante.
+        val dividido = pago(dia, 1_262_300, "d1").map { it.copy(repartoDe = "ev_original") } +
+            pago(dia, 1_262_300, "d2").map { it.copy(repartoDe = "ev_original", createdAt = escritas + 5) }
+        assertEquals(CuotaPagada(1_262_300, "2026-10", 2_524_600, 2), ultimaCuotaPagadaDe(virtualRuleFor(uvr, libre.name), dividido))
+
+        // Y dos pagos de verdad (anotados en momentos distintos) siguen sumando: es la cuota pagada en partes.
+        val enDosPagos = pago(dia, 600_000, "a").map { it.copy(createdAt = escritas) } +
+            pago(dia, 662_300, "b").map { it.copy(createdAt = escritas + 60_000) }
+        assertEquals(CuotaPagada(1_262_300, "2026-10"), ultimaCuotaPagadaDe(virtualRuleFor(uvr, libre.name), enDosPagos))
+    }
+
+    /**
+     * Revisión de la vuelta 134 (m-4) · un pago suelto de la cuota más un giro repartido en dos cuotas, en el
+     * mismo período: son tres cuotas ($3.786.900 ÷ 3), no dos (que daba unos $1.893.450 de cuota).
+     */
+    @Test
+    fun `un pago suelto mas un giro de dos cuotas en el mismo periodo son tres cuotas`() {
+        val dia = LocalDate.of(2026, 10, 20)
+        val escritas = 1_793_000_000_000L
+        val suelto = pago(LocalDate.of(2026, 10, 5), 1_262_300, "suelto").map { it.copy(createdAt = escritas - 1_000_000) }
+        val giro = (pago(dia, 1_262_300, "g1") + pago(dia, 1_262_300, "g2")).map { it.copy(createdAt = escritas) }
+        val uvr = terms.copy(tipoDeCuota = TipoDeCuota.UVR)
+        assertEquals(
+            CuotaPagada(1_262_300, "2026-10", pagadoEnElPeriodo = 3_786_900, cuotasEnElPeriodo = 3),
+            ultimaCuotaPagadaDe(virtualRuleFor(uvr, libre.name), suelto + giro),
+        )
+        // Una cuota pagada en dos momentos sigue siendo una.
+        val enDos = pago(dia, 600_000, "a").map { it.copy(createdAt = escritas) } + pago(dia, 662_300, "b").map { it.copy(createdAt = escritas + 1) }
+        assertEquals(1, cuotasQueCubreElPeriodo(enDos.filter { it.accountId == libre.id }))
+    }
 }

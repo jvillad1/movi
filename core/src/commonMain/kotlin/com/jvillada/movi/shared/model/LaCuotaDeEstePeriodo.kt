@@ -38,6 +38,16 @@ fun vencimientoEnElPeriodo(dia: Int, periodo: PeriodoFinanciero, ajustes: Period
 }
 
 /**
+ * Vuelta 134 (N-4) · **el sello de la cuota del día [dia] de [periodo]** (`"2026-10"`): el mes de su
+ * vencimiento dentro del período ([vencimientoEnElPeriodo]), que es como el server sella una cuota
+ * (`periodOf` del vencimiento) y como la ficha la nombra. **No es el prefijo del período**: con corte 25 y
+ * la cuota el 30, la del período de noviembre (25-oct → 24-nov) vence el 30 de octubre y se sella
+ * «2026-10». `null` si el período no trae ese día. Pura.
+ */
+fun selloDeLaCuotaDelPeriodo(dia: Int, periodo: PeriodoFinanciero, ajustes: PeriodSettings): String? =
+    vencimientoEnElPeriodo(dia, periodo, ajustes)?.let { PeriodoFinanciero(it.year, it.monthNumber).prefijo }
+
+/**
  * **¿La cuota del día [dia] de este período ya venció?** Es cuando el alta de un crédito pregunta
  * «¿Ya pagaste la cuota de este período?»: si todavía no vence, no hay nada vencido que esconder y la
  * cuota queda en Pagos como cualquier otra. Pura.

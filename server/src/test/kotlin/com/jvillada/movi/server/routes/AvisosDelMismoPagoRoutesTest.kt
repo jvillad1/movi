@@ -342,6 +342,52 @@ class AvisosDelMismoPagoRoutesTest {
         assertEquals(24, transaction { Events.selectAll().where { Events.id eq "ev_panaderia" }.first()[Events.cuotas] })
     }
 
+    private fun tarjetaDe(uid: String) = transaction {
+        Accounts.insert {
+            it[Accounts.id] = "tarjeta-$uid"
+            it[userId] = uid
+            it[name] = "Master 3684"
+            it[type] = "CREDIT_CARD"
+            it[balance] = 0L
+            it[currency] = "COP"
+        }
+    }
+
+    /** Vuelta 134 (M-9): las cuotas no abren una puerta a la tarjeta de otro. */
+    @Test
+    fun `vuelta 134 · confirmar con cuotas en la tarjeta de otro usuario es 404 y no anota nada`() = testApplication {
+        application { testModule() }
+        tarjetaDe(b)
+        subir(a, deWallet, delSms, deLaApp)
+        val g = grupo(a, bandeja(a).first().grupoId!!)
+        val ids = g.miembros.map { it.id }
+        val ajena = confirmar(a, g.grupoId, ConfirmarElMismoPago(ids, evento = movimiento(a).copy(accountId = "tarjeta-$b", cuotas = 12)))
+        assertEquals(HttpStatusCode.NotFound, ajena.status, ajena.bodyAsText())
+        assertEquals(0, movimientosDe(a))
+        assertEquals(0, movimientosDe(b))
+        assertTrue(bandeja(a).none { it.state == SMS_STATE_CONFIRMED }, "los avisos siguen por revisar")
+    }
+
+    /** Vuelta 134 (M-9): el doble toque con cuotas devuelve lo mismo y no las cambia. */
+    @Test
+    fun `vuelta 134 · el doble toque con cuotas no crea otro movimiento ni cambia las cuotas`() = testApplication {
+        application { testModule() }
+        tarjetaDe(a)
+        subir(a, deWallet, delSms, deLaApp)
+        val g = grupo(a, bandeja(a).first().grupoId!!)
+        val ids = g.miembros.map { it.id }
+        val pedido = ConfirmarElMismoPago(ids, evento = movimiento(a).copy(accountId = "tarjeta-$a", cuotas = 24))
+        val primero = confirmar(a, g.grupoId, pedido)
+        assertEquals(HttpStatusCode.OK, primero.status, primero.bodyAsText())
+        val segundo = confirmar(a, g.grupoId, pedido.copy(evento = pedido.evento!!.copy(cuotas = 36)))
+        assertEquals(HttpStatusCode.OK, segundo.status, segundo.bodyAsText())
+        val repetido: MismoPagoConfirmado = segundo.body()
+        assertEquals(false, repetido.creado, "el segundo toque no crea nada")
+        assertEquals("ev_panaderia", repetido.eventoId)
+        assertEquals(1, movimientosDe(a))
+        assertEquals(24, transaction { Events.selectAll().where { Events.id eq "ev_panaderia" }.first()[Events.cuotas] })
+    }
+
     @Test
     fun `vuelta 133 · unas cuotas en un gasto de ahorros no se guardan`() = testApplication {
         application { testModule() }

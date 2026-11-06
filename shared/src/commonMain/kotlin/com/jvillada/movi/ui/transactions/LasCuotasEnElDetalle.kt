@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.Account
+import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.FinancialEvent
 import com.jvillada.movi.shared.model.isOpeningBalance
 import com.jvillada.movi.shared.model.llevaCuotas
@@ -35,9 +36,21 @@ import kotlinx.coroutines.launch
  * `LocalRepository.updateEventCuotas`).
  */
 
-/** ¿El detalle de [evento] ofrece las cuotas? Un gasto suelto de una tarjeta de crédito, vivo. Pura. */
-fun ofreceLasCuotas(evento: FinancialEvent, cuentas: List<Account>): Boolean =
-    llevaCuotas(evento, cuentas.firstOrNull { it.id == evento.accountId }?.type) && !isOpeningBalance(evento)
+/**
+ * ¿El detalle de [evento] ofrece las cuotas? Un gasto suelto de una tarjeta de crédito, vivo. Pura.
+ *
+ * Vuelta 134 (M-6) · **se decide igual antes y después de que lleguen las cuentas**, para que el renglón no
+ * salte: con [cuentas] todavía vacías, el tipo sale de las que el Inicio ya leyó ([cacheadas],
+ * `DashboardDataCache`); y sin ninguna, un movimiento que ya trae cuotas es una compra con tarjeta (el server
+ * solo las guarda en un gasto de una `CREDIT_CARD`). Antes el encabezado decía «a 12 cuotas» y, al llegar las
+ * cuentas, eso se iba y aparecía el renglón más abajo.
+ */
+fun ofreceLasCuotas(evento: FinancialEvent, cuentas: List<Account>, cacheadas: List<Account> = emptyList()): Boolean {
+    if (isOpeningBalance(evento)) return false
+    val tipo = (cuentas.firstOrNull { it.id == evento.accountId } ?: cacheadas.firstOrNull { it.id == evento.accountId })?.type
+        ?: if (evento.cuotas != null) AccountType.CREDIT_CARD else null
+    return llevaCuotas(evento, tipo)
+}
 
 /** El tag del renglón de las cuotas en el detalle. */
 const val TAG_CUOTAS_EN_EL_DETALLE: String = "movimiento:cuotas-del-detalle"

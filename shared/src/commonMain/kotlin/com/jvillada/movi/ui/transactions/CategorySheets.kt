@@ -977,6 +977,9 @@ internal fun ContenidoDelMovimiento(
         },
     ) {
         Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
+            // Vuelta 134 (M-6): una sola decisión para el encabezado, la ficha y el renglón, que no cambia
+            // cuando las cuentas llegan tarde (ver [ofreceLasCuotas]).
+            val cuotasEnSuRenglon = ofreceLasCuotas(event, cuentas, DashboardDataCache.data?.accounts.orEmpty())
             // ── Lo que se lee primero: quién, cuánto, cuándo y en qué categoría. ──
             EncabezadoDelMovimiento(
                 evento = renombradoAca ?: event,
@@ -984,6 +987,7 @@ internal fun ContenidoDelMovimiento(
                 onEditar = { accion = AccionDelMovimiento.Nota },
                 espacios = espacios,
                 ficha = ficha,
+                cuotasEnSuRenglon = cuotasEnSuRenglon,
             )
             Spacer(Modifier.height(Espacio.s))
             if (ficha) {
@@ -996,7 +1000,7 @@ internal fun ContenidoDelMovimiento(
                         espacio = espacios.firstOrNull { it.id == event.espacioId },
                         hoy = hoyDeLaFicha,
                         // Vuelta 133: las de una compra con tarjeta van en su renglón, que las cambia.
-                        conLasCuotasAparte = ofreceLasCuotas(event, cuentas),
+                        conLasCuotasAparte = cuotasEnSuRenglon,
                     ),
                     abierta = accion,
                     onElegir = { if (!saving) alternar(it) },
@@ -1024,7 +1028,7 @@ internal fun ContenidoDelMovimiento(
                 ParteDeUnaCompra(evento = event, onDeshecho = onEventChanged)
             }
             // Vuelta 133: una compra con tarjeta dice a cuántas cuotas fue, y se cambia ahí mismo.
-            if (ofreceLasCuotas(event, cuentas)) {
+            if (cuotasEnSuRenglon) {
                 Spacer(Modifier.height(Espacio.xs))
                 CuotasDelMovimiento(evento = event, onCambiado = onEventChanged)
             }

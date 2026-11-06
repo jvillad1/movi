@@ -367,10 +367,13 @@ private fun SinMargenEnLaTarjeta(s: SinMargenParaElDiaADia, onVerPagos: (() -> U
         if (s.pesan.isNotEmpty()) {
             Spacer(Modifier.height(Espacio.xxs))
             Text(LO_QUE_MAS_PESA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            s.pesan.forEach { (nombre, monto) ->
+            s.pesan.forEach { (nombre, monto, estimada) ->
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(nombre, style = Movi.textos.apoyo, color = Movi.colores.texto, modifier = Modifier.weight(1f), maxLines = 2)
-                    CifraDelSistema(monto, VarianteDeCifra.Chica, forma = FormaDeCifra.Entera)
+                    // Vuelta 134: la cuota estimada de un crédito que cambia dice «unos».
+                    com.jvillada.movi.ui.components.ds.ConUnos(estimada) {
+                        CifraDelSistema(monto, VarianteDeCifra.Chica, forma = FormaDeCifra.Entera)
+                    }
                 }
             }
         }
