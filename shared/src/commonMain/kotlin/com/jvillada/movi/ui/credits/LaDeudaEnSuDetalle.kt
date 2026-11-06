@@ -237,7 +237,7 @@ fun SeccionDeLaDeuda(
         if (conCondiciones) {
             Seccion(titulo = if (prestamo != null) "El préstamo" else "La tarjeta")
             Superficie(modifier = Modifier.fillMaxWidth(), relleno = RellenoDeSuperficie.Lista) {
-                if (prestamo != null) LoQueDiceElPrestamo(prestamo, deuda.plan, deuda.primeraCuota, deuda.periodoActual)
+                if (prestamo != null) LoQueDiceElPrestamo(prestamo, deuda.plan, deuda.primeraCuota, deuda.periodoActual, deuda.ajustes)
                 if (tarjeta != null) LoQueDiceLaTarjeta(tarjeta)
             }
         }
@@ -324,6 +324,8 @@ private fun LoQueDiceElPrestamo(
     /** El mes de la primera cuota sin pagar: de ahí se cuenta la última (vuelta 59). */
     primeraCuota: PeriodoFinanciero,
     periodoActual: PeriodoFinanciero,
+    /** Vuelta 134 · el período del dueño, para saber qué cuota es la de este período (N-4). */
+    ajustes: PeriodSettings,
 ) {
     val t = credit.terms ?: return
     val hoy = hoyEnAppZone()
@@ -342,7 +344,7 @@ private fun LoQueDiceElPrestamo(
     )
     BajoLaFila {
         // Vuelta 133: una cuota que cambia dice por qué, que es una estimación y cuánto fue la última.
-        lineasDeLaCuotaQueCambia(t, credit.ultimaCuotaPagada, plan, periodoActual).forEach { linea ->
+        lineasDeLaCuotaQueCambia(t, credit.ultimaCuotaPagada, plan, periodoActual, ajustes).forEach { linea ->
             Text(linea, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_CUOTA_QUE_CAMBIA))
         }
         // Quién la paga, si no es el dueño: un estado de la cuota, en una píldora.

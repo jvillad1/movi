@@ -60,4 +60,28 @@ class LaCuotaQueCambiaEnPantallaTest {
             textoDeLaCuotaEnLaFicha(LaCuotaEnLaFicha(PeriodoFinanciero(2026, 11), pagada = false, monto = 1_200_000)),
         )
     }
+
+    /**
+     * Vuelta 134 (N-4) · con corte 25 y la cuota el 30, la del período de noviembre (25-oct → 24-nov) vence el
+     * 30 de octubre y el server la sella «2026-10». La ficha comparaba con el prefijo del período («2026-11»)
+     * y seguía diciendo «Este mes, unos $X» con la cuota ya pagada.
+     */
+    @Test
+    fun `con corte 25 y cuota del 30 la ficha dice lo pagado`() {
+        val variable = terms.copy(tipoDeCuota = TipoDeCuota.TASA_VARIABLE, dayOfMonth = 30)
+        val corte25 = com.jvillada.movi.shared.model.PeriodSettings(cutoffDay = 25)
+        val noviembre = PeriodoFinanciero(2026, 11)
+        assertEquals("2026-10", com.jvillada.movi.shared.model.selloDeLaCuotaDelPeriodo(30, noviembre, corte25))
+        assertEquals(
+            "Este mes pagaste \$1.262.300",
+            lineasDeLaCuotaQueCambia(variable, octubre, plan = null, periodoActual = noviembre, ajustes = corte25)[1],
+        )
+        // La de septiembre (sellada «2026-09») no es la de este período: sigue la estimación.
+        assertEquals(
+            "Este mes, unos \$1.262.300, como la de septiembre",
+            lineasDeLaCuotaQueCambia(variable, CuotaPagada(1_262_300, "2026-09"), plan = null, periodoActual = noviembre, ajustes = corte25)[1],
+        )
+        // Con la cuota el 5 el sello coincide con el período: lo de siempre.
+        assertEquals("2026-11", com.jvillada.movi.shared.model.selloDeLaCuotaDelPeriodo(5, noviembre, corte25))
+    }
 }

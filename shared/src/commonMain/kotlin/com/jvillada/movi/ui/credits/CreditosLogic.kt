@@ -1198,6 +1198,12 @@ fun lineasDeLaCuotaQueCambia(
     plan: PlanDelCredito?,
     /** Revisión de la vuelta 133: si la cuota de este período ya se pagó, se dice lo pagado, no «unos». */
     periodoActual: PeriodoFinanciero? = null,
+    /**
+     * Vuelta 134 (N-4) · el período del dueño (el mes de referencia), para saber **qué cuota es la de este
+     * período**: la que vence en él, sellada por el mes de su vencimiento
+     * ([com.jvillada.movi.shared.model.selloDeLaCuotaDelPeriodo]), no por el prefijo del período.
+     */
+    ajustes: com.jvillada.movi.shared.model.PeriodSettings = com.jvillada.movi.shared.model.PeriodSettings(),
 ): List<String> {
     val tipo = t.tipoDeCuota?.takeIf { t.cuotaCambia() } ?: return emptyList()
     val monto = com.jvillada.movi.shared.model.cuotaDeEsteMes(t, ultima)
@@ -1208,7 +1214,9 @@ fun lineasDeLaCuotaQueCambia(
     ) else emptyList()
     return listOfNotNull(
         listOfNotNull(porQue).plus(tasaVariable).joinToString(" · "),
-        if (ultima != null && periodoActual != null && ultima.periodo == periodoActual.prefijo) "Este mes pagaste ${formatCOP(ultima.monto)}"
+        if (ultima != null && periodoActual != null &&
+            ultima.periodo == com.jvillada.movi.shared.model.selloDeLaCuotaDelPeriodo(t.dayOfMonth, periodoActual, ajustes)
+        ) "Este mes pagaste ${formatCOP(ultima.monto)}"
         else "Este mes, " + com.jvillada.movi.shared.model.textoDeLaCuotaQueCambia(monto, ultima),
         com.jvillada.movi.shared.model.loQueSuponeElPlan(tipo, t.rateEa),
         plan?.cuotaAlFinal?.let { "La última cuota sería de unos ${formatCOP(it)}." },
