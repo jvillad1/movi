@@ -9,9 +9,13 @@ import com.jvillada.movi.server.db.Cards
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Users
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.server.fx.FxRateService
+import com.jvillada.movi.server.reminders.ultimasCuotasPagadasDe
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.shared.model.AccountType
+import com.jvillada.movi.shared.model.cuotaCambia
+import com.jvillada.movi.shared.model.cuotaDeEsteMes
 import com.jvillada.movi.shared.model.esCuentaDeDeuda
 import com.jvillada.movi.shared.model.esBien
 import com.jvillada.movi.shared.model.patrimonioDe
@@ -99,6 +103,8 @@ internal data class DeudaCompartida(
      * Sin este dato, la cara en dólares de la Master Black salía «Pago mínimo $71».
      */
     val monedaDeLaCuota: String = "COP",
+    /** Vuelta 134: [cuota] es la de este mes de un crédito que cambia, una estimación: «Cuota de unos $X al mes». */
+    val cuotaEstimada: Boolean = false,
 )
 
 /** Arma el resumen del usuario [uid] **ahora**. Una pasada por la base, más la TRM (cacheada por día). */
@@ -106,7 +112,8 @@ internal suspend fun resumenCompartidoDe(uid: String, venceEn: Long): ResumenCom
     val tasa = FxRateService.usdToCop()
     val ahora = AppClock.now().toInstant().toEpochMilli()
 
-    data class TerminosDeCredito(val banco: String, val cuota: Long, val tasa: Double, val sinIntereses: Boolean)
+    /** Vuelta 134: [cuota] es la de este mes ([com.jvillada.movi.shared.model.cuotaDeEsteMes]) y [estimada] si cambia. */
+    data class TerminosDeCredito(val banco: String, val cuota: Long, val tasa: Double, val sinIntereses: Boolean, val estimada: Boolean)
 
     val (quien, cuentas, creditos, tarjetas) = dbQuery {
         val nombre = Users.select(Users.name).where { Users.id eq uid }.firstOrNull()?.get(Users.name).orEmpty()
@@ -114,12 +121,18 @@ internal suspend fun resumenCompartidoDe(uid: String, venceEn: Long): ResumenCom
             // Un tipo que este server no conoce se salta en vez de tumbar la página entera.
             runCatching { fila.toAccount() }.getOrNull()
         }
-        val creditos = Credits.selectAll().where { Credits.userId eq uid }.associate { fila ->
-            fila[Credits.accountId] to TerminosDeCredito(
-                banco = fila[Credits.bank],
-                cuota = fila[Credits.installment],
-                tasa = fila[Credits.rateEa],
-                sinIntereses = fila[Credits.sinIntereses] ?: false,
+        // Vuelta 134 (M-2): la cuota de un crédito que cambia no es `installment`: es la de este mes (la
+        // última pagada de verdad, la misma de Pagos y «Te quedan»), y se dice «unos».
+        val condiciones = Credits.selectAll().where { Credits.userId eq uid }.map { it.toCreditTerms() }
+        val nombres = cuentas.associate { it.id to it.name }
+        val ultimas = ultimasCuotasPagadasDe(uid, condiciones.map { it to (nombres[it.accountId] ?: "") })
+        val creditos = condiciones.associate { terms ->
+            terms.accountId to TerminosDeCredito(
+                banco = terms.bank,
+                cuota = cuotaDeEsteMes(terms, ultimas[terms.accountId]),
+                tasa = terms.rateEa,
+                sinIntereses = terms.sinIntereses,
+                estimada = terms.cuotaCambia(),
             )
         }
         val tarjetas = Cards.selectAll().where { Cards.userId eq uid }.associate { fila ->
@@ -152,6 +165,7 @@ internal suspend fun resumenCompartidoDe(uid: String, venceEn: Long): ResumenCom
                 tasaEa = credito?.tasa?.takeIf { it > 0.0 },
                 sinIntereses = credito?.sinIntereses ?: false,
                 monedaDeLaCuota = cuenta.currency,
+                cuotaEstimada = credito?.estimada == true && credito.cuota > 0L,
             )
         }
 

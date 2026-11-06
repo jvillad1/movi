@@ -993,6 +993,8 @@ data class NotificationRow(
     val monto: Long? = null,
     val moneda: String = "COP",
     val urgencia: Int = urgenciaDeLaNotificacion(tipo),
+    /** Vuelta 134: [monto] es una estimación (la cuota de un crédito que cambia) y se dice «unos». */
+    val montoEstimado: Boolean = false,
     /** Vuelta 67: la propuesta de saldar dice su pregunta en dos renglones (en uno se cortaba a 390). */
     val lineasDelSubtitulo: Int = 1,
 ) {
@@ -1087,6 +1089,7 @@ fun notificationRows(data: DashboardData): List<NotificationRow> = buildList {
                         monto = pendiente.cifra?.takeIf { it > 0 },
                         moneda = p.moneda,
                         urgencia = urgenciaDeLaNotificacion(tipo, p.diasParaVencer),
+                        montoEstimado = com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(p),
                     ),
                 )
             }

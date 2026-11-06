@@ -145,7 +145,7 @@ private fun AvisoDeLaCampana(row: NotificationRow, modifier: Modifier, onClick: 
         inicio = { IconoEnCirculo(icono, tono = tono) },
         final = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-                row.monto?.let { Cifra(it, moneda = row.moneda) }
+                row.monto?.let { com.jvillada.movi.ui.components.ds.CifraEstimada(it, row.montoEstimado, moneda = row.moneda) }
                 Chevron()
             }
         },

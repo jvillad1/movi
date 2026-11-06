@@ -198,4 +198,20 @@ class LaCuotaQueCambiaTest {
         assertTrue(!esCuotaQueSeComparaConLaPactada(terms.copy(tipoDeCuota = TipoDeCuota.UVR)))
         assertTrue(!esCuotaQueSeComparaConLaPactada(terms.copy(tipoDeCuota = TipoDeCuota.ABONO_CONSTANTE)))
     }
+
+    // ── Vuelta 134 (M-2) · una sola regla para decir «unos» ─────────────────────────────────────
+
+    @Test
+    fun `la cifra de un pago es estimada solo si es la cuota pendiente de un credito que cambia`() {
+        val cuota = PagoDelPeriodo(
+            ruleId = "credit_acc_libre", nombre = "Cuota Libre inversión", monto = 1_080_500, pagado = false,
+            diasParaVencer = 3, cuotaQueCambia = LaCuotaQueCambia(pagadaEnOctubre),
+        )
+        assertTrue(laCifraDelPagoEsEstimada(cuota))
+        assertTrue(!laCifraDelPagoEsEstimada(cuota.copy(pagado = true)), "pagada, la cifra es lo que salió de verdad")
+        assertTrue(!laCifraDelPagoEsEstimada(cuota.copy(cuotaQueCambia = null)), "una cuota fija se dice tal cual")
+        assertEquals("unos \$1.080.500", conUnosSiEsEstimada("\$1.080.500", estimada = true))
+        assertEquals("\$1.080.500", conUnosSiEsEstimada("\$1.080.500", estimada = false))
+        assertEquals("unos \$1.080.500", cuotaEnPalabras(terms.copy(tipoDeCuota = TipoDeCuota.UVR), pagadaEnOctubre))
+    }
 }

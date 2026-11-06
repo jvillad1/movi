@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -367,9 +368,14 @@ private fun SinMargenEnLaTarjeta(s: SinMargenParaElDiaADia, onVerPagos: (() -> U
         if (s.pesan.isNotEmpty()) {
             Spacer(Modifier.height(Espacio.xxs))
             Text(LO_QUE_MAS_PESA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            s.pesan.forEach { (nombre, monto) ->
+            s.pesan.forEach { (nombre, monto, estimada) ->
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(nombre, style = Movi.textos.apoyo, color = Movi.colores.texto, modifier = Modifier.weight(1f), maxLines = 2)
+                    // Vuelta 134: la cuota estimada de un crédito que cambia dice «unos».
+                    if (estimada) {
+                        Text(com.jvillada.movi.shared.model.UNOS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                        Spacer(Modifier.width(Espacio.xxs))
+                    }
                     CifraDelSistema(monto, VarianteDeCifra.Chica, forma = FormaDeCifra.Entera)
                 }
             }

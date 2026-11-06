@@ -118,7 +118,7 @@ fun mesDeLaCuotaPagada(periodo: String): String? {
  * crédito; el server, Movi AI. Pura.
  */
 fun textoDeLaCuotaQueCambia(monto: Long, anterior: CuotaPagada?): String {
-    val base = "unos ${pesos(monto)}"
+    val base = conUnosSiEsEstimada(pesos(monto), estimada = true)
     val delMes = anterior?.takeIf { it.monto > 0L }?.let { a -> mesDeLaCuotaPagada(a.periodo)?.let { it to a.monto } }
     return when {
         delMes == null -> base
@@ -129,12 +129,31 @@ fun textoDeLaCuotaQueCambia(monto: Long, anterior: CuotaPagada?): String {
 }
 
 /**
+ * Vuelta 134 (M-2) · **lo que va delante de una cifra estimada**: «unos $1.262.300». Una sola palabra para
+ * la fila de Pagos, «Próximo pago», el widget «Falta por pagar», «Movi propone hoy», la campana, el aviso
+ * del teléfono y la página compartida.
+ */
+const val UNOS: String = "unos"
+
+/**
+ * Vuelta 134 (M-2) · **¿la cifra de [pago] es una estimación?** Solo la cuota de un crédito que cambia
+ * ([PagoDelPeriodo.cuotaQueCambia]: su monto es [cuotaDeEsteMes], la última pagada) mientras está
+ * pendiente: pagada, lo que se muestra es lo que salió de verdad. Es **la** regla: ningún lado decide
+ * por su cuenta si dice «unos». Pura.
+ */
+fun laCifraDelPagoEsEstimada(pago: PagoDelPeriodo): Boolean =
+    pago.cuotaQueCambia != null && !pago.hecho && !pago.montoEsSaldo
+
+/** «unos $1.262.300» si [estimada]; si no, [cifra] tal cual. Para los textos planos (avisos, página). */
+fun conUnosSiEsEstimada(cifra: String, estimada: Boolean): String = if (estimada) "$UNOS $cifra" else cifra
+
+/**
  * **«tu cuota es $X» o «tu cuota es de unos $X»**: el monto de la cuota de [terms] como lo dicen los textos
  * de Créditos y Movi AI. Fija, la cifra tal cual; cambiante, con «unos». Pura.
  */
 fun cuotaEnPalabras(terms: CreditTerms, ultimaPagada: CuotaPagada?): String {
     val monto = cuotaDeEsteMes(terms, ultimaPagada)
-    return if (terms.cuotaCambia()) "unos ${pesos(monto)}" else pesos(monto)
+    return conUnosSiEsEstimada(pesos(monto), terms.cuotaCambia())
 }
 
 /** «La tasa es variable (IBR + puntos)», «Está en UVR», «Baja cada mes (abono constante a capital)». */

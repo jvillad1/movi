@@ -6,7 +6,10 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,6 +23,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import com.jvillada.movi.theme.ColoresDeMovi
+import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.TextosDeMovi
 import com.jvillada.movi.ui.components.LocalSaldosOcultos
@@ -273,5 +277,44 @@ fun Cifra(
         )
     } else {
         BasicText(text = texto, modifier = conTag, style = estilo, maxLines = 1)
+    }
+}
+
+/** Tag de «unos» delante de una [CifraEstimada]. */
+const val TAG_UNOS_DE_LA_CIFRA: String = "ds-cifra:unos"
+
+/**
+ * Vuelta 134 · **una cifra que es una estimación se dice estimada**: con [estimada], «unos» en `apoyo`
+ * delante de la [Cifra] —la cuota de un crédito que cambia, con la regla única
+ * `laCifraDelPagoEsEstimada`—, como la fila de Pagos (vuelta 133). Sin [estimada], la [Cifra] tal cual,
+ * sin nada alrededor: un pago de siempre no cambia ni un dp.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun CifraEstimada(
+    monto: Long,
+    estimada: Boolean,
+    variante: VarianteDeCifra = VarianteDeCifra.Fila,
+    modifier: Modifier = Modifier,
+    moneda: String = "COP",
+) {
+    if (!estimada) {
+        Cifra(monto, variante, modifier, moneda = moneda)
+        return
+    }
+    // Un renglón que se parte: a 360 dp con la letra grande, al lado de un botón, «unos» y la cifra no
+    // caben juntos y la cifra baja entera al renglón de abajo (nunca se corta ni se achica de más).
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            com.jvillada.movi.shared.model.UNOS,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.testTag(TAG_UNOS_DE_LA_CIFRA),
+        )
+        Cifra(monto, variante, moneda = moneda)
     }
 }
