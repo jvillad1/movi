@@ -11,6 +11,9 @@ import io.ktor.server.response.respond
 import com.jvillada.movi.server.conector.revocarPorToken
 import com.jvillada.movi.server.conector.credencialDe
 import com.jvillada.movi.server.conector.claveDeIp
+import com.jvillada.movi.server.conector.esIpDeAnthropic
+import com.jvillada.movi.server.conector.LIMITE_DE_TOKEN_DE_ANTHROPIC
+import com.jvillada.movi.server.conector.LIMITE_DE_REGISTRO_DE_ANTHROPIC
 import com.jvillada.movi.server.conector.clientIdConForma
 import com.jvillada.movi.server.conector.limitadorDelConector
 import com.jvillada.movi.server.conector.FORMA_DEL_VERIFICADOR
@@ -261,7 +264,7 @@ private suspend fun ApplicationCall.errorDeToken(error: String, descripcion: Str
  */
 private suspend fun ApplicationCall.canjear() {
     // N1 · un balde por IP (el /64 en IPv6) delante de todo: ningún pedido llega a la base ni a otro balde sin pasarlo.
-    if (!limitadorDelConector.permitir("token:ip:${claveDeIp(ipDelPedido(this))}", LIMITE_DE_TOKEN_POR_IP, 60_000L)) {
+    if (!permitirPorIp("token", LIMITE_DE_TOKEN_POR_IP, LIMITE_DE_TOKEN_DE_ANTHROPIC)) {
         return errorDeToken("slow_down", "demasiados pedidos; espera un minuto", HttpStatusCode.TooManyRequests)
     }
     if (request.contentType().withoutParameters() != ContentType.Application.FormUrlEncoded) {
@@ -314,6 +317,20 @@ private val jsonDelRegistro = Json { ignoreUnknownKeys = true }
  * balde por cliente (N1-bis): ver [permitirCredencial].
  */
 internal const val LIMITE_DE_TOKEN_POR_IP = 120
+
+private val logDeLimites = org.slf4j.LoggerFactory.getLogger("ConectorDeClaude")
+
+/**
+ * El balde por IP (o `/64`) de [ruta], con el tope de Anthropic si la IP es de su rango de salida (ver
+ * `RANGOS_DE_ANTHROPIC`). Un 429 a una IP de Anthropic deja un WARN: es tráfico de todos los usuarios de Claude.
+ */
+private fun ApplicationCall.permitirPorIp(ruta: String, normal: Int, deAnthropic: Int): Boolean {
+    val ip = ipDelPedido(this)
+    val esDeAnthropic = esIpDeAnthropic(ip)
+    val bien = limitadorDelConector.permitir("$ruta:ip:${claveDeIp(ip)}", if (esDeAnthropic) deAnthropic else normal, 60_000L)
+    if (!bien && esDeAnthropic) logDeLimites.warn("Conector: 429 en /oauth/$ruta a una IP de Anthropic ($ip, tope $deAnthropic por minuto)")
+    return bien
+}
 internal const val LIMITE_DE_TOKEN_POR_CONCESION = 20
 
 /**
@@ -337,7 +354,7 @@ private suspend fun ApplicationCall.registrar() {
         responderJson(buildJsonObject { put("error", error); put("error_description", descripcion) }, HttpStatusCode.BadRequest)
 
     // N2 · sin límite global (un registro ya no agrega filas: ver idDelClienteDcr); solo un balde por IP (o /64).
-    if (!limitadorDelConector.permitir("register:ip:${claveDeIp(ipDelPedido(this))}", 30, 60_000L)) {
+    if (!permitirPorIp("register", 30, LIMITE_DE_REGISTRO_DE_ANTHROPIC)) {
         return responderJson(buildJsonObject { put("error", "slow_down"); put("error_description", "demasiados registros; espera") }, HttpStatusCode.TooManyRequests)
     }
     val crudo = when (val leido = leerConTope(MAX_BYTES_DEL_FORMULARIO)) {
@@ -390,7 +407,7 @@ private suspend fun ApplicationCall.registrar() {
  * también. Siempre 200, exista o no el token (RFC 7009 §2.2): no se le dice a nadie qué tokens existen.
  */
 private suspend fun ApplicationCall.revocar() {
-    if (!limitadorDelConector.permitir("revoke:ip:${claveDeIp(ipDelPedido(this))}", LIMITE_DE_TOKEN_POR_IP, 60_000L)) {
+    if (!permitirPorIp("revoke", LIMITE_DE_TOKEN_POR_IP, LIMITE_DE_TOKEN_DE_ANTHROPIC)) {
         return errorDeToken("slow_down", "demasiados pedidos; espera un minuto", HttpStatusCode.TooManyRequests)
     }
     if (request.contentType().withoutParameters() != ContentType.Application.FormUrlEncoded) {

@@ -85,6 +85,17 @@ class LasReglasDelConectorTest {
     }
 
     @Test
+    fun `el rango de salida de Anthropic se reconoce sin resolver nombres`() {
+        assertTrue(esIpDeAnthropic("160.79.104.0"))
+        assertTrue(esIpDeAnthropic("160.79.111.255"))
+        assertFalse(esIpDeAnthropic("160.79.112.0"))
+        assertFalse(esIpDeAnthropic("160.79.103.255"))
+        assertFalse(esIpDeAnthropic("8.8.8.8"))
+        assertFalse(esIpDeAnthropic("claude.ai"))
+        assertFalse(esIpDeAnthropic("2001:db8::1"))
+    }
+
+    @Test
     fun `el limitador del conector nunca guarda mas de su tope de claves`() {
         val l = LimitadorAcotado(1_000)
         repeat(50_000) { l.permitir("cliente-inventado-$it", 10, 60_000L) }

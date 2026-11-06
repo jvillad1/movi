@@ -5,6 +5,10 @@ import com.jvillada.movi.server.conector.AndamioDelConector.Companion.RETORNO_DE
 import com.jvillada.movi.server.routes.LIMITE_DE_TOKEN_POR_IP
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.parameters
@@ -102,5 +106,24 @@ class ElLimiteDelTokenTest {
         val res = with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to deB, "client_id" to CIMD_DE_CLAUDE)) }
         assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
         assertEquals(0, limitadorDelConector.llavesQueEmpiezanCon("token:cliente:"), "no hay balde por cliente")
+    }
+
+    @Test
+    fun `una IP de Anthropic tiene un tope mas alto en token y en register`() = testApplication {
+        with(c) { montar() }
+        repeat(LIMITE_DE_TOKEN_DE_ANTHROPIC) { i ->
+            val res = canjeDesde("160.79.104.20", CIMD_DE_CLAUDE, "mvc_c_" + "d".repeat(43))
+            assertEquals(HttpStatusCode.BadRequest, res.status, "pedido $i desde Anthropic")
+        }
+        assertEquals(HttpStatusCode.TooManyRequests, canjeDesde("160.79.104.20", CIMD_DE_CLAUDE, "mvc_c_" + "d".repeat(43)).status)
+        // El registro DCR: 30 por minuto a una IP cualquiera, 300 a una de Anthropic.
+        suspend fun registrar(ip: String) = client.post("/oauth/register") {
+            header("X-Forwarded-For", ip)
+            contentType(ContentType.Application.Json)
+            setBody("""{"redirect_uris":["$RETORNO_DE_CLAUDE"]}""")
+        }
+        repeat(40) { assertEquals(HttpStatusCode.Created, registrar("160.79.105.1").status) }
+        repeat(30) { registrar("203.0.113.9") }
+        assertEquals(HttpStatusCode.TooManyRequests, registrar("203.0.113.9").status)
     }
 }
