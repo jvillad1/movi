@@ -186,6 +186,12 @@ internal fun EncabezadoDelMovimiento(
      * dónde y las cuotas los dicen las filas de [datosDeLaFicha].
      */
     ficha: Boolean = false,
+    /**
+     * Vuelta 134 (M-6) · las cuotas van en su renglón ([CuotasDelMovimiento]) y el encabezado no las repite.
+     * Lo decide quien monta el detalle con [ofreceLasCuotas], una vez, igual antes y después de que lleguen
+     * las cuentas: así el «a 12 cuotas» no aparece arriba para mudarse abajo un instante después.
+     */
+    cuotasEnSuRenglon: Boolean = ofreceLasCuotas(evento, cuentas),
 ) {
     val hoy = remember { hoyEnAppZone() }
     val cuenta = cuentas.firstOrNull { it.id == evento.accountId }?.name
@@ -234,7 +240,7 @@ internal fun EncabezadoDelMovimiento(
     } else if (!ficha) {
         // Vuelta 71 (revisión): una compra diferida dice a cuántas cuotas, como su fila en Actividad.
         // Vuelta 133: salvo que el detalle las diga en su renglón, que además las cambia.
-        textoDeLasCuotas(evento.cuotas)?.takeUnless { ofreceLasCuotas(evento, cuentas) }?.let { cuotas ->
+        textoDeLasCuotas(evento.cuotas)?.takeUnless { cuotasEnSuRenglon }?.let { cuotas ->
             Text(cuotas, style = Movi.textos.cuerpo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_CUOTAS_DEL_MOVIMIENTO))
         }
     }

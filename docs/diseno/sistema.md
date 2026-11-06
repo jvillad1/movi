@@ -5582,6 +5582,27 @@ a la vista. El patrón:
   «Confirmar los N»** (hay que mirarlo), salvo que el mismo monto ya se le haya mandado a esa persona por
   un motivo. La Nota no aparece con «Es este» (no se crea nada) ni en «Repartir en partes».
 
+## Vuelta 134 · las cuotas que cambian, segunda pasada: una cifra estimada se dice estimada en todos lados
+
+- **Una regla, una pieza.** Si una cifra es una estimación lo decide `laCifraDelPagoEsEstimada` (`:core`: la cuota
+  pendiente de un crédito que cambia) y se pinta con `ds/CifraEstimada`: «unos» en `apoyo` y `textoMedio` delante
+  de la `Cifra`, en un renglón que se parte (`FlowRow`): a 360 dp con la letra a ×1,456, al lado de un botón, la
+  cifra baja entera al renglón de abajo en vez de achicarse de más o salirse de su caja. Sin estimación, la `Cifra`
+  tal cual, sin nada alrededor. La usan «Próximo pago», el widget «Falta por pagar», `TarjetaDePropuesta`
+  (`cifraEstimada`) y la campana; la fila de Pagos hace lo mismo con `MontoDeFila`. Los textos planos (el aviso del
+  teléfono, la página compartida, el correo y el push) usan `conUnosSiEsEstimada`. **«unos» + cifra se arma en un
+  solo lugar**, `ds/ConUnos` (`CifraEstimada` es `ConUnos` con una `Cifra`; la fila de Pagos y «Lo que más pesa» le
+  pasan su pieza del monto), y con `apilado` va encima de la cifra en el final de una `Fila` (la campana). La fila
+  «Cuota» de la ficha, «Lo que viene», el período siguiente y «Lo que paga otra persona» también la usan.
+- **El título de un aviso de la campana nunca se corta: crece** (con un monto de millones al lado, a ×1,456).
+- **El nombre de una factura llega a cuatro renglones** en la fila de Pagos: «Cuota Libre inversión 9695» a ×1,456
+  necesita cuatro al lado de «Anotar pago».
+- **Una pregunta de dos índices son dos pastillas**: «¿Sobre qué índice?» · IBR · Otro índice, como el resto de la
+  hoja del crédito; el campo de los puntos dice sobre cuál. Los decimales se escriben y se ven con coma («8,5»).
+- **Lo que depende de una lectura que llega tarde se decide con lo que ya se sabe.** El renglón de las cuotas del
+  detalle se decide con las cuentas que el Inicio ya leyó, o con las cuotas que el movimiento trae: lo que se ve
+  al abrir es lo que queda (nada salta más de 8 dp).
+
 ## Vuelta 135 · «Movi en Claude»: una dirección para copiar y conexiones que se cortan
 
 - **Dónde**: una `Fila` más en Tú → Ajustes → «Movi», debajo de «Qué ve la IA» (ícono `Link`, «Conecta Claude

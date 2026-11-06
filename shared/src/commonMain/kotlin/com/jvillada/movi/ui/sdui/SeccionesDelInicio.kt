@@ -358,6 +358,7 @@ private fun TarjetaDelFeed(propuesta: PropuestaDelInicio, hacer: (AccionDeLaProp
         // «Ocultar los saldos» igual que la [Cifra].
         titulo = conCifrasOcultas(propuesta.titulo),
         cifra = propuesta.cifra,
+        cifraEstimada = propuesta.cifraEstimada,
         moneda = propuesta.moneda,
         cuerpo = propuesta.cuerpo?.let { conCifrasOcultas(it) },
         // Vuelta 79 · un solo amarillo por vista: el amarillo del Inicio es «Anotar gasto». El círculo de
@@ -440,7 +441,12 @@ internal fun ProximoPagoSection(data: DashboardData, onNavigate: (Screen) -> Uni
                     modifier = Modifier.testTag(TAG_NOMBRE_DEL_PROXIMO_PAGO),
                 )
                 // Una tarjeta sin mínimo conocido no tiene cifra que decir: su «monto» es el saldo.
-                cifraDelPago(pago)?.let { Cifra(it, VarianteDeCifra.Fila, moneda = pago.moneda) }
+                // Vuelta 134: la cuota de un crédito que cambia es una estimación y dice «unos».
+                cifraDelPago(pago)?.let {
+                    com.jvillada.movi.ui.components.ds.CifraEstimada(
+                        it, com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago), VarianteDeCifra.Fila, moneda = pago.moneda,
+                    )
+                }
                 // Vuelta 86: y lo dice, como su fila en Pagos.
                 LoQueNoSumaDelPago(pago)
             }
@@ -794,7 +800,12 @@ internal fun WidgetFaltaPorPagar(
                 )
                 // Una tarjeta no tiene cuota: su monto es el saldo, y no se muestra como un pago.
                 val monto = cifraDelPago(pago)
-                if (monto != null) Cifra(monto, VarianteDeCifra.Chica, moneda = pago.moneda)
+                // Vuelta 134: con «unos» si es la cuota estimada de un crédito que cambia.
+                if (monto != null) {
+                    com.jvillada.movi.ui.components.ds.CifraEstimada(
+                        monto, com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago), VarianteDeCifra.Chica, moneda = pago.moneda,
+                    )
+                }
                 // Vuelta 86: la fila que no suma lo dice (antes iba sin monto, callada).
                 LoQueNoSumaDelPago(pago)
                 Text(

@@ -67,6 +67,8 @@ fun TarjetaDePropuesta(
     cifra: Long? = null,
     moneda: String = "COP",
     cuerpo: String? = null,
+    /** Vuelta 134: [cifra] es una estimación y va con «unos» delante ([CifraEstimada]). */
+    cifraEstimada: Boolean = false,
     /**
      * Vuelta 82 · **el amarillo se pide a propósito**: el círculo va neutro (la capa 3) salvo que quien
      * llama pida otro tono —[TonoDeIcono.Aviso] si urge—. Era [TonoDeIcono.Marca]: toda propuesta nueva
@@ -112,7 +114,7 @@ fun TarjetaDePropuesta(
                     color = Movi.colores.texto,
                     onTextLayout = { alMedirElTitulo?.invoke(it.lineCount) },
                 )
-                if (cifra != null) Cifra(cifra, VarianteDeCifra.Fila, moneda = moneda)
+                if (cifra != null) CifraEstimada(cifra, cifraEstimada, VarianteDeCifra.Fila, moneda = moneda)
                 if (cuerpo != null) {
                     Text(
                         text = cuerpo,

@@ -202,9 +202,6 @@ fun lineaDelMinimo(pago: PagoDelPeriodo): String? {
 /** El tag de esa línea. */
 const val TAG_FALTA_DEL_MINIMO: String = "pagos:falta-del-minimo"
 
-/** Vuelta 133 · lo que va antes del monto de una cuota que cambia: es una estimación. */
-const val ROTULO_DE_LA_CUOTA_ESTIMADA: String = "unos"
-
 /** Vuelta 133 · el tag de «La de octubre fue $Y» en la fila. */
 const val TAG_CUOTA_ANTERIOR_DE_LA_FILA: String = "pagos:cuota-anterior"
 
@@ -396,12 +393,13 @@ internal fun FilaDeFactura(
                 Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
                     // Vuelta 55: tres renglones. Con la letra al 130 % a 360 dp, «Administración del
-                    // conjunto» al lado de «Anotar pago» necesita tres; con dos se cortaba.
+                    // conjunto» al lado de «Anotar pago» necesita tres; con dos se cortaba. Vuelta 134: cuatro;
+                    // «Cuota Libre inversión 9695» (el nombre de la cuota de un crédito) necesita cuatro a ×1,456.
                     Text(
                         pago.nombre,
                         style = Movi.textos.cuerpoFuerte,
                         color = Movi.colores.texto,
-                        maxLines = 3,
+                        maxLines = 4,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
@@ -409,10 +407,14 @@ internal fun FilaDeFactura(
                             // Vuelta 62: lo que pide el extracto, no el saldo entero.
                             MontoDeFila(montoDelExtracto(extracto.facturado, extracto.moneda), color = Movi.colores.texto)
                             Text(ROTULO_DEL_EXTRACTO, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                        } else if (pago.cuotaQueCambia != null) {
+                        } else if (com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago)) {
                             // Vuelta 133: la cuota que cambia es una estimación, y se dice («unos $X»).
-                            Text(ROTULO_DE_LA_CUOTA_ESTIMADA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-                            MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
+                            // Vuelta 134: con la regla única, la misma de «Próximo pago», el widget y la campana; y en
+                            // un renglón que se parte: a 360 dp con la letra a ×1,456 la cifra baja entera debajo de
+                            // «unos» en vez de salirse de su caja.
+                            com.jvillada.movi.ui.components.ds.ConUnos(estimada = true) {
+                                MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
+                            }
                         } else {
                             MontoDeFila(textoDelMontoDelChecklist(pago), color = Movi.colores.texto)
                             // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.

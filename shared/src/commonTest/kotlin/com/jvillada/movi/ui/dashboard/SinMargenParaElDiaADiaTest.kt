@@ -56,7 +56,7 @@ class SinMargenParaElDiaADiaTest {
         assertEquals("llevas $0", s.hoy)
         assertEquals(
             listOf("Cuota Vehículo 8761 · 17 nov" to 4_101_123L, "Cuota Hipotecario 2334 · 7 nov" to 2_613_714L, "Cuota Cotrafa 5413 · 22 nov" to 1_931_488L),
-            s.pesan,
+            s.pesan.map { it.nombre to it.monto },
         )
         assertEquals("Ver los 4 pagos que faltan", s.verTodos)
         // Con el mes de calendario, el último día del período.

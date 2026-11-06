@@ -385,7 +385,8 @@ internal fun montoConMoneda(rule: RecurringRule): String {
     // Revisión de la vuelta 133: la cuota de un crédito que cambia es una estimación («unos»).
     return when {
         rule.montoEsSaldo -> "saldo $texto"
-        rule.cuotaQueCambia != null -> "unos $texto"
+        // Revisión de la vuelta 134 (m-5): la misma palabra de :core que la app.
+        rule.cuotaQueCambia != null -> com.jvillada.movi.shared.model.conUnosSiEsEstimada(texto, estimada = true)
         else -> texto
     }
 }

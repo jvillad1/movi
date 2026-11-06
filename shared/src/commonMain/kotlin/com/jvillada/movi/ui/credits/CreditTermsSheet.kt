@@ -189,7 +189,9 @@ fun CreditTermsSheet(
     // Vuelta 133 · «¿Tu cuota es siempre la misma?» (ver `LaCuotaQueCambiaEnLaHoja.kt`): Sí por defecto.
     var tipoDeCuota by remember { mutableStateOf(existingTerms?.tipoDeCuota ?: com.jvillada.movi.shared.model.TipoDeCuota.FIJA) }
     // Con coma, como se escribe en Colombia (el campo acepta las dos y guarda con punto).
-    var puntosSobreElIbr by remember { mutableStateOf(existingTerms?.puntosSobreElIndice?.toString()?.removeSuffix(".0")?.replace('.', ',') ?: "") }
+    var puntosSobreElIbr by remember { mutableStateOf(existingTerms?.puntosSobreElIndice?.let(::puntosConComa) ?: "") }
+    // Vuelta 134 (M-7): la hoja ofrece «IBR · Otro índice»; un crédito guardado con otro índice lo conserva.
+    var indiceDeLaTasa by remember { mutableStateOf(existingTerms?.indiceDeLaTasa ?: com.jvillada.movi.shared.model.IndiceDeLaTasa.IBR) }
     var alCambiarLaTasa by remember { mutableStateOf(existingTerms?.alCambiarLaTasa) }
     var dayOfMonth by remember { mutableStateOf(existingTerms?.dayOfMonth?.toString() ?: "") }
     // F23: aceptaba cualquier cosa como fecha — el filtro de abajo (solo dígitos y guiones) más
@@ -405,8 +407,8 @@ fun CreditTermsSheet(
                     // Vuelta 133: la cuota que cambia. Viaja siempre (volver a «Sí» la apaga); los datos
                     // de la tasa variable, solo con ella (`conLaCuotaQueCambiaLimpia`, lo mismo que el server).
                     tipoDeCuota = tipoDeCuota,
-                    // La hoja pregunta por el IBR; un «Otro» que ya estaba guardado no se reescribe.
-                    indiceDeLaTasa = existingTerms?.indiceDeLaTasa ?: com.jvillada.movi.shared.model.IndiceDeLaTasa.IBR,
+                    // Vuelta 134 (M-7): el que el dueño eligió («IBR · Otro índice»); un «Otro» guardado no se reescribe.
+                    indiceDeLaTasa = indiceDeLaTasa,
                     puntosSobreElIndice = puntosSobreElIbr.replace(',', '.').toDoubleOrNull(),
                     alCambiarLaTasa = alCambiarLaTasa,
                 ).conLaCuotaQueCambiaLimpia()
@@ -678,12 +680,14 @@ fun CreditTermsSheet(
                 onTipo = { tipoDeCuota = it },
                 alCambiar = alCambiarLaTasa,
                 onAlCambiar = { alCambiarLaTasa = it },
+                indice = indiceDeLaTasa,
+                onIndice = { indiceDeLaTasa = it },
                 habilitada = !saving,
                 campoDeLosPuntos = {
                     Box(Modifier.testTag(TAG_PUNTOS_SOBRE_EL_IBR)) {
                         Campo(
-                            puntosSobreElIbr, { puntosSobreElIbr = filterRateInput(it) },
-                            rotulo = PUNTOS_SOBRE_EL_IBR, ejemplo = "8,5",
+                            puntosSobreElIbr, { puntosSobreElIbr = filtrarLosPuntos(it) },
+                            rotulo = rotuloDeLosPuntos(indiceDeLaTasa), ejemplo = "8,5",
                             teclado = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         )
                     }
@@ -1265,6 +1269,13 @@ internal fun CampoDeTasa(
  * F23: la tasa aceptaba "12%" y no se leía como número. Filtra todo lo que no sea dígito o un
  * único punto decimal — el "%" queda a cargo de [CampoDeTasa], nunca del texto escrito.
  */
+/**
+ * Vuelta 134 (M-7) · **los puntos sobre el índice se escriben con coma**: lo mismo que [filterRateInput]
+ * (dígitos y un solo decimal, que puede llegar como coma o como punto) pero el decimal se queda como coma,
+ * «8,5», como se ve al editar ([puntosConComa]). Se lee con `replace(',', '.')`. Pura.
+ */
+fun filtrarLosPuntos(input: String): String = filterRateInput(input).replace('.', ',')
+
 fun filterRateInput(input: String): String {
     var sawDot = false
     // La coma cuenta como punto decimal: en Colombia se escribe «12,5», y el teclado decimal de
