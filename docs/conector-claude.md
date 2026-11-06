@@ -70,24 +70,37 @@ preguntó ni lo que se contestó.
 - **MCP sin estado** sobre Streamable HTTP: cada `POST /mcp` es un mensaje JSON-RPC con su token y recibe su
   respuesta en JSON. El protocolo está escrito a mano (`server/…/conector/ServidorMcp.kt`): el SDK oficial de
   Kotlin pide Ktor 3.5 y Kotlin 2.4.
-- **Solo para Claude** (revisión de seguridad): el CIMD solo se baja de `claude.ai` o `claude.com`
-  (`CONECTOR_HOSTS_DE_CIMD` agrega otros), por https al 443, con un tope de 5 s para toda la lectura y 16 KB, en
-  cuatro hilos propios (nunca los de la base), una lectura a la vez por cliente y el resultado (bueno o malo) en
-  memoria unos minutos. Las únicas direcciones de retorno son `https://claude.ai/api/mcp/auth_callback` y el
+- **Solo para Claude** (revisiones de seguridad): el `client_id` CIMD tiene que ser exactamente uno de los dos de
+  Claude —`https://claude.ai/oauth/mcp-oauth-client-metadata` (web, escritorio, teléfono) y
+  `https://claude.ai/oauth/claude-code-client-metadata`— o uno de `CONECTOR_CIMD_PERMITIDOS`. Se baja por https,
+  con un tope de 5 s para toda la lectura y 16 KB, en cuatro hilos propios (nunca los de la base), una lectura a la
+  vez. Un documento bueno se vuelve a pedir a los 10 minutos y, si en ese momento claude.ai no contesta, se sigue
+  usando el último bueno; solo un documento que no sirve (o un 404) se recuerda como falla, 5 minutos. Los dos se
+  comprobaron el 6-nov-2026 con el `HttpClient` de Java: contestan su JSON, sin desafío de Cloudflare (desde la
+  Mac del dueño; falta verlo desde Railway).
+- **DCR idempotente**: el `client_id` sale de los retornos declarados, así que registrar lo mismo da el mismo
+  cliente (a lo sumo siete filas en total).
+- **La pantalla de permiso no escribe nada**: la solicitud viaja firmada con HMAC (`CONECTOR_SECRETO_DE_SOLICITUDES`
+  o una clave derivada de `JWT_SECRET`) y vence a los 10 minutos. Reenviarla solo vuelve a pedir la contraseña: cada
+  «Permitir» da un código nuevo, de un uso. La pantalla dice «Sigue solo si tú empezaste a conectar Movi desde tu
+  Claude. Si alguien te mandó este enlace, ciérralo.» Las únicas direcciones de retorno son `https://claude.ai/api/mcp/auth_callback` y el
   loopback de Claude Code (`http://localhost|127.0.0.1:<puerto>/callback`), en DCR y en CIMD. La pantalla de
   consentimiento dice «Claude» o «Claude Code» según el retorno, nunca el nombre que el cliente dice tener.
 - **Revocar**: `POST /oauth/revoke` (RFC 7009, anunciado como `revocation_endpoint`). Quitar el conector en
   Claude corta la conexión en Movi.
 - **El reuso de un refresco**: Claude cambia el refresco en cada uso. Si vuelve a mandar uno ya cambiado dentro de
-  2 minutos (dos pedidos casi a la vez, o una respuesta que se perdió), Movi contesta `invalid_grant` sin cortar
-  nada. Pasados los 2 minutos lo toma como un token copiado y **corta la conexión**: si el dueño dice «se
+  2 minutos (dos pedidos casi a la vez, o una respuesta que se perdió), Movi contesta `invalid_grant`, revoca los
+  tokens de la rotación que quedó huérfana y deja un WARN, sin cortar la concesión. Pasados los 2 minutos lo toma como un token copiado y **corta la conexión**: si el dueño dice «se
   desconectó solo», es la causa probable, y la solución es volver a conectar.
-- **Vida de una conexión**: una conexión sin uso en 90 días deja de servir y el barrido diario la borra (con sus
-  tokens). El registro de llamadas guarda 90 días.
-- **Límites**: 60 llamadas por minuto por conexión en `/mcp` (429 con `Retry-After: 60`); `/oauth/token` 1.000 por
-  minuto por cliente y 20 por conexión (no por IP: todos los usuarios de Claude llegan desde las IP de Anthropic);
-  `/oauth/register` 300 por hora en total; el login comparte el balde por correo de `/api/auth/login`. Topes
-  globales de 2.000 solicitudes pendientes y 2.000 clientes DCR: lleno, 503 con un WARN en el log.
+- **Vida de una conexión**: **un año** desde que se conectó, se use o no; después hay que volver a entrar desde
+  Claude (la pantalla «Movi en Claude» lo dice). Sin uso, se acaba sola a los 30 días (vence el refresco). El barrido
+  diario borra las conexiones con 90 días sin uso o revocadas hace 90 días, y las llamadas de más de 90 días.
+- **Límites**: 60 llamadas por minuto por conexión en `/mcp` (429 con `Retry-After: 60`). En `/oauth/token` y
+  `/oauth/revoke`, primero la forma del `client_id` (si no es un CIMD de Claude ni un id de DCR, `invalid_client`),
+  después 120 por minuto por IP (el `/64` en IPv6), y 1.000 por minuto por cliente y 20 por conexión **solo** para
+  pedidos con una credencial que existe y es de ese cliente. `/oauth/authorize` 60 por minuto por IP, el login 30 por
+  IP cada 5 minutos más el balde por correo de `/api/auth/login`, `/oauth/register` 30 por minuto por IP. Todos esos
+  baldes viven en un limitador propio de como mucho 10.000 claves.
 - **Sin chequeo de `Origin` en `/mcp`**, a propósito: la spec lo pide contra el DNS rebinding, que sirve para
   colarse en un servidor que confía en cookies o en la red local. `/mcp` exige un token en cada pedido y no lee
   ninguna cookie, así que una página que lograra mandarle un pedido no tiene con qué autenticarse. Tampoco se
