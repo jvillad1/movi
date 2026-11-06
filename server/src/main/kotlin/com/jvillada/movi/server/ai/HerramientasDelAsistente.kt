@@ -644,7 +644,7 @@ internal fun textoDelPlanDeSalida(plan: PlanDeSalida, otra: PlanDeSalida, period
     fun nombreDeLa(e: EstrategiaDeSalida) = if (e == EstrategiaDeSalida.AVALANCHA) "avalancha (mayor tasa primero)" else "bola de nieve (menor saldo primero)"
     appendLine(
         "Plan de salida de deudas, estrategia ${nombreDeLa(plan.estrategia)}, con ${plan.abonoMensual} pesos extra al mes. " +
-            "Supuestos: tasa y cuota constantes; el abono va entero a capital de la primera deuda del orden y, cuando " +
+            "Supuestos: tasa y cuota constantes (una cuota que cambia se cuenta con la de este mes; un abono constante, con su capital fijo; en UVR, con 3 % de inflación al año); el abono va entero a capital de la primera deuda del orden y, cuando " +
             "esa termina, pasa a la siguiente; la cuota que se libera NO se suma al abono.",
     )
     if (plan.enElCalculo.isEmpty()) {
@@ -656,7 +656,10 @@ internal fun textoDelPlanDeSalida(plan: PlanDeSalida, otra: PlanDeSalida, period
             appendLine(
                 "${s.orden}. ${d.nombre}: saldo ${d.saldo}, tasa ${d.tasaEa ?: 0.0} % EA" +
                     (if (d.sinIntereses) " (no cobra intereses)" else "") +
-                    ", ${if (d.tipo.name == "TARJETA") "pago mínimo" else "cuota"} ${d.cuota}, interés de este mes ${d.interesDelMes}. " +
+                    ", ${if (d.tipo.name == "TARJETA") "pago mínimo" else "cuota"} ${if (d.tipoDeCuota != null) "de unos " else ""}${d.cuota}" +
+                    // Revisión de la vuelta 133: una cuota que cambia se dice estimada, con su porqué.
+                    (d.tipoDeCuota?.let { t -> com.jvillada.movi.shared.model.porQueCambiaLaCuota(t)?.let { " (no es fija: ${it.replaceFirstChar { c -> c.lowercase() }})" } } ?: "") +
+                    ", interés de este mes ${d.interesDelMes}. " +
                     "Sin abono: ${cuando(s.mesesSinAbono)}${s.interesSinAbono?.let { ", $it de interés por pagar" } ?: ""}. " +
                     "Con el abono: ${cuando(s.mesesConAbono)}${s.interesConAbono?.let { ", $it de interés por pagar" } ?: ""}." +
                     (s.interesAhorrado?.let { " Ahorra $it de interés." } ?: ""),

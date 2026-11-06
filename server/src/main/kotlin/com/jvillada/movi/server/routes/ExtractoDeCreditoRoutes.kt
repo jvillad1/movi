@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.routes
 
+import com.jvillada.movi.shared.model.cuotaCambia
 import com.jvillada.movi.server.balance.balanceAdjustmentEventFor
 import com.jvillada.movi.server.balance.computeBalances
 import com.jvillada.movi.server.balance.enrichWith
@@ -156,6 +157,7 @@ internal fun Transaction.propuestaDelExtractoDeCredito(
         interesEstimado = estimado,
         seguroEnMovi = terms?.insuranceMonthly,
         tasaEnMovi = terms?.let { if (it.sinIntereses) 0.0 else it.rateEa.takeIf { t -> t > 0.0 } },
+        cuotaCambia = terms?.cuotaCambia() == true,
     )
 }
 
@@ -182,9 +184,19 @@ private fun Transaction.actualizarConElExtracto(
             "Este crédito no tiene condiciones todavía. Regístralas primero y vuelve a leer el extracto.",
         )
     val cuotaDelInteres = cuotaDelInteres(r, antes.dayOfMonth)
+    // Vuelta 133 · **la tasa**: en un crédito de cuota que cambia, la del extracto es la vigente y se pone.
+    // En uno de cuota fija que ya tiene tasa, una distinta no se cambia sola: la revisión preguntó si es de
+    // tasa variable (`tasaDistintaEnUnCreditoFijo`), y el dueño lo dice en la hoja del crédito. Sin tasa
+    // registrada (0 o «no cobra»), la del extracto llena lo que faltaba, como siempre.
+    val tasaDelExtracto = r.tasaEa
+    val tasaQueQueda = when {
+        tasaDelExtracto == null -> antes.rateEa
+        antes.cuotaCambia() || antes.rateEa <= 0.0 || antes.sinIntereses -> tasaDelExtracto
+        else -> antes.rateEa
+    }
     val despues = antes.copy(
         insuranceMonthly = r.seguro?.takeIf { it > 0L } ?: antes.insuranceMonthly,
-        rateEa = r.tasaEa ?: antes.rateEa,
+        rateEa = tasaQueQueda,
         // Una tasa del banco dice que el crédito sí cobra: la casilla de «no cobra» deja de ser verdad.
         sinIntereses = if (r.tasaEa != null) false else antes.sinIntereses,
         interesReal = if (r.interesDelPeriodo != null && cuotaDelInteres != null) r.interesDelPeriodo else antes.interesReal,

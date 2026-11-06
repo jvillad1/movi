@@ -995,6 +995,8 @@ internal fun ContenidoDelMovimiento(
                         nombreDeLaCuenta = cuentas.firstOrNull { it.id == event.accountId }?.name,
                         espacio = espacios.firstOrNull { it.id == event.espacioId },
                         hoy = hoyDeLaFicha,
+                        // Vuelta 133: las de una compra con tarjeta van en su renglón, que las cambia.
+                        conLasCuotasAparte = ofreceLasCuotas(event, cuentas),
                     ),
                     abierta = accion,
                     onElegir = { if (!saving) alternar(it) },
@@ -1020,6 +1022,11 @@ internal fun ContenidoDelMovimiento(
             if (event.repartoDe != null) {
                 Spacer(Modifier.height(Espacio.s))
                 ParteDeUnaCompra(evento = event, onDeshecho = onEventChanged)
+            }
+            // Vuelta 133: una compra con tarjeta dice a cuántas cuotas fue, y se cambia ahí mismo.
+            if (ofreceLasCuotas(event, cuentas)) {
+                Spacer(Modifier.height(Espacio.xs))
+                CuotasDelMovimiento(evento = event, onCambiado = onEventChanged)
             }
             // Lo que espera una decisión no se esconde detrás de una acción: confirmarlo es lo que
             // el dueño vino a hacer cuando abre un aviso pendiente.

@@ -374,7 +374,12 @@ internal fun montoConMoneda(rule: RecurringRule): String {
         "USD" -> "US$" + monto
         else  -> rule.currency + " " + monto
     }
-    return if (rule.montoEsSaldo) "saldo $texto" else texto
+    // Revisión de la vuelta 133: la cuota de un crédito que cambia es una estimación («unos»).
+    return when {
+        rule.montoEsSaldo -> "saldo $texto"
+        rule.cuotaQueCambia != null -> "unos $texto"
+        else -> texto
+    }
 }
 
 /** Nombres de mes en español, indexados 0=enero..11=diciembre (evita depender de Locale("es")). */

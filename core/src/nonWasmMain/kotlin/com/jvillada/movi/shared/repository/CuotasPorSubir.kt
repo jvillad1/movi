@@ -40,6 +40,17 @@ internal object CuotasPorSubir {
         escribir(db, uid, todas(db, uid) + (eventoId to cuotas))
     }
 
+    /**
+     * Revisión de la vuelta 133 · ya subió **ese valor**: se olvida solo si no cambió mientras el `POST`
+     * viajaba (el detalle puede cambiar las cuotas de un movimiento pendiente). Si cambió, se queda y
+     * `SyncEngine.subirLasCuotasQueQuedaron` lo sube con `PUT /api/events/{id}/cuotas` en la misma vuelta
+     * (o en la siguiente, sin red).
+     */
+    fun olvidarSiSigueSiendo(db: MoviDatabase, uid: String, eventoId: String, subido: Int) {
+        val antes = todas(db, uid)
+        if (antes[eventoId] == subido) escribir(db, uid, antes - eventoId)
+    }
+
     /** Ya subió: se olvida. */
     fun olvidar(db: MoviDatabase, uid: String, eventoId: String) {
         val antes = todas(db, uid)

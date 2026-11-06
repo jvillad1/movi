@@ -110,6 +110,7 @@ import com.jvillada.movi.ui.components.SelectorDeCategoria
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
 import com.jvillada.movi.ui.quickadd.categoriasParaLasPastillasDeAgregar
 import com.jvillada.movi.ui.sms.EligeLaCategoria
+import com.jvillada.movi.ui.sms.CuotasDelAviso
 import com.jvillada.movi.ui.sms.categoriasDeLaTarjeta
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.ui.transactions.HojaDeConfirmarLosAvisos
@@ -417,19 +418,23 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     // Vuelta 46: la categoría que el dueño eligió en la tarjeta de un aviso al que solo le faltaba
     // esa (cabeza del pago → categoría). Con ella el aviso queda confirmable ahí mismo y en el lote.
     var categoriasElegidasAca by remember { mutableStateOf(emptyMap<String, String>()) }
+    // Vuelta 133: las cuotas que el dueño eligió en la tarjeta de una compra con tarjeta (cabeza → cuotas).
+    var cuotasElegidasAca by remember { mutableStateOf(emptyMap<String, Int>()) }
     // La cabeza del aviso cuyo «Todas ›» abrió el selector completo.
     var todasLasCategoriasPara by remember { mutableStateOf<String?>(null) }
     // Vuelta 51 · «Más antiguos»: plegada, y la pregunta de «Ignorar los N».
     var antiguosAbiertos by rememberSaveable { mutableStateOf(false) }
     var pidiendoIgnorarLosAntiguos by remember { mutableStateOf(false) }
     var ignorandoLosAntiguos by remember { mutableStateOf(false) }
-    val entendimientos: Map<String, LoQueMoviEntendio> = remember(mensajes, propuestas, cuentas, fallaronAca, categoriasElegidasAca) {
+    val entendimientos: Map<String, LoQueMoviEntendio> = remember(mensajes, propuestas, cuentas, fallaronAca, categoriasElegidasAca, cuotasElegidasAca) {
         val todos = mensajes ?: return@remember emptyMap()
         val leidas = propuestas ?: return@remember emptyMap()
         val ahora = Clock.System.now().toEpochMilliseconds()
         pagosPorRevisar(todos)
             .filter { it.id !in fallaronAca }
-            .associate { cabeza -> cabeza.id to loQueMoviEntendio(cabeza, todos, leidas, cuentas, ahora, categoriasElegidasAca[cabeza.id]) }
+            .associate { cabeza ->
+                cabeza.id to loQueMoviEntendio(cabeza, todos, leidas, cuentas, ahora, categoriasElegidasAca[cabeza.id], cuotasElegidasAca[cabeza.id])
+            }
     }
     val entendidos: Map<String, AnotacionEntendida> =
         entendimientos.mapNotNull { (id, e) -> e.anotacion?.let { id to it } }.toMap()
@@ -438,9 +443,9 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
     /** Vuelta 91: «Traspaso de Bancolombia ·8133 a Nu», el título de un traspaso entre cuentas suyas. */
     val titulos: Map<String, String> = entendimientos.mapNotNull { (id, e) -> e.titulo?.let { id to it } }.toMap()
     /** Lo que pinta la tarjeta de «Confirmar los N» y lo que confirma su hoja: lo de Actividad. */
-    val avisosDelLote: AvisosPorConfirmar? = remember(mensajes, propuestas, cuentas, fallaronAca, categoriasElegidasAca) {
+    val avisosDelLote: AvisosPorConfirmar? = remember(mensajes, propuestas, cuentas, fallaronAca, categoriasElegidasAca, cuotasElegidasAca) {
         val todos = mensajes ?: return@remember null
-        avisosPorConfirmar(todos, propuestas, cuentas, Clock.System.now().toEpochMilliseconds(), fallaronAca, categoriasElegidasAca)
+        avisosPorConfirmar(todos, propuestas, cuentas, Clock.System.now().toEpochMilliseconds(), fallaronAca, categoriasElegidasAca, cuotasElegidasAca)
     }
     /**
      * Vuelta 46: **las pastillas de una tarjeta que pide la categoría** —las frecuentes del tipo, como
@@ -743,6 +748,15 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 loEntendido = lineas[sms.id],
                 titulo = titulos[sms.id],
                 eligeLaCategoria = eligeLaCategoriaDe(sms),
+                // Vuelta 133: una compra con tarjeta pregunta a cuántas cuotas (no bloquea «Confirmar»).
+                cuotasDelAviso = entendidos[sms.id]?.takeIf { it.preguntaLasCuotas }?.let { anotacion ->
+                    CuotasDelAviso(
+                        elegidas = anotacion.cuotas,
+                        monto = anotacion.monto,
+                        moneda = anotacion.leido.currency,
+                        onElegir = { cuotasElegidasAca = cuotasElegidasAca + (sms.id to it) },
+                    )
+                },
                 // Vuelta 51: lo que no es la categoría (cuenta, monto, comercio) sigue en Revisar aviso.
                 onMasCambios = { revisarEnReconciliar(sms.id, false) },
                 // El otro aviso puede estar ya confirmado: se busca en la lista

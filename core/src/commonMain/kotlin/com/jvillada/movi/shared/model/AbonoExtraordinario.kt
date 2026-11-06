@@ -126,8 +126,14 @@ fun simularAbonoUnico(
     abono: Long,
     /** Ver [planDeUnaDeuda]. */
     sinIntereses: Boolean = false,
+    /** Revisión de la vuelta 133 · ver [planDeUnaDeuda]: el simulador proyecta el mismo crédito que la ficha. */
+    tipoDeCuota: TipoDeCuota? = null,
+    capitalFijo: Long? = null,
 ): SimulacionDeAbono {
-    val antes = planDeUnaDeuda(saldoDeLaDeuda, rateEa, cuota, seguroMensual, otrosCargosMensuales, saleDeTuBolsillo, sinIntereses)
+    val antes = planDeUnaDeuda(
+        saldoDeLaDeuda, rateEa, cuota, seguroMensual, otrosCargosMensuales, saleDeTuBolsillo, sinIntereses,
+        tipoDeCuota = tipoDeCuota, capitalFijo = capitalFijo,
+    )
     // El abono no puede llevarse la deuda a negativo: lo que pase del saldo no ahorra intereses,
     // sobra. Ver [SimulacionDeAbono.sobrante].
     val aplicado = abono.coerceIn(0L, saldoDeLaDeuda.coerceAtLeast(0L))
@@ -139,6 +145,8 @@ fun simularAbonoUnico(
         otrosCargosMensuales,
         saleDeTuBolsillo,
         sinIntereses,
+        tipoDeCuota = tipoDeCuota,
+        capitalFijo = capitalFijo,
     )
     val logro = when {
         abono <= 0L || !antes.comoVa.seProyecta -> QueLograElAbono.NO_SE_PUEDE_SIMULAR
@@ -187,12 +195,15 @@ fun simularAbonoUnico(credit: CreditSummary, abono: Long): SimulacionDeAbono? {
     return simularAbonoUnico(
         saldoDeLaDeuda = credit.account.balance,
         rateEa = terms.rateEa,
-        cuota = terms.installment,
+        // Revisión de la vuelta 133: la cuota de este mes y el tipo de cuota, como `planDelCredito`.
+        cuota = cuotaDeEsteMes(terms, credit.ultimaCuotaPagada),
         seguroMensual = terms.insuranceMonthly,
         otrosCargosMensuales = terms.otrosCargosMensuales,
         saleDeTuBolsillo = saleDeTuBolsillo(terms),
         abono = abono,
         sinIntereses = terms.sinIntereses,
+        tipoDeCuota = terms.tipoDeCuota,
+        capitalFijo = capitalFijoDe(terms),
     )
 }
 
@@ -236,6 +247,9 @@ fun abonoMinimoParaQueSeTermine(
     otrosCargosMensuales: Long?,
     /** Ver [planDeUnaDeuda]. */
     sinIntereses: Boolean = false,
+    /** Revisión de la vuelta 133 · ver [planDeUnaDeuda]. */
+    tipoDeCuota: TipoDeCuota? = null,
+    capitalFijo: Long? = null,
 ): Long? {
     fun seTermina(abono: Long): Boolean =
         planDeUnaDeuda(
@@ -247,9 +261,14 @@ fun abonoMinimoParaQueSeTermine(
             // Da igual quién pague: no entra en la aritmética, solo rotula el resultado.
             saleDeTuBolsillo = true,
             sinIntereses = sinIntereses,
+            tipoDeCuota = tipoDeCuota,
+            capitalFijo = capitalFijo,
         ).mesesHastaLaUltimaCuota != null
 
-    val hoy = planDeUnaDeuda(saldoDeLaDeuda, rateEa, cuota, seguroMensual, otrosCargosMensuales, true, sinIntereses)
+    val hoy = planDeUnaDeuda(
+        saldoDeLaDeuda, rateEa, cuota, seguroMensual, otrosCargosMensuales, true, sinIntereses,
+        tipoDeCuota = tipoDeCuota, capitalFijo = capitalFijo,
+    )
     // Ya se termina, o no hay nada cargado con qué preguntarlo. En los dos casos la pregunta no
     // aplica, y contestar un monto sería contestar otra cosa.
     if (!hoy.comoVa.seProyecta || hoy.mesesHastaLaUltimaCuota != null) return null
@@ -274,9 +293,11 @@ fun abonoMinimoParaQueSeTermine(credit: CreditSummary): Long? {
     return abonoMinimoParaQueSeTermine(
         saldoDeLaDeuda = credit.account.balance,
         rateEa = terms.rateEa,
-        cuota = terms.installment,
+        cuota = cuotaDeEsteMes(terms, credit.ultimaCuotaPagada),
         seguroMensual = terms.insuranceMonthly,
         otrosCargosMensuales = terms.otrosCargosMensuales,
         sinIntereses = terms.sinIntereses,
+        tipoDeCuota = terms.tipoDeCuota,
+        capitalFijo = capitalFijoDe(terms),
     )
 }

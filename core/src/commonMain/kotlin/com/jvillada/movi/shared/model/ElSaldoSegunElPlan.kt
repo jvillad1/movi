@@ -58,6 +58,11 @@ fun saldoSegunElPlan(
     diaDePago: Int?,
     desde: LocalDate?,
     hoy: LocalDate,
+    /**
+     * Revisión de la vuelta 133 · en un abono constante a capital ([capitalFijoDe]), cada cuota vencida
+     * baja exactamente eso, no lo que deja la cuota pactada después del interés.
+     */
+    capitalFijo: Long? = null,
 ): SaldoSegunElPlan {
     val falta = when {
         capital == null || capital <= 0L -> FaltaParaElSaldoDelPlan.CAPITAL
@@ -86,7 +91,8 @@ fun saldoSegunElPlan(
             yaCobradoEnElMes = 0L,
             sinIntereses = sinIntereses,
         )
-        saldo = (saldo - desglose.capital).coerceAtLeast(0L)
+        val baja = capitalFijo?.takeIf { it > 0L }?.let { minOf(it, saldo) } ?: desglose.capital
+        saldo = (saldo - baja).coerceAtLeast(0L)
         vencidas++
         mes = mesSiguiente(mes)
     }

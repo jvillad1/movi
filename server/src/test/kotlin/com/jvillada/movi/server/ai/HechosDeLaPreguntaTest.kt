@@ -398,4 +398,30 @@ class HechosDeLaPreguntaTest {
         assertEquals("\$0", pesos(0L))
         assertEquals("\$950", pesos(950L))
     }
+
+    // ── Revisión de la vuelta 133 · una cuota que cambia no se afirma como fija ─────────────────────
+
+    @Test
+    fun `vuelta 133 · los hechos de un credito en UVR dicen unos y por que cambia`() {
+        val uvr = v8761.copy(tipoDeCuota = com.jvillada.movi.shared.model.TipoDeCuota.UVR, cuotaEsLaUltimaPagada = true)
+        val hechos = hechosDelCredito(uvr)
+        assertTrue(hechos.contains("- Cuota: NO es fija (está en UVR); la de este mes es de unos \$1.500.000 (es la última que pagó)"), hechos)
+        assertTrue(!hechos.contains("- Cuota: \$1.500.000 el día"), "sin la cifra dicha como fija: $hechos")
+        // Sin un pago todavía, la estimación es la pactada, y se dice.
+        assertTrue(hechosDelCredito(uvr.copy(cuotaEsLaUltimaPagada = false)).contains("es la que pactó"))
+        // Un crédito fijo, como siempre.
+        assertTrue(hechosDelCredito(v8761).contains("- Cuota: \$1.500.000 el día 12"))
+    }
+
+    @Test
+    fun `vuelta 133 · simular_abono dice que la cuota de tasa variable es estimada`() {
+        val deuda = com.jvillada.movi.shared.model.DeudaParaSalir(
+            id = "v", nombre = "Libre inversión 9695", tipo = com.jvillada.movi.shared.model.TipoDeDeuda.CREDITO,
+            saldo = 12_000_000L, tasaEa = 18.0, cuota = 1_262_300L,
+            tipoDeCuota = com.jvillada.movi.shared.model.TipoDeCuota.TASA_VARIABLE,
+        )
+        val plan = com.jvillada.movi.shared.model.planDeSalida(listOf(deuda), 0L, com.jvillada.movi.shared.model.EstrategiaDeSalida.AVALANCHA)
+        val texto = textoDelPlanDeSalida(plan, plan, com.jvillada.movi.shared.model.PeriodoFinanciero(2026, 11))
+        assertTrue(texto.contains("cuota de unos 1262300 (no es fija: la tasa es variable (IBR + puntos))"), texto)
+    }
 }

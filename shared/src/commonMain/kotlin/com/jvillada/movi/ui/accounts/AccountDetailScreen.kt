@@ -138,7 +138,9 @@ fun AccountDetailScreen(onNavigate: (Screen) -> Unit, accountId: String, group: 
     // a la vista no se taparían al tocar el ojo.
     val lineasDeLaCuota = remember(days, condiciones, SaldosOcultosStore.ocultos) {
         val terms = condiciones
-        if (terms == null) {
+        // Revisión de la vuelta 133: una cuota que cambia (UVR, tasa variable, abono constante) no tiene una
+        // cifra fija contra la cual decir «pagaste $X más que la cuota»: esa frase sería falsa.
+        if (terms == null || com.jvillada.movi.shared.model.esCuotaQueSeComparaConLaPactada(terms).not()) {
             emptyMap()
         } else {
             textosDeLosPagosQueNoFueronLaCuota(

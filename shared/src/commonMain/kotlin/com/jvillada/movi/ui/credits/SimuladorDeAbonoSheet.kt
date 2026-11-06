@@ -75,7 +75,8 @@ fun SimuladorDeAbonoSheet(
     var recordando by remember { mutableStateOf(false) }
     val alcance = rememberCoroutineScope()
     val saldo = credit.account.balance
-    val cuota = credit.terms?.installment ?: 0L
+    // Vuelta 133: la cuota de este mes (la que cambia, la última pagada de verdad).
+    val cuota = credit.terms?.let { com.jvillada.movi.shared.model.cuotaDeEsteMes(it, credit.ultimaCuotaPagada) } ?: 0L
     // Una búsqueda binaria sobre treinta y pico de proyecciones: se hace UNA vez por crédito, no
     // en cada tecla. Da `null` en la mayoría —los créditos que ya se terminan no tienen mínimo que
     // buscar— y solo cuesta algo en las dos deudas que hoy no se terminan. Viene con su fecha

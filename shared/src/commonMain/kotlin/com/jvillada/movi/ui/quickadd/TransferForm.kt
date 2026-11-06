@@ -516,13 +516,19 @@ fun deudaDeHoy(deuda: Account?): String? {
 // ── Vuelta 48 · en Cuota, tocar un crédito es pagar su cuota ───────────────────────────────────
 
 /**
- * **La cuota del mes que se propone al elegir un crédito en Cuota**: la de sus condiciones
- * (`CreditTerms.installment`, la misma que arma la fila sintética `credit_<id>` de Pagos), o `null`
+ * **La cuota del mes que se propone al elegir un crédito en Cuota**: la de [cuotaDeEsteMes] (vuelta 133:
+ * fija, `CreditTerms.installment`; la que cambia, la última pagada de verdad), la misma que arma la fila
+ * sintética `credit_<id>` de Pagos, o `null`
  * si no es un crédito o no tiene cuota cargada. Una tarjeta no propone nada: su «monto» es el
  * saldo, no lo que se va a pagar (ver `hojaParaAnotar`).
  */
-fun cuotaPropuesta(deuda: Account?, terms: CreditTerms?): Long? =
-    terms?.installment?.takeIf { deuda?.type == AccountType.LOAN && it > 0L }
+fun cuotaPropuesta(
+    deuda: Account?,
+    terms: CreditTerms?,
+    /** Vuelta 133 · la última cuota pagada de verdad (`CreditSummary.ultimaCuotaPagada`), para una cuota que cambia. */
+    ultimaPagada: com.jvillada.movi.shared.model.CuotaPagada? = null,
+): Long? =
+    terms?.let { com.jvillada.movi.shared.model.cuotaDeEsteMes(it, ultimaPagada) }?.takeIf { deuda?.type == AccountType.LOAN && it > 0L }
 
 /**
  * La cuenta de la que el banco **debita solo** la cuota de este crédito
@@ -865,6 +871,8 @@ internal fun TransferBody(
     // separar con `falloCargarCuentas`. Sin este estado aparte, un corte de red le habría dicho
     // «este crédito no tiene tasa registrada» sobre un crédito que sí la tiene.
     var terminosPorCuenta by remember { mutableStateOf<Map<String, CreditTerms>>(emptyMap()) }
+    // Vuelta 133: la última cuota pagada de cada crédito de cuota que cambia, para proponer la de este mes.
+    var ultimasPagadas by remember { mutableStateOf<Map<String, com.jvillada.movi.shared.model.CuotaPagada>>(emptyMap()) }
     var terminosCargados by remember { mutableStateOf(false) }
     var falloCargarTerminos by remember { mutableStateOf(false) }
     // Vuelta 48: los ajustes del período, para decir de qué mes es la cuota («Cuota de X · octubre»).
@@ -876,6 +884,7 @@ internal fun TransferBody(
         runCatching { Repositories.wallets.getCredits() }
             .onSuccess { creditos ->
                 terminosPorCuenta = creditos.mapNotNull { it.terms }.associateBy { it.accountId }
+                ultimasPagadas = creditos.mapNotNull { c -> c.ultimaCuotaPagada?.let { c.account.id to it } }.toMap()
             }
             .onFailure { falloCargarTerminos = true }
         terminosCargados = true
@@ -1044,7 +1053,7 @@ internal fun TransferBody(
         if (deuda.type != AccountType.LOAN) return@LaunchedEffect
         val terms = terminosPorCuenta[deuda.id]
         val escritoPorLaHoja = montoActual.isBlank() || montoActual == montoPropuesto
-        val cuota = if (abonoExtra) null else cuotaPropuesta(deuda, terms)?.toString()
+        val cuota = if (abonoExtra) null else cuotaPropuesta(deuda, terms, ultimasPagadas[deuda.id])?.toString()
         if (escritoPorLaHoja) {
             if (cuota != null && cuota != montoActual) proponerMonto(cuota)
             else if (cuota == null && montoActual.isNotBlank()) proponerMonto("")

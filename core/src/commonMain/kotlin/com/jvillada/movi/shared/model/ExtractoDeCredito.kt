@@ -56,7 +56,28 @@ data class PropuestaDelExtractoDeCredito(
     val interesEstimado: Long? = null,
     val seguroEnMovi: Long? = null,
     val tasaEnMovi: Double? = null,
+    /**
+     * Vuelta 133 · **el crédito tiene una cuota que cambia** ([CreditTerms.cuotaCambia]). Con `true`,
+     * «Actualizar» también pone la tasa del extracto como la vigente. Con `false` (cuota fija) una tasa
+     * distinta no se cambia sola: la revisión pregunta si el crédito es de tasa variable. Default `false`
+     * para un server viejo.
+     */
+    val cuotaCambia: Boolean = false,
 )
+
+/**
+ * Vuelta 133 · ¿la tasa del extracto difiere de la de un crédito de **cuota fija** que ya tiene tasa? Es
+ * la señal de que el crédito es de tasa variable (o se reestructuró): se pregunta, nunca se cambia sola.
+ */
+fun tasaDistintaEnUnCreditoFijo(p: PropuestaDelExtractoDeCredito): Boolean {
+    val delExtracto = p.resumen.tasaEa ?: return false
+    val enMovi = p.tasaEnMovi?.takeIf { it > 0.0 } ?: return false
+    return !p.cuotaCambia && abs(delExtracto - enMovi) >= 0.005
+}
+
+/** «La tasa de este extracto es 12,4 % E.A.; ¿tu crédito es de tasa variable?» (vuelta 133). */
+fun preguntaDeLaTasaVariable(tasaDelExtracto: Double): String =
+    "La tasa de este extracto es ${tasa(tasaDelExtracto)}; ¿tu crédito es de tasa variable?"
 
 /**
  * **Los renglones de la propuesta**, uno por cifra que el extracto dice: «Saldo $40.710.555 (Movi
@@ -72,7 +93,9 @@ fun renglonesDelExtractoDeCredito(p: PropuestaDelExtractoDeCredito): List<String
     r.seguro?.let { add(comparado("Seguro", plata(it), p.seguroEnMovi?.let(::plata) ?: "sin seguro", it == p.seguroEnMovi, "Movi")) }
     r.tasaEa?.let {
         val igual = p.tasaEnMovi != null && abs(it - p.tasaEnMovi) < 0.005
-        add(comparado("Tasa", tasa(it), p.tasaEnMovi?.let(::tasa), igual, "Movi"))
+        // Vuelta 133: en un crédito de cuota fija, una tasa distinta se pregunta (no se actualiza).
+        if (tasaDistintaEnUnCreditoFijo(p)) add(preguntaDeLaTasaVariable(it) + " Movi deja la tasa que tiene (" + tasa(p.tasaEnMovi!!) + ").")
+        else add(comparado("Tasa", tasa(it), p.tasaEnMovi?.let(::tasa), igual, "Movi"))
     }
 }
 
@@ -84,7 +107,8 @@ fun hayAlgoQueActualizar(p: PropuestaDelExtractoDeCredito): Boolean {
         // El interés siempre se guarda —es el de una cuota nueva—, aunque coincida con la estimación.
         (r.interesDelPeriodo != null && r.fechaDePago != null) ||
         (r.seguro != null && r.seguro != p.seguroEnMovi) ||
-        (r.tasaEa != null && (p.tasaEnMovi == null || abs(r.tasaEa - p.tasaEnMovi) >= 0.005))
+        // Vuelta 133: en un crédito de cuota fija la tasa no se actualiza sola (ver [tasaDistintaEnUnCreditoFijo]).
+        (r.tasaEa != null && !tasaDistintaEnUnCreditoFijo(p) && (p.tasaEnMovi == null || abs(r.tasaEa - p.tasaEnMovi) >= 0.005))
 }
 
 private fun comparado(que: String, delExtracto: String, deMovi: String?, igual: Boolean, quien: String): String = when {

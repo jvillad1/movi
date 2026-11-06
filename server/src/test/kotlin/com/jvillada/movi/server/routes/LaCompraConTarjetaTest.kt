@@ -21,6 +21,7 @@ import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.appDateToEpochMillis
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.CUOTAS_FUERA_DE_RANGO
+import com.jvillada.movi.shared.model.CUOTAS_SOLO_EN_UNA_COMPRA_CON_TARJETA
 import com.jvillada.movi.shared.model.DE_UNA_TARJETA_SOLO_GASTOS
 import com.jvillada.movi.shared.model.DosPatasDelAviso
 import com.jvillada.movi.shared.model.EventSource
@@ -36,6 +37,7 @@ import com.jvillada.movi.shared.model.isCashFlow
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -352,5 +354,85 @@ class LaCompraConTarjetaTest {
 
         assertTrue(anulados().isEmpty(), "nada se anuló: la plata sigue donde estaba")
         assertEquals(deudaInicial + 400_000L + 50_000L, deudaDeNu())
+    }
+
+    // ── Vuelta 133 · cambiar las cuotas de una compra ya anotada (`PUT /api/events/{id}/cuotas`) ──────
+
+    private suspend fun ApplicationTestBuilder.cambiarCuotas(id: String, cuotas: Int, comoQuien: String = token()): HttpResponse =
+        cliente().put("/api/events/$id/cuotas") {
+            header(HttpHeaders.Authorization, "Bearer $comoQuien")
+            contentType(ContentType.Application.Json)
+            setBody("""{"cuotas":$cuotas}""")
+        }
+
+    private fun otroUsuario(): String {
+        val otro = "user-otro-cuotas"
+        transaction {
+            Users.insert { it[id] = otro; it[email] = "otro-cuotas@movi.test"; it[name] = "Otro"; it[passwordHash] = "hash" }
+            Accounts.insert { it[Accounts.id] = "acc-otro-tarjeta"; it[userId] = otro; it[name] = "Otra tarjeta"; it[type] = "CREDIT_CARD" }
+        }
+        return JWT.create()
+            .withIssuer(issuer).withAudience(audience)
+            .withClaim("userId", otro).withClaim("email", "$otro@movi.test")
+            .withExpiresAt(Date(System.currentTimeMillis() + 3_600_000))
+            .sign(Algorithm.HMAC256(testSecret))
+    }
+
+    @Test
+    fun `vuelta 133 · las cuotas de una compra anotada se cambian sin tocar monto, fecha ni categoria`() = testApplication {
+        application { testModule() }
+        transaction { evento("ev-nevera", nu, "EXPENSE", 6_000_000L, "Hogar") }
+        val respuesta = cambiarCuotas("ev-nevera", 60)
+        assertEquals(HttpStatusCode.OK, respuesta.status, respuesta.bodyAsText())
+        assertEquals(60, cuotasDe("ev-nevera"))
+        val fila = transaction { Events.selectAll().where { Events.id eq "ev-nevera" }.first() }
+        assertEquals(6_000_000L, fila[Events.amount])
+        assertEquals("Hogar", fila[Events.category])
+        assertEquals(momento, fila[Events.timestamp])
+        // Idempotente: el mismo número otra vez contesta lo mismo y no cambia nada.
+        assertEquals(HttpStatusCode.OK, cambiarCuotas("ev-nevera", 60).status)
+        assertEquals(60, cuotasDe("ev-nevera"))
+        // Y se puede corregir.
+        assertEquals(HttpStatusCode.OK, cambiarCuotas("ev-nevera", 48).status)
+        assertEquals(48, cuotasDe("ev-nevera"))
+    }
+
+    @Test
+    fun `vuelta 133 · las cuotas van de 1 a 72, solo en un gasto de una tarjeta del dueno`() = testApplication {
+        application { testModule() }
+        transaction {
+            evento("ev-tarjeta", nu, "EXPENSE", 300_000L, "Mercado")
+            evento("ev-ahorros", ahorros, "EXPENSE", 300_000L, "Mercado")
+            evento("ev-pago", nu, "INCOME", 300_000L, "Pago de tarjeta")
+            evento("ev-anulado", nu, "EXPENSE", 300_000L, "Mercado")
+            VoidEvents.insert { it[id] = "void-1"; it[userId] = uid; it[originalEventId] = "ev-anulado"; it[VoidEvents.timestamp] = momento }
+        }
+        assertEquals(HttpStatusCode.BadRequest, cambiarCuotas("ev-tarjeta", 0).status)
+        assertEquals(HttpStatusCode.BadRequest, cambiarCuotas("ev-tarjeta", MAXIMO_DE_CUOTAS + 1).status)
+        val deAhorros = cambiarCuotas("ev-ahorros", 12)
+        assertEquals(HttpStatusCode.UnprocessableEntity, deAhorros.status)
+        assertEquals(CUOTAS_SOLO_EN_UNA_COMPRA_CON_TARJETA, deAhorros.bodyAsText())
+        assertEquals(HttpStatusCode.UnprocessableEntity, cambiarCuotas("ev-pago", 12).status, "un abono a la tarjeta no tiene cuotas")
+        assertEquals(HttpStatusCode.NotFound, cambiarCuotas("ev-anulado", 12).status)
+        assertEquals(HttpStatusCode.NotFound, cambiarCuotas("no-existe", 12).status)
+        assertEquals(HttpStatusCode.NotFound, cambiarCuotas("ev-tarjeta", 12, comoQuien = otroUsuario()).status, "de otro: 404")
+        assertNull(cuotasDe("ev-tarjeta"), "nada de lo rechazado escribió")
+        assertNull(cuotasDe("ev-ahorros"))
+    }
+
+    @Test
+    fun `vuelta 133 revision 2 · el POST y el PUT de las cuotas aceptan lo mismo`() = testApplication {
+        application { testModule() }
+        // Un predial pagado con la tarjeta, en «Impuestos»: el POST guarda sus cuotas y el PUT las cambia.
+        val predial = gasto("ev-predial", nu, cuotas = "12").replace("\"category\":\"Mercado\",\"description\":\"Mercado\"", "\"category\":\"Impuestos\",\"description\":\"Predial Medellín\"")
+        assertEquals(HttpStatusCode.Created, anotar(predial).status)
+        assertEquals(12, cuotasDe("ev-predial"))
+        assertEquals(HttpStatusCode.OK, cambiarCuotas("ev-predial", 24).status)
+        assertEquals(24, cuotasDe("ev-predial"))
+        // Un cargo del banco (la cuota de manejo): el POST las ignora y el PUT las rechaza.
+        val manejo = gasto("ev-manejo", nu, monto = 45_000L, cuotas = "3").replace("\"category\":\"Mercado\",\"description\":\"Mercado\"", "\"category\":\"Otros\",\"description\":\"CUOTA DE MANEJO\"")
+        assertEquals(HttpStatusCode.Created, anotar(manejo).status)
+        assertNull(cuotasDe("ev-manejo"))
+        assertEquals(HttpStatusCode.UnprocessableEntity, cambiarCuotas("ev-manejo", 3).status)
     }
 }

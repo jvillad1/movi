@@ -267,6 +267,30 @@ data class CreditTerms(
      * clave conserva el guardado.
      */
     val cuotasDesde: String? = null,
+    /**
+     * **Vuelta 133 · cómo se mueve la cuota** (ver `LaCuotaQueCambia.kt`). `null` = [TipoDeCuota.FIJA], lo
+     * de siempre: un crédito viejo y un APK viejo no cambian nada.
+     *
+     * **Viaja siempre**, como [debitoAutomaticoDesde]: la hoja lo arma entero, así que volver a «Sí, es
+     * siempre la misma» manda el `null` y lo apaga. Un APK que no conoce el campo no manda la clave y el
+     * `PUT` conserva lo guardado (la guarda por clave de `PUT /api/credits/{id}`). Columna nueva y nullable,
+     * `credit_terms.tipo_de_cuota`.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val tipoDeCuota: TipoDeCuota? = null,
+    /** Vuelta 133 · el índice de una tasa variable (IBR u otro). Solo con [TipoDeCuota.TASA_VARIABLE]. */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val indiceDeLaTasa: IndiceDeLaTasa? = null,
+    /**
+     * Vuelta 133 · los puntos sobre el índice («IBR + 8,5»), nominal anual como los publica Bancolombia;
+     * opcionales. Solo con [TipoDeCuota.TASA_VARIABLE]. **La tasa vigente sigue en [rateEa]**: estos
+     * puntos solo describen el crédito, Movi no los suma a un IBR que no conoce.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val puntosSobreElIndice: Double? = null,
+    /** Vuelta 133 · qué cambia cuando se reajusta la tasa: la cuota o el plazo. Solo con [TipoDeCuota.TASA_VARIABLE]. */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val alCambiarLaTasa: AlCambiarLaTasa? = null,
 )
 
 /**
@@ -387,6 +411,12 @@ data class CreditSummary(
      * pagadas ([mesDeLaPrimeraCuotaSinPagar]). Solo `GET /api/credits`; `null` = no se sabe.
      */
     val saldoFijadoEn: Long? = null,
+    /**
+     * Vuelta 133 · **la última cuota que se pagó de verdad** (la pata del dinero del último pago de cuota,
+     * de los últimos dos meses), para [cuotaDeEsteMes] de un crédito de cuota que cambia. Solo
+     * `GET /api/credits`, y solo en un crédito de cuota que cambia; `null` = no hay o no se sabe.
+     */
+    val ultimaCuotaPagada: CuotaPagada? = null,
 )
 
 /**
@@ -972,6 +1002,12 @@ data class RecurringRule(
      * de [frecuencia] en un PUT.
      */
     val primerVencimiento: String? = null,
+    /**
+     * **Vuelta 133 · la cuota de un crédito que cambia** (solo en la regla sintética `credit_<id>`): su
+     * [amount] es la de [cuotaDeEsteMes] —la última pagada de verdad— y la fila dice «unos $X (la de
+     * octubre fue $Y)». `null` en todo lo demás (también un crédito de cuota fija): el wire de siempre.
+     */
+    val cuotaQueCambia: LaCuotaQueCambia? = null,
 )
 
 /**
