@@ -1,7 +1,7 @@
 package com.jvillada.movi.ui.sms
 
 import com.jvillada.movi.shared.model.CategoriaDelNumero
-import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
+import com.jvillada.movi.shared.model.queSeOfrecen
 
 /** La línea que explica por qué las pastillas arrancan con las del número (Revisar aviso y la tarjeta). */
 const val TAG_LINEA_DEL_NUMERO: String = "linea-del-numero"
@@ -14,7 +14,7 @@ private const val CATEGORIAS_EN_LA_LINEA = 3
  * tarjeta», «Descuento de nómina», «Pago de un tercero»…). Con menos de dos no queda nada que ofrecer.
  */
 fun lasDelNumero(categorias: List<CategoriaDelNumero>): List<CategoriaDelNumero> =
-    categorias.filterNot { esCategoriaQueNoSeElige(it.categoria) }.takeIf { it.size >= 2 }.orEmpty()
+    categorias.queSeOfrecen()
 
 /**
  * **«A esta llave le pusiste Parqueadero 3 veces y Gasolina 2»** (categorías del número): lo que el

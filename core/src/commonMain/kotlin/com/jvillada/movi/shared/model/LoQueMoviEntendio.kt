@@ -191,7 +191,18 @@ fun dudasDelAviso(
  * entendidos son el trámite que el lote acelera; los ingresos son pocos.
  */
 fun entraEnElLote(leido: ParsedSms): Boolean =
-    leido.type != TransactionType.INCOME && (leido.categoriasDelNumero.size < 2 || leido.porElMismoMonto)
+    leido.type != TransactionType.INCOME &&
+        (leido.categoriasDelNumeroQueSeOfrecen().isEmpty() || leido.porElMismoMonto)
+
+/**
+ * **Las categorías del número que sí se ofrecen** (la única regla, para la pantalla y el lote): sin las
+ * que ningún selector ofrece ([esCategoriaQueNoSeElige]: «Avance de tarjeta», «Descuento de nómina»…) y,
+ * si quedan menos de dos, ninguna: con una sola la propuesta de siempre ya lo explica.
+ */
+fun List<CategoriaDelNumero>.queSeOfrecen(): List<CategoriaDelNumero> =
+    filterNot { esCategoriaQueNoSeElige(it.categoria) }.takeIf { it.size >= 2 }.orEmpty()
+
+fun ParsedSms.categoriasDelNumeroQueSeOfrecen(): List<CategoriaDelNumero> = categoriasDelNumero.queSeOfrecen()
 
 /**
  * **¿Este aviso es plata que llega?** (vuelta 85, para «Por confirmar» con signo) Un ingreso, salvo lo

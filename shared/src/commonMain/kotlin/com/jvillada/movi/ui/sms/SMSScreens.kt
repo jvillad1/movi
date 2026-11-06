@@ -2052,16 +2052,15 @@ fun SMSReconcileScreen(
                                 ),
                             )
                         }
-                    }
-
-                    // «Nota»: para qué fue. No con «Es este» (nada se crea) ni en partes (cada una tiene la suya).
-                    if (parsed != null && pendiente && unicoYaAnotado == null && !enPartes) {
-                        FilaDeLaNota(
-                            valor = notaEscrita ?: parsed?.nota.orEmpty(),
-                            habilitada = !working,
-                            onCambio = { notaEscrita = it },
-                            modifier = Modifier.padding(top = Medida.dentroDeSeccion),
-                        )
+                        // «Nota» (dentro de la misma superficie, debajo de la categoría): para qué fue. No con «Es este» (nada se crea) ni en partes (cada una tiene la suya).
+                        if (parsed != null && pendiente && unicoYaAnotado == null && !enPartes) {
+                            FilaDeLaNota(
+                                valor = notaEscrita ?: parsed?.nota.orEmpty(),
+                                habilitada = !working,
+                                onCambio = { notaEscrita = it },
+                                modifier = Modifier.padding(horizontal = Medida.margenDePantalla, vertical = Medida.dentroDeSeccion),
+                            )
+                        }
                     }
 
                     // Vuelta 56 · «Es la cuota de un crédito ›» / «Es el pago de una tarjeta ›»: las dos

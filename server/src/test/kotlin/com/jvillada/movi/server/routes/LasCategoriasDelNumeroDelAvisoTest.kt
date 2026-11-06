@@ -12,6 +12,11 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.plugins.configureRouting
 import com.jvillada.movi.server.plugins.configureSerialization
 import com.jvillada.movi.shared.model.CategoriaDelNumero
+import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.TipoDeTercero
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
+import org.jetbrains.exposed.sql.select
 import com.jvillada.movi.shared.model.ParsedSms
 import com.jvillada.movi.shared.model.SmsMessage
 import com.jvillada.movi.shared.model.momentoDelSms
@@ -226,5 +231,24 @@ class LasCategoriasDelNumeroDelAvisoTest {
         val p = leer("sms_1")
 
         assertFalse(p.merchant.contains("lo de ayer"), "el nombre propuesto: ${p.merchant}")
+        assertEquals(merchantQr, p.merchant)
+    }
+
+    @Test
+    fun `renombrado por un tercero, el siguiente aviso trae el nombre sin la nota`() = testApplication {
+        application { testModule() }
+        movimiento("Parqueadero", merchantQr, descripcion = "$merchantQr · parqueadero del centro", minutosAtras = 5)
+        val c = cliente()
+        val r = c.post("/api/destinos") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(DestinoConocido(nombre = "Parqueadero Calle 85", numero = "", llave = llave, tipo = TipoDeTercero.COMERCIO))
+        }
+        assertEquals(HttpStatusCode.Created, r.status, r.bodyAsText())
+        val descripcion = transaction { Events.select(Events.description).single()[Events.description] }
+        assertEquals("Parqueadero Calle 85 · parqueadero del centro", descripcion)
+        subir(aviso("sms_1"))
+
+        assertEquals("Parqueadero Calle 85", leer("sms_1").merchant)
     }
 }

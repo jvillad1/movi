@@ -5519,7 +5519,7 @@ filas que anotó la otra persona desde su Movi. El patrón:
 Cuando un mismo número (llave o cuenta) se ha anotado con varias categorías, Movi no adivina: las pone
 a la vista. El patrón:
 
-- **Una línea dice por qué**: «A esta llave le pusiste Parqueadero 3 veces, Gasolina 2 y Comercio 1»
+- **Una línea dice por qué**: «A esta llave le pusiste Parqueadero 3 veces, Gasolina 2 y Comercio 1 vez»
   (`lineaDelNumero`, texto `apoyo`, `TAG_LINEA_DEL_NUMERO`), encima de las pastillas. Con más de tres,
   «… y 2 más»; «cuenta» en vez de «llave» si es un número de cuenta. Con una sola categoría no hay línea:
   la frase de siempre («Así lo anotaste 3 veces») ya lo explica.

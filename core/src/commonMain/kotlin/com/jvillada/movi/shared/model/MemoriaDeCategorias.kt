@@ -179,11 +179,26 @@ fun huellaDelIdentificador(id: IdentificadorDelDestino): String? = when (id.tipo
 }
 
 /**
- * El comercio de un movimiento sin la nota que el dueño le agregó después: si [descripcion] es
- * «[merchant] · nota», el nombre es [merchant]; si no, [descripcion].
+ * El nombre de un movimiento sin la nota que el dueño le agregó después («nombre · nota»), con el
+ * mismo separador que usa `NombreDelTercero.kt` ([SEPARADOR_DE_LA_NOTA]):
+ *  - empieza por «[merchant] · »: el nombre es [merchant];
+ *  - lo que va antes de algún « · » es un número o una llave del banco («Pago QR · llave 0099887766 ·
+ *    nota»): el nombre es esa cabeza —su « · » lo puso el banco, no el dueño—;
+ *  - hay [merchant] pero la descripción ya no empieza por él (el tercero la renombró y la nota se
+ *    quedó): el nombre es lo que va antes del primer « · »;
+ *  - si no, [descripcion] tal cual: un nombre sin separador, o sin comercio, no se toca.
  */
-fun nombreSinLaNota(merchant: String?, descripcion: String): String =
-    if (!merchant.isNullOrEmpty() && descripcion.startsWith("$merchant · ")) merchant else descripcion
+fun nombreSinLaNota(merchant: String?, descripcion: String): String {
+    if (!merchant.isNullOrEmpty() && descripcion.startsWith(merchant + SEPARADOR_DE_LA_NOTA)) return merchant
+    val partes = descripcion.split(SEPARADOR_DE_LA_NOTA)
+    if (partes.size < 2) return descripcion
+    for (k in 1 until partes.size) {
+        val cabeza = partes.take(k).joinToString(SEPARADOR_DE_LA_NOTA)
+        val huella = huellaDeUnMovimiento(cabeza)
+        if (huella != null && laHuellaEsUnNumero(huella)) return cabeza
+    }
+    return if (merchant.isNullOrEmpty()) descripcion else partes.first()
+}
 
 /**
  * Lo que Movi recuerda de un destinatario: con qué categoría lo anotó el dueño, cómo lo llamó, y

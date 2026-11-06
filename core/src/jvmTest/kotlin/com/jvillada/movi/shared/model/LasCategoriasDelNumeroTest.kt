@@ -116,6 +116,30 @@ class LasCategoriasDelNumeroTest {
     }
 
     @Test
+    fun `nombreSinLaNota con el nombre renombrado por un tercero y la nota que se quedo`() {
+        // El tercero reescribió la descripción; el comercio sigue siendo el número.
+        assertEquals(
+            "Parqueadero Calle 85",
+            nombreSinLaNota(llave, "Parqueadero Calle 85 · parqueadero del centro"),
+        )
+        // Sin renombrar, con nota: la cabeza es la llave entera (su « · » lo puso el banco).
+        assertEquals(llave, nombreSinLaNota(null, "$llave · lo de ayer"))
+        // Un nombre sin separador y sin comercio no se toca.
+        assertEquals("Parqueadero Calle 85", nombreSinLaNota(llave, "Parqueadero Calle 85"))
+        assertEquals("Pago QR · llave 0099887766", nombreSinLaNota(null, "Pago QR · llave 0099887766"))
+    }
+
+    @Test
+    fun `entraEnElLote cuenta las categorias que se ofrecen, no las crudas`() {
+        val base = ParsedSms(1.0, "x", TransactionType.EXPENSE, "A")
+        val conUnaInterna = listOf(CategoriaDelNumero("Parqueadero", 2), CategoriaDelNumero("Descuento de nómina", 1))
+        assertTrue(entraEnElLote(base.copy(categoriasDelNumero = conUnaInterna)))
+        assertTrue(base.copy(categoriasDelNumero = conUnaInterna).categoriasDelNumeroQueSeOfrecen().isEmpty())
+        val dos = listOf(CategoriaDelNumero("Parqueadero", 2), CategoriaDelNumero("Gasolina", 1))
+        assertEquals(dos, base.copy(categoriasDelNumero = dos).categoriasDelNumeroQueSeOfrecen())
+    }
+
+    @Test
     fun `entraEnElLote`() {
         val dos = listOf(CategoriaDelNumero("A", 2), CategoriaDelNumero("B", 1))
         val base = ParsedSms(1.0, "x", TransactionType.EXPENSE, "A")
