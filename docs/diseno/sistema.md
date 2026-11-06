@@ -2616,7 +2616,8 @@ desembolso plata que entró.
    (`minLines = 2`): vacío sin deuda, «Deuda de Nu: $1.683.000» al elegirla y «… pasa a $1.583.000» con el
    monto. La frase del desglose de un crédito reserva tres (`minLines = 3`). Elegir un crédito suma lo suyo
    —el interés y el enlace del abono—: es cambiar de modo, no escribir.
-3. **La factura pagada es compacta** (`FilaDeFacturaPagada`, `ui/recurrentes/FacturasDelPeriodo.kt`). Medía
+3. **La factura pagada es compacta** — *reemplazado por la vuelta 136 («una sola fila de factura»): la pagada
+   y la pendiente son la misma fila, sin «⋯», y lo de su menú vive en la hoja de la factura.* (`FilaDeFacturaPagada`, `ui/recurrentes/FacturasDelPeriodo.kt`). Medía
    más que una pendiente, con «Ver movimiento» y «Quitar la marca» como dos botones con borde apilados.
    - Un renglón: el ícono de su categoría, el nombre y **«Pagado ✓ · $1.800.000 · 27 oct»** («Pagado» en
      `apoyoMedio` color `entra` con el check, el resto `apoyo` `textoMedio`; `resumenDeLaFacturaPagada`).
@@ -5581,3 +5582,60 @@ a la vista. El patrón:
 - **Lo que no hace**: no elige por el dueño ni confirma solo; el aviso con varias categorías **no entra a
   «Confirmar los N»** (hay que mirarlo), salvo que el mismo monto ya se le haya mandado a esa persona por
   un motivo. La Nota no aparece con «Es este» (no se crea nada) ni en «Repartir en partes».
+
+## Vuelta 136 · una sola fila de factura
+
+El dueño, con una captura de Pagos en su Pixel 8 Pro: «El formato de lo por pagar y pagado debería ser
+consistente, es decir, misma altura de la card de la row y componentes». La fila por pagar medía de ~180 a ~370
+px (nombre, monto, pastilla, «Movi estima: …», «¿Es el de $X?» y «Anotar pago») y la pagada ~130. **Reemplaza
+el punto 3 de §52** (la fila pagada compacta con su «⋯»). **Sin reglas de plata nuevas.**
+
+1. **Una anatomía para toda factura** (`FilaDeFactura`, `ui/recurrentes/FacturasDelPeriodo.kt`): vencida, por
+   vencer, por confirmar, pagada, abono, cuota, tarjeta, débito automático. Es la `Fila` del sistema:
+   - a la izquierda el ícono de su categoría (`nombreParaElIconoDeLaFactura`);
+   - en el centro **dos renglones fijos**: el nombre (`cuerpo`, uno con «…») y el **renglón de estado**
+     (`apoyo`, uno);
+   - a la derecha la cifra (`MontoDeFila`, `TAG_CIFRA`; «unos» antes de una cuota que cambia, «saldo» o
+     «extracto» después, `cifraDeLaFactura`) y debajo, alineada a la derecha, la fecha corta («17 nov»;
+     `fechaDeLaFactura`: el día que salió la plata en lo pagado);
+   - **toda la fila se toca** y abre la hoja de la factura. Sin botones, sin «⋯», sin chevrón.
+   - **El mismo alto**: a letra normal, 58 dp (el alto de la `Fila` con subtítulo) para todas. Con la letra del
+     sistema por encima de ×1,2 (`ESCALA_DE_LETRA_GRANDE_EN_LAS_FACTURAS`) el nombre y el estado reservan **dos
+     renglones cada uno** (`renglonesDeLaFactura`): todas crecen igual. Lo hace `Fila(reservarRenglones = true)`
+     (nuevo: `minLines` en el título y el subtítulo).
+2. **El renglón de estado: un texto y un tono** (`estadoDeLaFactura`, pura; sale de las funciones de siempre):
+   «Guardando…» con una escritura en vuelo; **pagada** «Pagado · 25 oct» («Recibido», «Mínimo cubierto») en el
+   verde de `entra` con el visto delante; tarjeta por debajo del mínimo `lineaDelMinimo` en aviso; **con
+   candidato** «¿Es el de $4.000.000?» en el azul del enlace (el del server, cerca o lejos del monto, o el gasto
+   que se parece a la cuota); una tarjeta que no suma en «Falta por pagar» «No suma: falta el mínimo» en aviso
+   (vuelta 86: lo dice la fila; «Cargar mínimo» va en la hoja); abono «Abono planeado · el día 15»; lo demás la pastilla de siempre
+   (`pastillaDeVencimiento`: «Vence el 17 nov» neutro; «Venció hace 3 días», «Vence mañana», «¿Se cobró?» en
+   aviso; «Se cobra sola el 5»). `TonoDeSubtitulo` ganó `Exito` y `Enlace` (y `colorDelTonoDeSubtitulo`).
+3. **Lo que no cabe va a la hoja de la factura** (`HojaDeLaFactura`, `ui/recurrentes/HojaDeLaFactura.kt`,
+   `MarcoDeHoja`; fuera del teléfono una ficha de `Medida.anchoDeFicha`, como el detalle de un movimiento,
+   §79): el nombre como `EncabezadoDeHoja`, la cifra en `Grande`, el estado entero; la cuota anterior, la
+   cadencia, el mínimo que falta, el extracto (`alternativaDelMinimo`, diferidos, lo que falta del extracto),
+   «Movi estima…» con su pie, el texto del abono, «No suma» con «Cargar mínimo», y de dónde salió el «Pagado»;
+   el candidato en un bloque de capa 2 con «Sí, fue este» / «No fue este» (o «Sí, es la cuota»); «Anotar pago»
+   («Anotar ingreso», «Anotar este abono») a todo el ancho; en lo pagado «Ver movimiento», «Quitar la marca» y
+   «No fue este» (`accionesDeLaHojaPagada`); y al pie, en `Fantasma`, «Editar el pago fijo» / «Ver en Créditos»
+   y «Pausar». **Cada acción cierra la hoja y hace lo de siempre** (la fila dice «Guardando…»).
+   **Un solo amarillo** (`principalDeLaHoja`): «Anotar pago» si falta; «Sí, fue este» (o «Sí, es la cuota») si
+   el candidato está cerca del monto —entonces no se ofrece «Anotar pago», que duplicaría el gasto—; ninguno
+   si está pagada. Con un candidato lejano, «Anotar pago» sigue en amarillo y el candidato va con borde.
+4. **«Anotar pago» sin abrir la hoja: en «Falta por pagar»** (`TarjetaFaltaPorPagar(loMasUrgente)`). Debajo de
+   «Llevas $X pagados», un hilo y el renglón «Lo más urgente: Arriendo» (el nombre en `cuerpoFuerte`; su estado
+   ya lo dice su fila, que va primera) con el botón `S` —«Anotar
+   pago» en amarillo (lo de siempre, `hojaParaAnotar`) o, si Movi tiene un candidato, «¿Es el de $X?», que abre
+   la hoja (en amarillo solo con un gasto que se parece a la cuota, `accionPrincipalDeLaFila`)—. Se eligió la
+   tarjeta (y no un botón en la fila más urgente) porque deja **todas las filas idénticas** y la tarjeta ya
+   es lo primero que se mira en Pagos. Sigue habiendo un solo amarillo en Pagos (§77).
+5. **Pantalla ancha**: la lista sigue en su columna, con las mismas filas; la hoja es la ficha centrada.
+6. **El Inicio no cambia**: «Próximo pago» y el widget «Falta por pagar» tienen su propia pieza.
+
+Lo vigilan `UnaSolaFilaDeFacturaTest` (Robolectric: siete estados del mismo alto a 360 con ×1,12; a ×1,456
+todas crecen igual y las cifras, fechas y estados cortos se leen enteros; tocar abre la hoja; «Anotar pago»
+y «Sí, fue este» hacen lo de siempre; un amarillo en la hoja, ninguno en la pagada; la tarjeta con el más
+urgente), `UnaSolaFilaDeFacturaReglasTest` (commonTest, las reglas puras), `LaFacturaPagadaEsCompactaTest`
+(ahora: mide lo mismo que la pendiente, y «Ver movimiento», «Quitar la marca» y «No fue este» en la hoja) y
+`UnSoloAmarilloPorVistaTest`.
