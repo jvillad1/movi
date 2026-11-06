@@ -133,8 +133,8 @@ internal const val TOPE_DE_RESULTADOS = 40
  */
 internal const val MESES_HACIA_ATRAS_POR_DEFECTO = 12L
 
-/** Una fila, como la lee el modelo. */
-private data class FilaDeMovimiento(
+/** Una fila, como la lee el modelo (y, desde la vuelta 135, la herramienta `movimientos` del conector). */
+internal data class FilaDeMovimiento(
     val fecha: String,
     val nombre: String,
     val categoria: String,
@@ -444,7 +444,7 @@ private suspend fun consultarPersonaOComercio(uid: String, args: Map<String, Str
  * que no encuentra nada porque el cobro fue en dólares es un hueco silencioso. Cada fila dice su
  * moneda y los totales van separados por moneda — nunca sumadas entre sí.
  */
-private suspend fun filasDe(uid: String, desde: LocalDate, hasta: LocalDate): List<FilaDeMovimiento> {
+internal suspend fun filasDe(uid: String, desde: LocalDate, hasta: LocalDate): List<FilaDeMovimiento> {
     val inicio = appDateToEpochMillis(desde)
     val finExclusivo = appDateToEpochMillis(hasta.plusDays(1))
     return dbQuery {

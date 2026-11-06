@@ -16,6 +16,10 @@ import com.jvillada.movi.server.db.CorreosDescartados
 import com.jvillada.movi.server.db.InicioPersonalizado
 import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.Cards
+import com.jvillada.movi.server.db.CodigosDelConector
+import com.jvillada.movi.server.db.ConcesionesDelConector
+import com.jvillada.movi.server.db.LlamadasDelConector
+import com.jvillada.movi.server.db.TokensDelConector
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.ConversacionesConElAsistente
 import com.jvillada.movi.server.db.ConversacionesDelAsistente
@@ -166,6 +170,12 @@ internal val TABLAS_DEL_USUARIO: List<TablaDelUsuario> = listOf(
     TablaDelUsuario(AtajosDescartados, AtajosDescartados.userId),
     // Vuelta 100 · observabilidad: sus fallos (los que llegaron sin sesión llevan `""` y no se tocan)
     // y su uso de la app.
+    // Vuelta 135 · el conector de Movi para Claude: lo que concedió, los códigos y tokens (solo su hash) y el
+    // registro de llamadas.
+    TablaDelUsuario(ConcesionesDelConector, ConcesionesDelConector.userId),
+    TablaDelUsuario(CodigosDelConector, CodigosDelConector.userId),
+    TablaDelUsuario(TokensDelConector, TokensDelConector.userId),
+    TablaDelUsuario(LlamadasDelConector, LlamadasDelConector.userId),
     TablaDelUsuario(FallosDeLaApp, FallosDeLaApp.userId),
     TablaDelUsuario(UsoDeLaApp, UsoDeLaApp.userId),
 )

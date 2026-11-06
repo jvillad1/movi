@@ -135,7 +135,10 @@ class CadaEscrituraVaciaLoRecordadoTest {
          * del iPhone: ninguna lectura recordada depende de él (su `GET` no pasa por lo recordado), y vaciar
          * todo dejaría Mensajes del banco en esqueleto por crear un código.
          */
-        val NO_VACIAN_A_PROPOSITO = setOf("subirLoPendienteAhora", "marcarAvisoDeLaIa", "crearCodigoDeCaptura", "revocarCodigoDeCaptura")
+        /**
+         * Vuelta 135 · `desconectarDeClaude` solo revoca el acceso del conector: ninguna cifra cambia.
+         */
+        val NO_VACIAN_A_PROPOSITO = setOf("subirLoPendienteAhora", "marcarAvisoDeLaIa", "crearCodigoDeCaptura", "revocarCodigoDeCaptura", "desconectarDeClaude")
 
         val CONTINUACION = object : Continuation<Any?> {
             override val context: CoroutineContext = EmptyCoroutineContext

@@ -2825,6 +2825,9 @@ class LocalRepository(
     override suspend fun crearCodigoDeCaptura() = remote.crearCodigoDeCaptura()
     override suspend fun revocarCodigoDeCaptura() = remote.revocarCodigoDeCaptura()
     override suspend fun getAtajosDescartados() = remote.getAtajosDescartados()
+    // Vuelta 135: el conector de Claude vive solo en el server.
+    override suspend fun getConectorDeClaude() = remote.getConectorDeClaude()
+    override suspend fun desconectarDeClaude(id: String) = remote.desconectarDeClaude(id)
     override suspend fun getStatementImports(): List<StatementImport> =
         remote.getStatementImports()
     override suspend fun getStatementImportDetail(id: String): StatementImportDetail =

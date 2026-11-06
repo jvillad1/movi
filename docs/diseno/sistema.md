@@ -5603,3 +5603,23 @@ a la vista. El patrón:
   detalle se decide con las cuentas que el Inicio ya leyó, o con las cuotas que el movimiento trae: lo que se ve
   al abrir es lo que queda (nada salta más de 8 dp).
 
+## Vuelta 135 · «Movi en Claude»: una dirección para copiar y conexiones que se cortan
+
+- **Dónde**: una `Fila` más en Tú → Ajustes → «Movi», debajo de «Qué ve la IA» (ícono `Link`, «Conecta Claude
+  para que lea tus cifras»). Abre `Screen.MoviEnClaude` (`ui/mas/MoviEnClaude.kt`), ficha de Ajustes con flecha a Tú.
+- **Arriba, qué es y qué ve Claude**: el `cuerpo` de la intro y, en `apoyo`, la promesa de siempre: «Claude puede
+  leer tus cuentas, movimientos y pagos. No puede anotar, borrar ni mover plata.» (la misma frase que la página de
+  consentimiento del server).
+- **Una dirección que se copia**: «En Claude» es una `Superficie` con la URL en `cuerpoFuerte` dentro de un
+  `SelectionContainer`, «Copiar» `Secundario` S (que dice «Copiado» después) y el paso a paso en `apoyo`. «En
+  Claude Code», lo mismo con el comando `claude mcp add --transport http movi <url>` y «Copiar el comando». La URL
+  la manda el server (`GET /api/conector`): es la audiencia de los tokens, no la que arma la app.
+- **Cada conexión, una fila con su botón debajo**: `Fila` con el cliente («Claude», «Claude Code») y
+  «claude.ai · conectado el 6 nov · último uso hace 2 h» (`lineaDeLaConexion`, hasta tres renglones), y
+  «Desconectar» `Fantasma` S debajo (no al final: a 360 dp con letra grande no cabe al lado). Desconectar pregunta
+  en `ConfirmarEnHoja` («¿Desconectar Claude?») y saca la fila al contestar el server. Sin conexiones, una línea
+  `apoyo`: «Todavía no has conectado Claude.»
+- **Ningún amarillo**: aquí no hay acción principal; copiar y desconectar son secundarias.
+- **La página de consentimiento** (server, `conector/PantallaDeConsentimiento.kt`) usa los colores de `Tokens.kt`:
+  la marca en pastilla, una tarjeta blanca con a qué host vuelves y qué podrá hacer Claude, y el formulario con
+  «Permitir» (el único amarillo) y «Cancelar» con borde.

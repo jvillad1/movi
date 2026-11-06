@@ -124,6 +124,7 @@ import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
 
 class WalletRepositoryImpl(
@@ -1553,6 +1554,13 @@ class WalletRepositoryImpl(
 
     override suspend fun revocarCodigoDeCaptura() {
         client.delete("$baseUrl/api/captura/codigo").exigirExito()
+    }
+
+    override suspend fun getConectorDeClaude(): com.jvillada.movi.shared.model.ConectorDeClaude =
+        client.get("$baseUrl/api/conector").exigirExito().body()
+
+    override suspend fun desconectarDeClaude(id: String) {
+        client.delete("$baseUrl/api/conector/conexiones/${id.encodeURLPathPart()}").exigirExito()
     }
 
     override suspend fun getAtajosDescartados(): com.jvillada.movi.shared.model.ResumenDeAtajosDescartados =

@@ -128,6 +128,9 @@ class BuscarEnMoviTest {
         assertTrue(Screen.Categorias in pantallas("categorias"))
         assertTrue(Screen.BorrarLaCuenta in pantallas("borrar mi cuenta"))
         assertTrue(Screen.Compartir in pantallas("Compartir"))
+        // Vuelta 135: «Movi en Claude», por su nombre y por «conector».
+        assertTrue(Screen.MoviEnClaude in pantallas("Movi en Claude"))
+        assertTrue(Screen.MoviEnClaude in pantallas("conector"))
         // Vuelta 38: Perfil y Ajustes viven en «Tú»; los nombres viejos lo siguen encontrando.
         assertTrue(Screen.Tu in pantallas("huella"), "Perfil se mudó dentro de Tú")
         assertTrue(Screen.Tu in pantallas("perfil"))
