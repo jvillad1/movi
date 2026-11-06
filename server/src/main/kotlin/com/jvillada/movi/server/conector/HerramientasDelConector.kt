@@ -195,8 +195,8 @@ internal val jsonDelConector = Json { encodeDefaults = true; explicitNulls = fal
  *
  * - **un monto con marca de moneda** («$», «COP», «USD», «US$») y forma estricta: grupos de miles de a tres
  *   («$1.500.000», «COP 27.500», «USD 1,234.56») o hasta 7 dígitos seguidos («$27500»), con hasta 2 decimales;
- * - **un monto sin marca** solo con grupos de miles exactos y **hasta 7 dígitos enteros** («1.500.000», «25,000»): una
- *   cédula o una cuenta con puntos (8 o más dígitos) se recorta;
+ * - **un monto sin marca** solo con grupos de miles exactos, **hasta 7 dígitos enteros** y el decimal con el otro
+ *   separador («1.500.000», «25,000», «1.234.567,89»): una cédula o una cuenta con puntos (8 o más dígitos) se recorta;
  * - **una fecha** con mes y día válidos («2026-10-01», «01/10/2026», «1/10/26»).
  *
  * Una variante para el conector y no un cambio a `sinNumerosCompletos`: la página compartida no muestra textos
@@ -219,10 +219,13 @@ private const val FIN_DEL_NUMERO = """(?!\d|[.,]\d)"""
 private val NUMEROS_MONTOS_Y_FECHAS = Regex(
     """(?<fecha>(?<![\d/.,-])(?:(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])/(?:0?[1-9]|1[0-2])/(?:(?:19|20)\d{2}|\d{2}))(?![\d/.,-]))""" +
         """|(?<monto>(?:US\$|\$|COP|USD)\s?(?:\d{1,3}(?:[.,]\d{3})+|\d{1,7})(?:[.,]\d{1,2})?""" + FIN_DEL_NUMERO + ")" +
-        """|(?<montoSinMarca>(?<![\d.,])(?:\d[.,]\d{3}[.,]\d{3}|\d{1,3}[.,]\d{3})(?:[.,]\d{1,2})?""" + FIN_DEL_NUMERO + ")" +
-        // Lo demás: dígitos con a lo sumo un separador entre cada uno («1.020.304.050», «4513 2200 1234 5678»,
-        // «12/34/5678»); «Cuotas 1, 2, 3, 4, 5» no se junta en un número.
-        """|\d(?:[ .,/\-]?\d)*""",
+        // Sin marca: grupos de miles exactos, hasta 7 dígitos enteros, y el decimal con el OTRO separador
+        // («1.234.567,89» sí; «1.234.567.8» no es un monto: son 8 dígitos).
+        """|(?<montoSinMarca>(?<![\d.,])(?:\d(?<a>[.,])\d{3}\k<a>\d{3}(?:(?!\k<a>)[.,]\d{1,2})?|\d{1,3}(?<b>[.,])\d{3}(?:(?!\k<b>)[.,]\d{1,2})?)""" + FIN_DEL_NUMERO + ")" +
+        // Lo demás: dígitos con hasta tres caracteres entre cada uno si son espacios, puntos, guiones o guiones bajos
+        // («4513 - 2200 - 1234 - 5678», el doble espacio, «4513_2200»), o una coma o una barra sola («1,020,304,050»,
+        // «12/34/5678»). Así «Cuotas 1, 2, 3, 4, 5» (coma y espacio) no se junta en un número (M-b).
+        """|\d(?:(?:[ ._\-]{1,3}|[,/])?\d)*""",
 )
 
 /** **Un texto de afuera, listo para salir**: sin control, una línea, corto y sin números completos. */

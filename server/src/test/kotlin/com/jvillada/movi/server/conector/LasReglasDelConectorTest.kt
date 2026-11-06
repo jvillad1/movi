@@ -152,6 +152,13 @@ class LasReglasDelConectorTest {
         assertEquals("Monto $27500", textoSeguro("Monto $27500"))
         assertEquals("Fecha ••1301", textoSeguro("Fecha 2026-13-01"), "un mes que no existe no es una fecha")
         assertEquals("Cuotas 1, 2, 3, 4, 5", textoSeguro("Cuotas 1, 2, 3, 4, 5"))
+        // M-b · hasta tres separadores entre dígitos.
+        assertEquals("Tarjeta ••5678", textoSeguro("Tarjeta 4513 - 2200 - 1234 - 5678"))
+        assertEquals("Tarjeta ••5678", textoSeguro("Tarjeta 4513  2200  1234  5678"))
+        assertEquals("Tarjeta ••5678", textoSeguro("Tarjeta 4513_2200_1234_5678"))
+        assertEquals("ref ••5678", textoSeguro("ref 1.234.567.8"))
+        assertEquals("Abono 1.234.567,89", textoSeguro("Abono 1.234.567,89"))
+        assertEquals("Cuotas 1, 2, 3", textoSeguro("Cuotas 1, 2, 3"))
         val largo = textoSeguro("a".repeat(500))
         assertEquals(LARGO_MAXIMO_DE_UN_TEXTO, largo.length)
         assertTrue(largo.endsWith("…"))
