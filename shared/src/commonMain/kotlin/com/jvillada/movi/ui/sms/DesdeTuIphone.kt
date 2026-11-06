@@ -31,6 +31,9 @@ import com.jvillada.movi.platform.hojaDeCompartir
 import com.jvillada.movi.shared.model.CodigoDeCaptura
 import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES
+import com.jvillada.movi.shared.model.TIPO_DE_MENSAJE
+import com.jvillada.movi.shared.model.TIPO_DE_NOTIFICACION
 import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.shared.model.RUTA_DE_LA_CAPTURA_POR_ATAJO
@@ -108,14 +111,17 @@ const val COPIAR_EL_TEXTO_DE_PRUEBA: String = "Copiar el texto de prueba"
  * La línea de privacidad. Vuelta 114: decía «Solo se guardan los mensajes de bancos», y desde la 113 el atajo
  * no sabe quién manda (`seGuardaElSmsDelAtajo`): se guarda lo que **empieza** como un aviso del banco y trae un
  * monto, aunque lo escriba una persona. Ahora dice eso, y que nada se anota solo. Vuelta 127: también se
- * guardan las notificaciones de Nu (`notificacionDeNuDelAtajo`), que no empiezan por el banco.
+ * guardan las notificaciones de Nu (`notificacionDeNuDelAtajo`), que no empiezan por el banco. Vuelta 137: y las
+ * de las apps de banco que el dueño ata al atajo de notificaciones, si traen un monto.
  */
 const val PRIVACIDAD_DE_LOS_ATAJOS: String =
-    "Solo se guardan los mensajes que empiezan como un aviso del banco y traen un monto, y las notificaciones " +
-        "de Nu; los demás se descartan sin guardarlos. Nada se anota sin que lo confirmes."
+    "Solo se guardan los mensajes que empiezan como un aviso del banco y traen un monto, las notificaciones de " +
+        "Nu y las de las apps de banco que elijas que traen un monto; lo demás se descarta sin guardarlo. Nada se " +
+        "anota sin que lo confirmes."
 
 const val INTRO_DESDE_TU_IPHONE: String =
-    "Con la app Atajos, tu iPhone le avisa a Movi cada SMS del banco y cada pago con Apple Pay. " +
+    "Con la app Atajos, tu iPhone le avisa a Movi cada SMS del banco, cada notificación de las apps de tus " +
+        "bancos y cada pago con Apple Pay. " +
         "Lo que llegue te espera en «Por revisar» para que lo confirmes. Es opcional."
 
 const val QUE_ES_EL_CODIGO: String =
@@ -131,12 +137,16 @@ const val DETALLE_CREAR_OTRO: String =
 
 /**
  * Vuelta 115 · Safari no abre el atajo solo (verificado en dos iPhone con iOS 27): después de «Descargar»
- * hay que abrir el archivo desde las descargas. Va antes de [AL_AGREGAR_EL_ATAJO].
+ * hay que abrir el archivo desde las descargas. Va antes de [AL_AGREGAR_EL_ATAJO]. Vuelta 137: la misma frase
+ * para el atajo de notificaciones, con su nombre ([abrirLoDescargado]).
  */
-const val ABRIR_LO_DESCARGADO: String =
+fun abrirLoDescargado(nombreDelAtajo: String): String =
     "Safari solo lo descarga: toca el ícono a la izquierda de la barra de direcciones → Descargas → " +
-        "«$NOMBRE_DEL_ATAJO_DE_MENSAJES». Si no lo ves, está en la app Archivos, en Descargas (dentro de " +
+        "«$nombreDelAtajo». Si no lo ves, está en la app Archivos, en Descargas (dentro de " +
         "«En mi iPhone» o «iCloud Drive»)."
+
+/** [abrirLoDescargado] del atajo de mensajes. */
+val ABRIR_LO_DESCARGADO: String = abrirLoDescargado(NOMBRE_DEL_ATAJO_DE_MENSAJES)
 
 /** Vuelta 114 · lo que dice el paso 2 al agregar el atajo: dónde pegar el código. */
 const val AL_AGREGAR_EL_ATAJO: String =
@@ -280,19 +290,17 @@ const val APPLE_PAY_EN_IOS_27: String =
         "como la de mensajes."
 
 /**
- * Vuelta 127 · **el mismo atajo sirve para las notificaciones de Nu**: en el iPhone de Caro (iOS 27) una
- * automatización «Notificación» de la app Nu le pasa cada notificación al atajo de mensajes, y el server la
- * reconoce (`notificacionDeNuDelAtajo`). Una línea, sin pasos: el atajo firmado no cambia.
- */
-const val TAMBIEN_LAS_NOTIFICACIONES_DE_NU: String =
-    "También sirve con la automatización «Notificación» de la app Nu: elige el atajo «$NOMBRE_DEL_ATAJO_DE_MENSAJES»."
-
-/**
  * **Cómo armar un atajo a mano**, cuando Movi no tiene el atajo firmado para instalarlo con un toque. Son
- * los mismos campos del atajo firmado ([url] con la ruta de [RUTA_DE_LA_CAPTURA_POR_ATAJO]).
+ * los mismos campos del atajo firmado ([url] con la ruta de [RUTA_DE_LA_CAPTURA_POR_ATAJO]). Vuelta 137: el de
+ * notificaciones ([deNotificaciones]) es el de mensajes con «tipo» = «notificacion».
  */
-fun recetaDelAtajo(url: String, deApplePay: Boolean): List<String> = buildList {
-    add("En Atajos toca «+» para un atajo nuevo y llámalo «${if (deApplePay) NOMBRE_DEL_ATAJO_DE_APPLE_PAY else NOMBRE_DEL_ATAJO_DE_MENSAJES}».")
+fun recetaDelAtajo(url: String, deApplePay: Boolean, deNotificaciones: Boolean = false): List<String> = buildList {
+    val nombre = when {
+        deApplePay -> NOMBRE_DEL_ATAJO_DE_APPLE_PAY
+        deNotificaciones -> NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES
+        else -> NOMBRE_DEL_ATAJO_DE_MENSAJES
+    }
+    add("En Atajos toca «+» para un atajo nuevo y llámalo «$nombre».")
     add("Agrega la acción «Obtener contenido de URL» y pega: $url")
     add("Toca la flecha de la acción: «Método» POST; en «Encabezados» agrega «Authorization» con el valor «Bearer » seguido de tu código.")
     if (deApplePay) {
@@ -301,7 +309,8 @@ fun recetaDelAtajo(url: String, deApplePay: Boolean): List<String> = buildList {
                 "«comercio», «monto» y «tarjeta» con esos datos de la «Entrada del atajo» (toca la variable y elige cada uno).",
         )
     } else {
-        add("En «Cuerpo de la solicitud» elige JSON y agrega dos campos de texto: «tipo» con «mensaje» y «texto» con «Entrada del atajo».")
+        val tipo = if (deNotificaciones) TIPO_DE_NOTIFICACION else TIPO_DE_MENSAJE
+        add("En «Cuerpo de la solicitud» elige JSON y agrega dos campos de texto: «tipo» con «$tipo» y «texto» con «Entrada del atajo».")
     }
 }
 
@@ -549,8 +558,6 @@ fun DesdeTuIphone(
                         }
                     }
                 }
-                Spacer(Modifier.height(Espacio.xs))
-                Text(TAMBIEN_LAS_NOTIFICACIONES_DE_NU, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
                 Spacer(Modifier.height(Espacio.s))
                 Text("Para los pagos con Apple Pay:", style = Movi.textos.apoyo, color = Movi.colores.texto)
                 Spacer(Modifier.height(Espacio.xs))
@@ -579,6 +586,12 @@ fun DesdeTuIphone(
                 )
             }
         }
+        // Vuelta 137: las notificaciones de las apps de los bancos, con su atajo y su automatización.
+        Spacer(Modifier.height(Medida.entreSecciones))
+        NotificacionesDeTusBancos(
+            codigo = (estado as? EstadoDelCodigo.Listo)?.codigo,
+            versionDeIos = versionDeIos,
+        )
         // Lo que llegó y no se guardó, como la línea de los correos descartados: nada se pierde en silencio.
         descartados?.let(::textoDeAtajosDescartados)?.let { linea ->
             Spacer(Modifier.height(Medida.dentroDeSeccion))
@@ -646,7 +659,7 @@ private fun VarianteDeLaAutomatizacionDeMensajes(palabras: List<String>, variant
 
 /** Una lista corta de pasos, uno por renglón, con su viñeta. */
 @Composable
-private fun RecetaDelAtajo(pasos: List<String>) {
+internal fun RecetaDelAtajo(pasos: List<String>) {
     Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
         pasos.forEachIndexed { i, paso ->
             Text("${i + 1}. $paso", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -656,7 +669,7 @@ private fun RecetaDelAtajo(pasos: List<String>) {
 
 /** Un paso: el número, el título y lo que haga falta debajo (como los del reenvío por correo). */
 @Composable
-private fun PasoDelAtajo(numero: Int, titulo: String, detalle: @Composable () -> Unit) {
+internal fun PasoDelAtajo(numero: Int, titulo: String, detalle: @Composable () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

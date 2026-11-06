@@ -25,6 +25,8 @@ import com.jvillada.movi.shared.model.CodigoDeCapturaNuevo
 import com.jvillada.movi.shared.model.GrupoDeAtajosDescartados
 import com.jvillada.movi.shared.model.ResumenDeAtajosDescartados
 import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES
+import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_NOTIFICACIONES
 import com.jvillada.movi.theme.MoviTheme
 import org.junit.After
 import org.junit.Rule
@@ -93,10 +95,20 @@ class DesdeTuIphoneTest {
     /** Lo que «Desde tu iPhone» le avisa a la pantalla que la pinta (vuelta 114). */
     private val avisados = mutableListOf<CodigoDeCaptura?>()
 
+    /** Las direcciones que la sección abrió (la descarga de un atajo firmado). */
+    private val abiertas = mutableListOf<String>()
+
+    private val uriDePrueba = object : androidx.compose.ui.platform.UriHandler {
+        override fun openUri(uri: String) { abiertas += uri }
+    }
+
     private fun montar(server: ServerDeCodigos, hoja: HojaDePrueba = HojaDePrueba(), versionDeIos: Int? = null) {
         Repositories.sustitutoDePrueba = server
         composeRule.setContent {
-            CompositionLocalProvider(LocalHojaDeCompartir provides hoja) {
+            CompositionLocalProvider(
+                LocalHojaDeCompartir provides hoja,
+                androidx.compose.ui.platform.LocalUriHandler provides uriDePrueba,
+            ) {
                 MoviTheme {
                     if (montada) {
                         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -248,23 +260,76 @@ class DesdeTuIphoneTest {
         // Vuelta 114 · la línea no promete de más: el atajo no sabe quién manda, así que no puede decir
         // «solo los mensajes de bancos»; dice la regla de verdad (empieza como un aviso y trae un monto).
         // Vuelta 127: y las notificaciones de Nu, que no empiezan por el banco.
+        // Vuelta 137: y las de las apps de banco que el dueño elige, si traen un monto.
         assertEquals(
-            "Solo se guardan los mensajes que empiezan como un aviso del banco y traen un monto, y las notificaciones " +
-                "de Nu; los demás se descartan sin guardarlos. Nada se anota sin que lo confirmes.",
+            "Solo se guardan los mensajes que empiezan como un aviso del banco y traen un monto, las notificaciones de " +
+                "Nu y las de las apps de banco que elijas que traen un monto; lo demás se descarta sin guardarlo. Nada se " +
+                "anota sin que lo confirmes.",
             PRIVACIDAD_DE_LOS_ATAJOS,
         )
         assertFalse("mensajes de bancos" in PRIVACIDAD_DE_LOS_ATAJOS)
         assertTrue(hay(TEXTO_DE_PRUEBA_DEL_ATAJO))
     }
 
+    // ── Vuelta 137 · «Notificaciones de tus bancos» ────────────────────────────────────────────
+
     @Test
-    fun `la guia dice que el atajo de mensajes tambien sirve con las notificaciones de Nu`() {
-        montar(ServerDeCodigos(CodigoDeCaptura()))
-        assertTrue(hay(TAMBIEN_LAS_NOTIFICACIONES_DE_NU))
-        assertEquals(
-            "También sirve con la automatización «Notificación» de la app Nu: elige el atajo «$NOMBRE_DEL_ATAJO_DE_MENSAJES».",
-            TAMBIEN_LAS_NOTIFICACIONES_DE_NU,
-        )
+    fun `debajo de los mensajes va Notificaciones de tus bancos, con su boton, sus pasos y la nota de Nu`() {
+        montar(ServerDeCodigos(CodigoDeCaptura(vigente = true, creadoEn = CREADO, atajoDeNotificaciones = true)), versionDeIos = 27)
+        assertTrue(existe(TAG_NOTIFICACIONES_DE_TUS_BANCOS))
+        assertTrue(hay(TITULO_NOTIFICACIONES_DE_TUS_BANCOS))
+        // Debajo de lo de los mensajes (sus pasos de iOS 27) y arriba de la línea de privacidad.
+        assertTrue(arribaDe(TAG_PASOS_IOS_27) < arribaDe(TAG_NOTIFICACIONES_DE_TUS_BANCOS))
+        assertTrue(hay(abrirLoDescargado(NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES)))
+        assertTrue(hay(SOLO_LAS_APPS_QUE_ELIJAS))
+        assertTrue(hay(SI_YA_ATASTE_NU))
+        assertTrue(existe(TAG_PASOS_DE_NOTIFICACIONES_IOS_27))
+        assertTrue(hay("Elige «Notificación»"))
+        // El botón baja el atajo firmado, con el nombre ASCII del archivo.
+        tocar(AGREGAR_EL_ATAJO_DE_NOTIFICACIONES)
+        assertEquals(1, abiertas.size, "$abiertas")
+        assertTrue(abiertas.single().endsWith(RUTA_DEL_ATAJO_DE_NOTIFICACIONES), abiertas.single())
+        // La nota de Nu dice el atajo viejo, y la línea dice una tarjeta por app.
+        assertTrue("«$NOMBRE_DEL_ATAJO_DE_MENSAJES»" in SI_YA_ATASTE_NU && "no hace falta moverla" in SI_YA_ATASTE_NU)
+        assertTrue("una tarjeta por cada app de banco" in SOLO_LAS_APPS_QUE_ELIJAS && "Nequi" in SOLO_LAS_APPS_QUE_ELIJAS)
+        // Ya no se recomienda atar Nu al atajo de mensajes.
+        assertFalse(hay("También sirve con la automatización «Notificación» de la app Nu"))
+    }
+
+    @Test
+    fun `sin el atajo de notificaciones firmado, el boton abre la receta con tipo notificacion`() {
+        montar(ServerDeCodigos(CodigoDeCaptura(vigente = true, creadoEn = CREADO, atajoDeNotificaciones = false)), versionDeIos = 27)
+        tocar(AGREGAR_EL_ATAJO_DE_NOTIFICACIONES)
+        assertTrue(abiertas.isEmpty())
+        assertTrue(hay("«tipo» con «notificacion»"))
+        assertTrue(hay("llámalo «$NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES»"))
+    }
+
+    @Test
+    fun `los pasos de notificaciones en iOS 27 son los de Mensaje con una tarjeta por app, y en iOS 17 a 26 por verificar`() {
+        val de27 = pasosDeLaAutomatizacionDeNotificaciones(VarianteDeLaAutomatizacion.IOS_27_O_MAS)
+        assertEquals("En Atajos abre el atajo «$NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES».", de27.first())
+        assertTrue(de27.any { "«Buscar»" in it && "«Automatización»" in it })
+        assertTrue(de27.any { "«Notificación»" in it && "la app" in it })
+        assertTrue(de27.any { "«Confirmar antes de ejecutar»" in it })
+        assertTrue(de27.any { "otra tarjeta «Notificación»" in it && "unidas por «o»" in it && "no «+ Agregar filtro»" in it })
+        assertEquals(PROBAR_CON_UNA_NOTIFICACION_REAL, de27.last())
+        val de17 = pasosDeLaAutomatizacionDeNotificaciones(VarianteDeLaAutomatizacion.IOS_17_A_26).single()
+        assertTrue("todavía no lo verificamos" in de17, de17)
+    }
+
+    @Test
+    fun `en iOS 18 se ve la linea por verificar y la de iOS 27 queda detras`() {
+        montar(ServerDeCodigos(CodigoDeCaptura()), versionDeIos = 18)
+        assertTrue(existe(TAG_PASOS_DE_NOTIFICACIONES_IOS_17_A_26))
+        assertFalse(existe(TAG_PASOS_DE_NOTIFICACIONES_IOS_27))
+    }
+
+    @Test
+    fun `la receta a mano de notificaciones manda tipo notificacion y la de mensajes sigue con mensaje`() {
+        val url = "https://movi.example/api/captura/atajo"
+        assertTrue(recetaDelAtajo(url, deApplePay = false, deNotificaciones = true).any { "«tipo» con «notificacion»" in it })
+        assertTrue(recetaDelAtajo(url, deApplePay = false).any { "«tipo» con «mensaje»" in it })
     }
 
     @Test
