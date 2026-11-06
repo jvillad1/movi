@@ -41,6 +41,7 @@ import com.jvillada.movi.shared.model.laMarcaPuedeHablar
 import com.jvillada.movi.shared.model.numeroDelOrigenDelIngreso
 import com.jvillada.movi.shared.model.esUnDepositoPropio
 import com.jvillada.movi.shared.model.ParsedSms
+import com.jvillada.movi.shared.model.identificador
 import com.jvillada.movi.shared.model.NoSePudoLeerElAviso
 import com.jvillada.movi.shared.model.PARAMETRO_ANOTARLO_IGUAL
 import com.jvillada.movi.shared.model.AvisoPorRevisar
@@ -600,6 +601,23 @@ internal fun conLoQueMoviRecuerda(
  * del banco se queda.
  */
 internal fun conLaMemoriaYLosTerceros(
+    parsed: ParsedSms,
+    textoDelMensaje: String,
+    memoria: MemoriaDeCategorias,
+    destinos: List<DestinoConocido>,
+): ParsedSms {
+    // Las categorías del número se miden antes de cualquier renombre: el comercio sigue siendo el del banco.
+    val delNumero = if (parsed.category in CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA) emptyList()
+    else memoria.categoriasDelNumero(parsed.merchant, parsed.type, parsed.identificador())
+    val resultado = laMemoriaYLosTerceros(parsed, textoDelMensaje, memoria, destinos)
+    return if (!resultado.porMarca && resultado.category !in CATEGORIAS_QUE_LA_MEMORIA_NO_TOCA) {
+        resultado.copy(categoriasDelNumero = delNumero)
+    } else {
+        resultado
+    }
+}
+
+private fun laMemoriaYLosTerceros(
     parsed: ParsedSms,
     textoDelMensaje: String,
     memoria: MemoriaDeCategorias,

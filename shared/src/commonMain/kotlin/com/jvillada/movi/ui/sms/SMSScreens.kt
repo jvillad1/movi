@@ -768,7 +768,9 @@ internal fun TarjetaDeMensajeDelBanco(
     cuotasDelAviso: CuotasDelAviso? = null,
 ) {
     val apartado = loApartoMovi(sms)
-    var eligiendoLaCategoria by remember(sms.id) { mutableStateOf(false) }
+    // `null` = no lo tocó: abre sola cuando llega la línea del número (llega después de la primera composición).
+    var eligiendoLaCategoria by remember(sms.id) { mutableStateOf<Boolean?>(null) }
+    val abiertas = eligiendoLaCategoria ?: (eligeLaCategoria?.delNumero != null)
     val pendiente = sms.state == SMS_STATE_PENDING
     val estado = when {
         apartado -> "Apartado" to TonoDePildora.Neutra
@@ -783,7 +785,7 @@ internal fun TarjetaDeMensajeDelBanco(
     val pideLaCategoria = pendiente && !confirmable && eligeLaCategoria != null
     // Vuelta 51: «Cambiar» de un aviso entendido abre las pastillas acá mismo, como «Elegir categoría».
     val cambiaEnLaTarjeta = confirmable && eligeLaCategoria != null
-    val pastillasAbiertas = eligiendoLaCategoria && eligeLaCategoria != null && (pideLaCategoria || cambiaEnLaTarjeta)
+    val pastillasAbiertas = abiertas && eligeLaCategoria != null && (pideLaCategoria || cambiaEnLaTarjeta)
     // Vuelta de diseño 2: la cabeza se lee primero —el comercio (o lo que Movi entendió) con su
     // marca, el monto a la derecha y «banco · hora» debajo—; el texto del banco va después, apagado.
     // Sin comercio, el banco y su marca (o el ícono de los avisos). Ver [cabezaDelAviso].
@@ -815,9 +817,9 @@ internal fun TarjetaDeMensajeDelBanco(
                         // Vuelta 51: «Cambiar» abre las pastillas en la tarjeta y pasa a «Cerrar»; Revisar
                         // aviso queda en «Más cambios ›», debajo de ellas.
                         PastillaDelPago(
-                            if (eligiendoLaCategoria) CERRAR_LAS_CATEGORIAS else CAMBIAR_EN_LA_FILA,
+                            if (abiertas) CERRAR_LAS_CATEGORIAS else CAMBIAR_EN_LA_FILA,
                             habilitada = !trabajando,
-                            onClick = { eligiendoLaCategoria = !eligiendoLaCategoria },
+                            onClick = { eligiendoLaCategoria = !abiertas },
                             modifier = Modifier.testTag(TAG_CAMBIAR_EN_LA_FILA),
                         )
                     } else {
@@ -833,10 +835,10 @@ internal fun TarjetaDeMensajeDelBanco(
                     // acción —como «Cambiar» → «Cerrar» en Revisar aviso—: lo que se espera ahora es
                     // tocar una pastilla.
                     PastillaDelPago(
-                        if (eligiendoLaCategoria) CERRAR_LAS_CATEGORIAS else ELEGIR_CATEGORIA,
-                        principal = !eligiendoLaCategoria,
+                        if (abiertas) CERRAR_LAS_CATEGORIAS else ELEGIR_CATEGORIA,
+                        principal = !abiertas,
                         habilitada = !trabajando,
-                        onClick = { eligiendoLaCategoria = !eligiendoLaCategoria },
+                        onClick = { eligiendoLaCategoria = !abiertas },
                         modifier = Modifier.testTag(TAG_ELEGIR_CATEGORIA_EN_LA_FILA),
                     )
                     PastillaDelPago("Revisar", habilitada = !trabajando, onClick = onRevisar)
@@ -897,6 +899,7 @@ internal fun TarjetaDeMensajeDelBanco(
         // Vuelta 46: las pastillas de las frecuentes, con «Todas ›» en el renglón del rótulo. Vuelta 51:
         // también las abre «Cambiar» de un aviso entendido, y debajo va «Más cambios ›».
         if (pastillasAbiertas && eligeLaCategoria != null) {
+            eligeLaCategoria.delNumero?.let { LineaDelNumero(it) }
             FilaDeCategorias(
                 categorias = eligeLaCategoria.categorias,
                 // La que dice la línea de arriba —la elegida acá o la que entendió Movi— va marcada.
@@ -984,7 +987,8 @@ fun SMSReconcileScreen(
     // `pedidosDeFoco` distingue quién abrió la hoja: «+ Nueva» viene a escribir un nombre y la abre
     // con el cursor en la búsqueda (y cada toque suma uno, así que un segundo toque vuelve a enfocar
     // aunque el teclado ya esté abajo); «Todas ›», a mirar.
-    var eligiendoCategoria by remember { mutableStateOf(false) }
+    // `null` = no lo tocó: con dos categorías o más del número abre sola; cualquier escritura es elección suya.
+    var eligiendoCategoria by remember { mutableStateOf<Boolean?>(null) }
     var hojaDeCategorias by remember { mutableStateOf(false) }
     // Ola 5: se abre una sola vez, cuando la lectura llegó (antes la fila «Categoría» no tiene con qué).
     var yaSeAbrioLaCategoria by remember { mutableStateOf(false) }
@@ -1230,7 +1234,10 @@ fun SMSReconcileScreen(
      * Ola L: el orden ya no es alfabético —con `take(10)`, «Hija» y «Fútbol» quedaban fuera del
      * corte— y lo que no cabe en la fila está en «Cambiar» (el selector completo, que también crea).
      */
-    val categoryOptions: List<String> = categoriasParaElegirEnElSms(
+    val delNumero = lasDelNumero(parsed?.categoriasDelNumero.orEmpty())
+    val explicacionDelNumero = lineaDelNumero(delNumero, parsed?.identificadorEsLlave == true)
+    val pastillasAbiertas = eligiendoCategoria ?: delNumero.isNotEmpty()
+    val categoryOptions: List<String> = primeroLasDelNumero(delNumero, categoriasParaElegirEnElSms(
         propuesta = parsed?.category,
         elegida = selectedCategory,
         tipo = parsed?.type,
@@ -1238,7 +1245,7 @@ fun SMSReconcileScreen(
         prefs = UsedCategoriesCache.prefs,
         usos = UsedCategoriesCache.usosRecientes,
         cuantas = CATEGORIAS_EN_LAS_PASTILLAS_DEL_SMS,
-    )
+    ))
 
     /**
      * El comercio que se guarda: el que dejó escrito el dueño, o el leído si lo dejó vacío. Monto y
@@ -1367,6 +1374,11 @@ fun SMSReconcileScreen(
         lasDosPatas?.operacion == OperacionDelAviso.CUOTA && lasDosPatas?.destino?.id == creditoId
     }?.second
 
+    // La nota: para qué fue el pago. `null` = no la ha tocado (arranca con la del correo de PSE, si la hay).
+    var notaEscrita by remember(smsId) { mutableStateOf<String?>(null) }
+    fun laNotaDelAviso(leido: ParsedSms): ParsedSms =
+        leido.copy(nota = (notaEscrita ?: leido.nota.orEmpty()).trim().ifEmpty { null })
+
     /** [comoAbono]: «Un abono extra», la respuesta a esa pregunta (ver [pedidoDeDosPatas]). */
     fun confirm(comoAbono: Boolean = false) {
         if (working) return
@@ -1383,7 +1395,7 @@ fun SMSReconcileScreen(
         }
         val cat = (selectedCategory ?: parsed?.category)?.takeIf { it.isNotBlank() } ?: return
         val acct = resolvedAccount ?: return
-        val p = parsed ?: return
+        val p = parsed?.let(::laNotaDelAviso) ?: return
         // Un aviso que se anota igual: sin monto no hay nada que anotar.
         if (p.amount <= 0.0) return
         // Se lee ACÁ, antes del `coroutine.launch`: si el dueño toca dos veces rápido, la segunda
@@ -2027,11 +2039,11 @@ fun SMSReconcileScreen(
                             // De dónde salió la propuesta: «Así lo anotaste 4 veces». Se calla en
                             // cuanto él elige otra — ya no está explicando lo que se ve.
                             hint = categoriaEnLaFila.pista ?: parsed?.aprendidoDe?.takeIf { selectedCategory == parsed?.category },
-                            action = if (parsed == null) null else if (eligiendoCategoria) "Cerrar" else "Cambiar",
+                            action = if (parsed == null) null else if (pastillasAbiertas) "Cerrar" else "Cambiar",
                             onClick = if (parsed == null) null else {
                                 {
                                     pedidosDeFoco = 0
-                                    eligiendoCategoria = !eligiendoCategoria
+                                    eligiendoCategoria = !pastillasAbiertas
                                 }
                             },
                         )
@@ -2039,8 +2051,10 @@ fun SMSReconcileScreen(
                         // «Cambiar»**. Iban siempre a la vista, sueltas entre la lista y los botones,
                         // y la fila ya dice la categoría elegida. Sin la lectura no se sabe de qué
                         // lado es el movimiento (gasto o ingreso): «Cambiar» y «+ Nueva» esperan.
-                        if (eligiendoCategoria && parsed != null) {
-                            LaunchedEffect(eligiendoCategoria) { categoriaBringIntoViewRequester.bringIntoView() }
+                        if (pastillasAbiertas && parsed != null) {
+                            // Solo si las abrió el dueño: las que abren solas no mueven la pantalla al llegar la lectura.
+                            LaunchedEffect(eligiendoCategoria) { if (eligiendoCategoria == true) categoriaBringIntoViewRequester.bringIntoView() }
+                            explicacionDelNumero?.let { LineaDelNumero(it) }
                             // Vuelta 46: el componente del sistema (`FilaDeCategorias`), el de Agregar:
                             // «Todas ›» en el renglón del rótulo, siempre a la vista. Iba al final de las
                             // pastillas y en el teléfono había que deslizar para encontrarlo (r44-08).
@@ -2069,6 +2083,15 @@ fun SMSReconcileScreen(
                                     pastillas = TAG_PASTILLAS_DE_CATEGORIA_DEL_SMS,
                                     pastilla = ::tagDePastillaDeCategoriaDelSms,
                                 ),
+                            )
+                        }
+                        // «Nota» (dentro de la misma superficie, debajo de la categoría): para qué fue. No con «Es este» (nada se crea) ni en partes (cada una tiene la suya).
+                        if (parsed != null && pendiente && unicoYaAnotado == null && !enPartes) {
+                            FilaDeLaNota(
+                                valor = notaEscrita ?: parsed?.nota.orEmpty(),
+                                habilitada = !working,
+                                onCambio = { notaEscrita = it },
+                                modifier = Modifier.padding(horizontal = Medida.margenDePantalla, vertical = Medida.dentroDeSeccion),
                             )
                         }
                     }
@@ -2704,3 +2727,14 @@ internal fun textoDelAvisoYaResuelto(sms: SmsMessage): String = when {
 /** Vuelta 109 · lo que falta en un teléfono con la versión de Play (sin SMS): el acceso a las notificaciones. */
 const val FALTA_EL_ACCESO_A_LAS_NOTIFICACIONES: String =
     "En este teléfono falta el acceso a las notificaciones del banco: se da en la sección de abajo."
+
+/** Categorías del número: la explicación encima de las pastillas; puede bajar a dos renglones, nunca se corta. */
+@Composable
+internal fun LineaDelNumero(texto: String) {
+    Text(
+        texto,
+        style = Movi.textos.apoyo,
+        color = Movi.colores.textoMedio,
+        modifier = Modifier.testTag(TAG_LINEA_DEL_NUMERO),
+    )
+}

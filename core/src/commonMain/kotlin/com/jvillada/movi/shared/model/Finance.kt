@@ -1197,6 +1197,18 @@ data class ParsedSms(
      */
     val aprendidoDe: String? = null,
     /**
+     * **Las categorías con las que el dueño ya anotó este mismo número** (llave o cuenta), de la más
+     * usada a la menos, cuando son 2 o más: Movi no adivina una, las ofrece todas. Vacía si el número
+     * tiene una sola categoría o ninguna. Con default: un APK viejo la ignora.
+     */
+    val categoriasDelNumero: List<CategoriaDelNumero> = emptyList(),
+    /**
+     * `true` si la categoría de este aviso salió de [conElMotivoDelEnvio] (el mismo monto que ya se
+     * le mandó a esa persona por un motivo): esa señal es más fina que la distribución del número, y
+     * el aviso sigue entrando al lote ([entraEnElLote]). Con default.
+     */
+    val porElMismoMonto: Boolean = false,
+    /**
      * Vuelta 85 · **la categoría sale de la marca, no de este mismo comercio** («Como tus 25 de Rappi»,
      * ver `MemoriaDeCategorias.recuerdoDe` con `conMarca`). Es una pista, no algo que el dueño ya
      * decidió: [categoriaEntendida] no la da por entendida y el aviso no entra al lote. Con default: un

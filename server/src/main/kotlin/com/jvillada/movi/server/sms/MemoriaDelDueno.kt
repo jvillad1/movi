@@ -5,6 +5,7 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.shared.model.AnotacionPasada
 import com.jvillada.movi.shared.model.MemoriaDeCategorias
 import com.jvillada.movi.shared.model.TransactionType
+import com.jvillada.movi.shared.model.nombreSinLaNota
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Transaction
@@ -39,7 +40,7 @@ fun Transaction.anotacionesPasadasDe(uid: String): List<AnotacionPasada> {
         .map { it[VoidEvents.originalEventId] }
         .toSet()
     return Events
-        .select(Events.id, Events.merchant, Events.description, Events.category, Events.timestamp, Events.type)
+        .select(Events.id, Events.merchant, Events.description, Events.category, Events.timestamp, Events.type, Events.rawPayload)
         .where { Events.userId eq uid }
         .orderBy(Events.timestamp to SortOrder.DESC)
         .limit(CUANTOS_MOVIMIENTOS_RECUERDA)
@@ -48,11 +49,13 @@ fun Transaction.anotacionesPasadasDe(uid: String): List<AnotacionPasada> {
             val delBanco = fila[Events.merchant]?.takeIf { it.isNotBlank() }
             AnotacionPasada(
                 comoLlego = delBanco ?: fila[Events.description],
-                nombre = fila[Events.description],
+                // La nota que el dueño agregó («… · lo de ayer») no es parte del nombre.
+                nombre = nombreSinLaNota(delBanco, fila[Events.description]),
                 categoria = fila[Events.category],
                 cuando = fila[Events.timestamp],
                 // Vuelta 85: lo que entró va a su propia memoria (ver `AnotacionPasada.tipo`).
                 tipo = runCatching { TransactionType.valueOf(fila[Events.type]) }.getOrNull(),
+                delBanco = fila[Events.rawPayload],
             )
         }
 }

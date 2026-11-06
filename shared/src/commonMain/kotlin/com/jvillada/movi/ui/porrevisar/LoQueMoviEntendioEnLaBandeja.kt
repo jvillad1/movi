@@ -217,7 +217,14 @@ fun loQueMoviEntendio(
     val leidoPorMovi = propuesta.leido ?: return noSe
     // La elegida a mano cuenta como una categoría que el dueño decidió (ver `categoriaEntendida`).
     val leido = categoriaElegida?.takeIf { it.isNotBlank() }
-        ?.let { leidoPorMovi.copy(category = it, aprendidoDe = leidoPorMovi.aprendidoDe ?: ELEGIDA_EN_LA_TARJETA) }
+        ?.let {
+            // Elegir no es callado: sin las del número, el aviso vuelve a entrar al lote (`entraEnElLote`).
+            leidoPorMovi.copy(
+                category = it,
+                aprendidoDe = leidoPorMovi.aprendidoDe ?: ELEGIDA_EN_LA_TARJETA,
+                categoriasDelNumero = emptyList(),
+            )
+        }
         ?: leidoPorMovi
 
     val uso = if (leido.type == TransactionType.INCOME) UsoDeCuenta.DESTINO_DE_INGRESO else UsoDeCuenta.ORIGEN_DE_GASTO

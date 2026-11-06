@@ -52,6 +52,7 @@ class MotivoDelEnvioTest {
         val leido = ParsedSms(1_300_000.0, "Transferencia a Caro", TransactionType.EXPENSE, "Mercado", aprendidoDe = "Así lo anotaste 2 veces")
         val conMotivo = conElMotivoDelEnvio(leido, "Otros", texto, listOf(caro), historia)
         assertEquals("Cuota de crédito", conMotivo.category)
+        assertEquals(true, conMotivo.porElMismoMonto)
         assertEquals("La última vez que le mandaste \$1.300.000 a Caro fue Cuota de crédito", conMotivo.aprendidoDe)
         // Lo que dice el aviso manda: un pago de tarjeta no se vuelve «Cuota» por el monto.
         assertEquals(leido, conElMotivoDelEnvio(leido, CARD_PAYMENT_CATEGORY, texto, listOf(caro), historia))
