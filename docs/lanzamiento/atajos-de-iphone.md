@@ -195,6 +195,59 @@ de Caro>' AND bank = 'Atajo · Notificación · Nu' ORDER BY time DESC LIMIT 5;`
 cuerpo del depósito («¡No te preocupes! En unas horas…», sin monto), no se puede reconocer: habría que pedirle al
 atajo el título.
 
+## Vuelta 137 · notificaciones de cualquier banco
+
+**Por qué.** El dueño: en el iPhone de Caro solo entraban las notificaciones de Nu (y los SMS de Bancolombia).
+Del 2 al 6-nov, `atajos_descartados` contó 15 `NO_ES_DEL_BANCO` y 10 `SIN_FORMA_DE_AVISO`. El atajo de mensajes
+manda `tipo` = `mensaje`, y el server le aplica la regla de un SMS (`seGuardaElSmsDelAtajo`: empezar por el nombre
+de un banco y traer un monto). Una notificación de app casi nunca empieza por el banco; solo Nu tenía su
+reconocedor (`notificacionDeNuDelAtajo`).
+
+**Qué cambió.**
+- Un segundo atajo firmado, **«Movi - Avisar una notificacion»** (sin tilde: es el nombre del archivo, como en la
+  vuelta 114), servido en `/atajos/Movi%20-%20Avisar%20una%20notificacion.shortcut` (y, por si se escribe a mano,
+  con tilde: `/atajos/Movi%20-%20Avisar%20una%20notificaci%C3%B3n.shortcut`, mismo archivo). Es el de mensajes con
+  `tipo` = `notificacion`, y **se ata solo a disparadores «Notificación» de las apps de banco que el dueño elige**:
+  elegir la app hace el papel de la lista de paquetes de Android.
+- Con `tipo` = `notificacion`, el server prueba primero Nu (igual que antes: texto normalizado y «Atajo ·
+  Notificación · Nu»). Si no es de Nu, guarda lo que **trae un monto que lee el parser** (`montoYMonedaDelTexto`:
+  «$», «COP» o «USD» delante, «por 27.500», «Recibiste 999.999,99», «640.000,00 COP»), con el texto «título:
+  cuerpo» (dos renglones se juntan como los sube un Android) y `bank` = **«Atajo · Notificación · <banco>»**: el
+  banco por `marcaDelRemitente` (lo de antes de «:» o la primera palabra) y solo si es un banco o una billetera;
+  si no, **«Atajo · Notificación · tu banco»**, como el SMS sin banco. Lo que no trae monto se cuenta como
+  `SIN_FORMA_DE_AVISO` y no se guarda.
+- `tipo` = `mensaje` no cambió: Nu atado al atajo de mensajes sigue entrando, y una notificación de otro banco
+  mandada como mensaje se sigue descartando.
+- La app: en «Desde tu iPhone», debajo de lo de los mensajes, el bloque **«Notificaciones de tus bancos»**: el
+  botón «Agregar el atajo de notificaciones», los pasos de iOS 27 y, para iOS 17 a 26, «por verificar».
+
+**Qué probar en el iPhone de Caro** (con la vuelta desplegada):
+1. «Agregar el atajo de notificaciones» → abrir lo descargado → pegar el mismo código. Tiene que instalarse como
+   «Movi - Avisar una notificacion».
+2. En ese atajo: «Buscar» → «Automatización» → **«Notificación»** → la app (Bancolombia). Flecha junto a «que»:
+   «Automatización» prendido, «Confirmar antes de ejecutar» apagado. Una tarjeta «Notificación» más por cada app
+   (Davivienda, Nequi, Daviplata…), **nunca «+ Agregar filtro»**. Anotar si las pantallas se llaman así.
+3. Nu puede quedarse en el atajo de mensajes (sigue andando) o pasar a este; no hace falta moverla.
+4. Con una compra o una transferencia real de cada banco, mirar «Por revisar» y la base:
+
+```sql
+SELECT time, bank, state, motivo_apartado, text FROM sms_messages
+WHERE user_id = '<id de Caro>' AND bank LIKE 'Atajo · Notificación%' ORDER BY time DESC LIMIT 20;
+SELECT dia, motivo, cuantos FROM atajos_descartados WHERE user_id = '<id de Caro>' ORDER BY dia DESC LIMIT 10;
+```
+
+**Qué anotar, por banco:**
+- **Si la entrada del atajo trae el nombre de la app** («Bancolombia» delante o como primer renglón). Si no lo
+  trae, el rótulo queda «tu banco» y el banco mudo los junta en un solo origen: habría que pensar otra seña.
+- **Cómo escribe el monto** cada banco: «$45.900», «$45.900,00», «45.900 COP», o sin «$» («Recibiste 999.999,99»).
+  Lo que el parser no lee queda contado como `SIN_FORMA_DE_AVISO` (sin texto): pasar la forma para agregarla a
+  `montoYMonedaDelTexto` (`server/.../routes/SmsRoutes.kt`) con su prueba.
+- Si una notificación con monto que **no** es un movimiento (una promoción con cifra) queda en «Por revisar» en
+  vez de apartada: pasar el texto para `queEsEsteMensaje`.
+
+Las pruebas de la vuelta (`NotificacionesDeCualquierBancoPorElAtajoTest`) usan textos de Davivienda, Nequi,
+Bancolombia y Lulo **inventados**; los de Nu son los reales con los dígitos cambiados.
+
 ## 5. Apple Pay (a mano)
 
 El atajo de Apple Pay **no está firmado**: para mandar comercio, monto y tarjeta hay que leer propiedades de la
@@ -255,7 +308,8 @@ curl -s -X POST https://movi-project-production.up.railway.app/api/captura/atajo
 ## Regenerar los atajos
 
 `python3 scripts/generar-atajos.py` (en una Mac: firma con `shortcuts sign --mode anyone`). El firmado se llama
-como el atajo (`Movi - Avisar un mensaje.shortcut`): el nombre tiene que ser el de `NOMBRE_DEL_ATAJO_DE_MENSAJES`
+como el atajo (`Movi - Avisar un mensaje.shortcut`, y desde la vuelta 137 `Movi - Avisar una notificacion.shortcut`):
+el nombre tiene que ser el de `NOMBRE_DEL_ATAJO_DE_MENSAJES` / `NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES`
 (`LosAtajosDelRepoTest` lo compara con el del script). Para apuntarlos a
 un server de desarrollo sin tocar los del repo:
 `python3 scripts/generar-atajos.py --url http://<ip-de-la-mac>:8080 --salida /tmp/atajos-dev --plist /tmp/atajos-dev`.
