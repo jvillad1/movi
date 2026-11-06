@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.text
+import androidx.compose.ui.semantics.getTextLayoutResult
 import androidx.compose.ui.text.AnnotatedString
 import com.jvillada.movi.ui.components.partirLaColaDelNombreCorto
 import androidx.compose.ui.text.style.TextOverflow
@@ -542,9 +543,14 @@ private fun TituloQueSeCortaPorElPrincipio(titulo: String, color: Color, renglon
     }
 }
 
+/** Lo que se ve del subtítulo de una [Fila] con versión larga (el lector oye la larga; ver [SubtituloLargoSiCabe]). */
+val SubtituloVisibleDeFilaKey: SemanticsPropertyKey<String> = SemanticsPropertyKey("SubtituloVisibleDeFila")
+
 /**
  * El subtítulo de una [Fila] con una versión larga que se usa solo si cabe entera en [renglones] (revisión de la
  * vuelta 136): mide con la letra de verdad y el ancho que le queda; si no cabe, [corto] (con «…» si hace falta).
+ * **El lector de pantalla oye siempre la larga** (re-revisión, punto 5): con la corta a la vista, la semántica
+ * del texto es [largo], y la disposición que se informa es la de lo que se dibuja ([SubtituloVisibleDeFilaKey]).
  */
 @Composable
 private fun SubtituloLargoSiCabe(corto: String, largo: String, color: Color, renglones: Int, reservar: Boolean) {
@@ -559,6 +565,7 @@ private fun SubtituloLargoSiCabe(corto: String, largo: String, color: Color, ren
             ).hasVisualOverflow
             if (cabe) largo else corto
         }
+        val disposicion = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
         Text(
             text = texto,
             style = estilo,
@@ -566,6 +573,20 @@ private fun SubtituloLargoSiCabe(corto: String, largo: String, color: Color, ren
             maxLines = renglones,
             minLines = if (reservar) renglones else 1,
             overflow = TextOverflow.Ellipsis,
+            onTextLayout = { disposicion.value = it },
+            modifier = if (texto == largo) {
+                Modifier.semantics { this[SubtituloVisibleDeFilaKey] = texto }
+            } else {
+                Modifier.clearAndSetSemantics {
+                    text = AnnotatedString(largo)
+                    this[SubtituloVisibleDeFilaKey] = texto
+                    getTextLayoutResult { resultados ->
+                        val d = disposicion.value ?: return@getTextLayoutResult false
+                        resultados.add(d)
+                        true
+                    }
+                }
+            },
         )
     }
 }

@@ -1,5 +1,6 @@
 package com.jvillada.movi.ui.recurrentes
 
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -215,14 +216,19 @@ class UnaSolaFilaDeFacturaTest {
             }
         }
         composeRule.waitForIdle()
-        // La cadencia cabe: va. «Venció hace 3 días · falta el mínimo» al lado de «$145.000 saldo» no cabe a 360:
-        // gana el vencimiento, entero, y nada se corta a medias.
-        for (texto in listOf("Vence el 22 nov · cada 3 meses", "Venció hace 3 días")) {
-            val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
-            assertEquals(1, nodos.size, "«$texto»")
-            assertTrue(seVeEntero(nodos.single()), "«$texto» entero")
-        }
-        assertTrue(composeRule.onAllNodesWithText("falta el mínimo", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        // La cadencia cabe: va, y se dibuja entera. «Venció hace 3 días · falta el mínimo» al lado de «$145.000
+        // saldo» no cabe a 360: se dibuja el vencimiento, entero, y nada se corta a medias…
+        val cadencia = composeRule.onAllNodesWithText("Vence el 22 nov · cada 3 meses", useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals(1, cadencia.size)
+        assertTrue(seVeEntero(cadencia.single()))
+        val visibles = composeRule.onAllNodes(
+            SemanticsMatcher.expectValue(com.jvillada.movi.ui.components.ds.SubtituloVisibleDeFilaKey, "Venció hace 3 días"),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes()
+        assertEquals(1, visibles.size, "se dibuja «Venció hace 3 días»")
+        assertTrue(seVeEntero(visibles.single()), "entero")
+        // …y el lector de pantalla oye la larga (re-revisión, punto 5).
+        assertEquals("Venció hace 3 días · falta el mínimo", texto(visibles.single()))
     }
 
     @Test
