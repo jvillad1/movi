@@ -448,15 +448,25 @@ internal fun Transaction.revocarPorToken(token: String, clientId: String, ahora:
     if (deEseCliente) revocarConcesion(concesionId, ahora)
 }
 
-/** La concesión de un código o de un refresco (para el límite por concesión de `/oauth/token`), sin gastarlo. */
-internal fun Transaction.concesionDe(codigoORefresco: String): String? = when {
-    LasConcesiones.tieneForma(codigoORefresco, LasConcesiones.PREFIJO_CODIGO) ->
-        CodigosDelConector.select(CodigosDelConector.concesionId)
-            .where { CodigosDelConector.hash eq LasConcesiones.hash(codigoORefresco) }
-            .firstOrNull()?.get(CodigosDelConector.concesionId)
-    LasConcesiones.tieneForma(codigoORefresco, LasConcesiones.PREFIJO_REFRESCO) ->
-        TokensDelConector.select(TokensDelConector.concesionId)
-            .where { TokensDelConector.hash eq LasConcesiones.hash(codigoORefresco) }
-            .firstOrNull()?.get(TokensDelConector.concesionId)
-    else -> null
+/**
+ * **De qué concesión y de qué cliente es** un código, un refresco o un token de acceso (para los límites de
+ * `/oauth/token` y `/oauth/revoke`), sin gastarlo. `null` = no existe.
+ */
+internal fun Transaction.credencialDe(credencial: String): Pair<String, String>? {
+    val concesionId = when {
+        LasConcesiones.tieneForma(credencial, LasConcesiones.PREFIJO_CODIGO) ->
+            CodigosDelConector.select(CodigosDelConector.concesionId)
+                .where { CodigosDelConector.hash eq LasConcesiones.hash(credencial) }
+                .firstOrNull()?.get(CodigosDelConector.concesionId)
+        LasConcesiones.tieneForma(credencial, LasConcesiones.PREFIJO_REFRESCO) ||
+            LasConcesiones.tieneForma(credencial, LasConcesiones.PREFIJO_ACCESO) ->
+            TokensDelConector.select(TokensDelConector.concesionId)
+                .where { TokensDelConector.hash eq LasConcesiones.hash(credencial) }
+                .firstOrNull()?.get(TokensDelConector.concesionId)
+        else -> null
+    } ?: return null
+    val clientId = ConcesionesDelConector.select(ConcesionesDelConector.clientId)
+        .where { ConcesionesDelConector.id eq concesionId }
+        .firstOrNull()?.get(ConcesionesDelConector.clientId) ?: return null
+    return concesionId to clientId
 }

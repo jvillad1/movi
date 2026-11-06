@@ -77,6 +77,24 @@ class LasReglasDelConectorTest {
     }
 
     @Test
+    fun `la IP de un balde es la direccion en IPv4 y el 64 en IPv6`() {
+        assertEquals("203.0.113.7", claveDeIp("203.0.113.7"))
+        assertEquals("2001:db8:1:2::/64", claveDeIp("2001:db8:1:2:3:4:5:6"))
+        assertEquals(claveDeIp("2001:db8:1:2::1"), claveDeIp("2001:0db8:0001:0002:ffff:ffff:ffff:ffff"))
+        assertEquals("no-es-una-ip.example", claveDeIp("no-es-una-ip.example"), "nunca se resuelve un nombre")
+    }
+
+    @Test
+    fun `el limitador del conector nunca guarda mas de su tope de claves`() {
+        val l = LimitadorAcotado(1_000)
+        repeat(50_000) { l.permitir("cliente-inventado-$it", 10, 60_000L) }
+        assertEquals(1_000, l.llaves())
+        // Y sigue limitando lo que se usa.
+        repeat(3) { assertTrue(l.permitir("claude", 3, 60_000L)) }
+        assertFalse(l.permitir("claude", 3, 60_000L))
+    }
+
+    @Test
     fun `PKCE S256 compara el desafio con el verificador`() {
         val verificador = "verificador-de-prueba-con-mas-de-cuarenta-y-tres-caracteres-123"
         val desafio = Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256").digest(verificador.toByteArray()))

@@ -67,6 +67,7 @@ internal class AndamioDelConector(nombreDeLaBase: String, tablasDeMas: Array<Tab
         lectorDeCimd = LectorDeCimd { url -> documentos[url]?.let { LecturaDelCimd.Documento(it) } ?: LecturaDelCimd.NoExiste }
         olvidarLosCimdEnMemoria()
         RateLimiter.reset()
+        limitadorDelConector.olvidar()
         transaction {
             listOf(a.duenoA to contrasenaDeA, a.duenoB to contrasenaDeB).forEach { (uid, clave) ->
                 Users.update({ Users.id eq uid }) { it[passwordHash] = BCrypt.withDefaults().hashToString(4, clave.toCharArray()) }
@@ -80,6 +81,7 @@ internal class AndamioDelConector(nombreDeLaBase: String, tablasDeMas: Array<Tab
         cimdDePrueba = emptySet()
         olvidarLosCimdEnMemoria()
         RateLimiter.reset()
+        limitadorDelConector.olvidar()
     }
 
     /** Las rutas del conector (públicas), las de la app que se pidan (con el JWT) y «Movi en Claude». */

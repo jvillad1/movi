@@ -129,8 +129,9 @@ class ElCicloDelConectorTest {
         val s = c.json.parseToJsonElement(client.get("/.well-known/oauth-authorization-server").bodyAsText()).jsonObject
         assertEquals("${AndamioDelConector.BASE}/oauth/revoke", s["revocation_endpoint"]!!.jsonPrimitive.content)
         val (acceso, refresco) = with(c) { conectar() }
-        // Con otro client_id no revoca nada.
-        val ajeno = client.submitForm("/oauth/revoke", formParameters = parameters { append("token", refresco); append("client_id", "otro") })
+        // Con otro client_id (de forma válida) no revoca nada; con uno inventado, invalid_client.
+        assertEquals(HttpStatusCode.Unauthorized, client.submitForm("/oauth/revoke", formParameters = parameters { append("token", refresco); append("client_id", "otro") }).status)
+        val ajeno = client.submitForm("/oauth/revoke", formParameters = parameters { append("token", refresco); append("client_id", AndamioDelConector.CIMD_DE_CLAUDE_CODE) })
         assertEquals(HttpStatusCode.OK, ajeno.status)
         assertEquals(HttpStatusCode.OK, with(c) { mcp(acceso, "ping") }.status)
         val res = client.submitForm("/oauth/revoke", formParameters = parameters { append("token", refresco); append("client_id", CIMD_DE_CLAUDE) })

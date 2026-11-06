@@ -1,11 +1,11 @@
 package com.jvillada.movi.server.routes
 
-import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.conector.AccesoDelConector
 import com.jvillada.movi.server.conector.ConfigDelConector
 import com.jvillada.movi.server.conector.ServidorMcp
 import com.jvillada.movi.server.conector.accesoDelToken
 import com.jvillada.movi.server.conector.anotarUso
+import com.jvillada.movi.server.conector.limitadorDelConector
 import com.jvillada.movi.server.conector.ejecutarHerramientaDelConector
 import com.jvillada.movi.server.db.LlamadasDelConector
 import com.jvillada.movi.server.db.dbQuery
@@ -75,7 +75,7 @@ private suspend fun ApplicationCall.atenderMcp(ahora: Long) {
         ?: return pedirToken(conToken = false)
     val acceso: AccesoDelConector = dbQuery { accesoDelToken(token, ahora) } ?: return pedirToken(conToken = true)
 
-    if (!RateLimiter.allow("conector:mcp:${acceso.concesionId}", ConfigDelConector.LLAMADAS_POR_MINUTO, 60_000L)) {
+    if (!limitadorDelConector.permitir("mcp:${acceso.concesionId}", ConfigDelConector.LLAMADAS_POR_MINUTO, 60_000L)) {
         response.header(HttpHeaders.RetryAfter, "60")
         return respondText(
             ServidorMcp.error(

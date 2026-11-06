@@ -6,7 +6,10 @@ import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.conector.ConfigDelConector
 import io.ktor.server.response.respond
 import com.jvillada.movi.server.conector.revocarPorToken
-import com.jvillada.movi.server.conector.concesionDe
+import com.jvillada.movi.server.conector.credencialDe
+import com.jvillada.movi.server.conector.claveDeIp
+import com.jvillada.movi.server.conector.clientIdConForma
+import com.jvillada.movi.server.conector.limitadorDelConector
 import com.jvillada.movi.server.conector.borrarClientesSinUso
 import com.jvillada.movi.server.conector.solicitudesPendientes
 import com.jvillada.movi.server.conector.LasConcesiones
@@ -158,7 +161,7 @@ private val FORMA_DEL_DESAFIO = Regex("^[A-Za-z0-9._~-]{43,128}$")
 private suspend fun ApplicationCall.autorizar(p: Parameters) {
     val clientId = p["client_id"].orEmpty()
     val redirectUri = p["redirect_uri"].orEmpty()
-    if (!RateLimiter.allow("conector:authorize:${ipDelPedido(this)}", 60, 60_000L)) {
+    if (!limitadorDelConector.permitir("authorize:ip:${claveDeIp(ipDelPedido(this))}", 60, 60_000L)) {
         return pantalla(PantallaDeConsentimiento.noSePuede(PantallaDeConsentimiento.DEMASIADOS_INTENTOS), HttpStatusCode.TooManyRequests)
     }
     val cliente = resolverCliente(clientId)
@@ -238,7 +241,7 @@ private suspend fun ApplicationCall.resolverElConsentimiento() {
     fun deNuevo(error: String) = PantallaDeConsentimiento.pedirPermiso(id, s.nombreDelCliente, host, error, correo.take(MAX_EMAIL_LENGTH))
 
     if (correo.length > MAX_EMAIL_LENGTH) return pantalla(deNuevo(PantallaDeConsentimiento.CREDENCIALES_MALAS), HttpStatusCode.Unauthorized)
-    if (!RateLimiter.allow("conector:login:ip:${ipDelPedido(this)}", 30, 5 * 60_000L) ||
+    if (!limitadorDelConector.permitir("login:ip:${claveDeIp(ipDelPedido(this))}", 30, 5 * 60_000L) ||
         // M2 · el MISMO balde por correo que `/api/auth/login`: entre los dos, 10 intentos por cuenta cada 5 minutos.
         !RateLimiter.allow("login:email:$correo", 10, 5 * 60_000L)
     ) {
@@ -277,22 +280,22 @@ private suspend fun ApplicationCall.errorDeToken(error: String, descripcion: Str
  * permiso, que es lo único que puede hacer.
  */
 private suspend fun ApplicationCall.canjear() {
+    // N1 · un balde por IP (el /64 en IPv6) delante de todo: ningún pedido llega a la base ni a otro balde sin pasarlo.
+    if (!limitadorDelConector.permitir("token:ip:${claveDeIp(ipDelPedido(this))}", LIMITE_DE_TOKEN_POR_IP, 60_000L)) {
+        return errorDeToken("slow_down", "demasiados pedidos; espera un minuto", HttpStatusCode.TooManyRequests)
+    }
     if (request.contentType().withoutParameters() != ContentType.Application.FormUrlEncoded) {
         return errorDeToken("invalid_request", "el cuerpo va como application/x-www-form-urlencoded")
     }
     request.contentLength()?.let { if (it > MAX_BYTES_DEL_FORMULARIO) return errorDeToken("invalid_request", "cuerpo demasiado grande") }
     val p = runCatching { receiveParameters() }.getOrNull() ?: return errorDeToken("invalid_request", "cuerpo ilegible")
     val clientId = p["client_id"].orEmpty()
-    if (clientId.isEmpty()) return errorDeToken("invalid_request", "falta client_id")
+    // N1 · la forma del cliente antes de usarlo como clave de nada.
+    if (!clientIdConForma(clientId)) return errorDeToken("invalid_client", "cliente desconocido", HttpStatusCode.Unauthorized)
     p["resource"]?.let { if (it.trimEnd('/') != ConfigDelConector.urlDelMcp) return errorDeToken("invalid_target", "el recurso es ${ConfigDelConector.urlDelMcp}") }
-    // M3 · los límites van por cliente y por concesión, no por IP: todos los usuarios de Claude llegan desde las mismas
-    // IP de Anthropic. El del cliente es amplio (el CIMD de Claude es uno para todos); el de la concesión, estrecho.
-    if (!RateLimiter.allow("conector:token:cliente:$clientId", LIMITE_DE_TOKEN_POR_CLIENTE, 60_000L)) {
-        return errorDeToken("slow_down", "demasiados pedidos de este cliente; espera un minuto", HttpStatusCode.TooManyRequests)
-    }
-    val credencial = p["code"] ?: p["refresh_token"]
-    val concesion = credencial?.let { dbQuery { concesionDe(it) } }
-    if (concesion != null && !RateLimiter.allow("conector:token:concesion:$concesion", LIMITE_DE_TOKEN_POR_CONCESION, 60_000L)) {
+    // M3 y N1 · el balde del cliente y el de la concesión cuentan SOLO pedidos con una credencial que existe y es de
+    // ese cliente: un atacante sin un código o un refresco de verdad no puede llenar el balde de Claude.
+    if (!permitirCredencial(p["code"] ?: p["refresh_token"], clientId, "token")) {
         return errorDeToken("slow_down", "demasiados pedidos para esta conexión; espera un minuto", HttpStatusCode.TooManyRequests)
     }
     val ahora = System.currentTimeMillis()
@@ -325,9 +328,24 @@ private suspend fun ApplicationCall.canjear() {
 
 private val jsonDelRegistro = Json { ignoreUnknownKeys = true }
 
-/** `/oauth/token`: pedidos por minuto por `client_id` (compartido por todos los usuarios de Claude) y por concesión. */
+/**
+ * `/oauth/token` y `/oauth/revoke`: pedidos por minuto por IP (o `/64`), por `client_id` (compartido por todos los
+ * usuarios de Claude; solo cuenta credenciales que existen) y por concesión. Elegidos, no medidos.
+ */
+internal const val LIMITE_DE_TOKEN_POR_IP = 120
 internal const val LIMITE_DE_TOKEN_POR_CLIENTE = 1_000
 internal const val LIMITE_DE_TOKEN_POR_CONCESION = 20
+
+/**
+ * Los baldes de quien trae una credencial: si [credencial] existe y es de [clientId], cuenta contra el balde del
+ * cliente y el de su concesión. Una credencial que no existe no cuenta en ninguno (la para el balde por IP).
+ */
+private suspend fun permitirCredencial(credencial: String?, clientId: String, ruta: String): Boolean {
+    val dueno = credencial?.takeIf { it.length <= 200 }?.let { dbQuery { credencialDe(it) } } ?: return true
+    if (dueno.second != clientId) return true
+    return limitadorDelConector.permitir("$ruta:cliente:$clientId", LIMITE_DE_TOKEN_POR_CLIENTE, 60_000L) &&
+        limitadorDelConector.permitir("$ruta:concesion:${dueno.first}", LIMITE_DE_TOKEN_POR_CONCESION, 60_000L)
+}
 
 /** `/oauth/register`: registros por hora en total (Anthropic registra desde unas pocas IP para todos). */
 internal const val LIMITE_GLOBAL_DE_REGISTROS_POR_HORA = 300
@@ -408,6 +426,9 @@ private suspend fun ApplicationCall.registrar() {
  * también. Siempre 200, exista o no el token (RFC 7009 §2.2): no se le dice a nadie qué tokens existen.
  */
 private suspend fun ApplicationCall.revocar() {
+    if (!limitadorDelConector.permitir("revoke:ip:${claveDeIp(ipDelPedido(this))}", LIMITE_DE_TOKEN_POR_IP, 60_000L)) {
+        return errorDeToken("slow_down", "demasiados pedidos; espera un minuto", HttpStatusCode.TooManyRequests)
+    }
     if (request.contentType().withoutParameters() != ContentType.Application.FormUrlEncoded) {
         return errorDeToken("invalid_request", "el cuerpo va como application/x-www-form-urlencoded")
     }
@@ -416,7 +437,8 @@ private suspend fun ApplicationCall.revocar() {
     val token = p["token"].orEmpty()
     val clientId = p["client_id"].orEmpty()
     if (token.isEmpty() || clientId.isEmpty()) return errorDeToken("invalid_request", "faltan token y client_id")
-    if (!RateLimiter.allow("conector:revoke:cliente:$clientId", LIMITE_DE_TOKEN_POR_CLIENTE, 60_000L)) {
+    if (!clientIdConForma(clientId)) return errorDeToken("invalid_client", "cliente desconocido", HttpStatusCode.Unauthorized)
+    if (!permitirCredencial(token, clientId, "revoke")) {
         return errorDeToken("slow_down", "demasiados pedidos de este cliente; espera un minuto", HttpStatusCode.TooManyRequests)
     }
     dbQuery { revocarPorToken(token, clientId, System.currentTimeMillis()) }
