@@ -69,6 +69,23 @@ class UnaSolaFilaDeFacturaReglasTest {
         assertEquals(lineaDelMinimo(tarjeta), estado.texto)
     }
 
+    /** Revisión de la 136 (C1): sellada por un abono menor que el extracto, la fila no se ve pagada. */
+    @Test
+    fun `una tarjeta abonada con el extracto abierto dice lo que falta, y su cifra es lo que salio`() {
+        val extracto = com.jvillada.movi.shared.model.ExtractoDeLaTarjeta(
+            corte = "2026-10-20", fechaDePago = "2026-11-05", facturado = 1_292_700L, pagadoDesdeElCorte = 100_000L, minimo = 180_000L,
+        )
+        val abonada = PagoDelPeriodo(
+            ruleId = "card_nu", nombre = "Pago tarjeta Nu", monto = 1_583_000L, pagado = true, diasParaVencer = 7,
+            montoEsSaldo = true, vence = "2026-11-05", montoPagado = 100_000L, derivado = true,
+        )
+        val estado = estadoDeLaFactura(abonada, null, extracto = extracto)
+        assertEquals(TonoDeSubtitulo.Aviso, estado.tono)
+        assertFalse(estado.conCheck)
+        assertTrue(estado.texto.startsWith("Abonaste \$100.000 · faltan \$1.292.700"), estado.texto)
+        assertEquals(CifraDeLaFactura("\$100.000"), cifraDeLaFactura(abonada, extracto))
+    }
+
     @Test
     fun `la fecha de la derecha es el dia que salio la plata o el vencimiento`() {
         assertEquals("22 nov", fechaDeLaFactura(porVencer))

@@ -89,7 +89,7 @@ internal data class LoDeLaFactura(
     val candidato: FinancialEvent? get() = propuesta ?: parecido?.gasto
 
     /** El renglón de estado de la fila. */
-    val estado: EstadoDeLaFactura get() = estadoDeLaFactura(pago, candidato, enVuelo, noSuma)
+    val estado: EstadoDeLaFactura get() = estadoDeLaFactura(pago, candidato, enVuelo, noSuma, extracto)
 }
 
 /** Arma [LoDeLaFactura]. [enElTotal]: la fila es del período (las de antes no suman en nada). Pura. */

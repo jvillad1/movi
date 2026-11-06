@@ -379,7 +379,18 @@ class ElExtractoYElAbonoEnPantallaTest {
             }
         }
         composeRule.waitForIdle()
-        // Vuelta 136: la fila dice «Pagado»; lo que falta del extracto, su hoja.
+        // Revisión de la 136 (C1): la FILA, sin abrir la hoja, dice lo que falta del extracto (en su renglón de
+        // estado) y no se ve pagada; a la derecha va lo que salió, no la cifra del extracto.
+        val enLaFila = composeRule.onAllNodes(
+            hasText("Abonaste \$100.000 · faltan \$1.292.700 del extracto", substring = true) and
+                hasAnyAncestor(hasTestTag(com.jvillada.movi.ui.recurrentes.TAG_FILA_DE_FACTURA)),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes()
+        assertEquals(1, enLaFila.size, "la fila dice lo que falta del extracto")
+        assertFalse(hay("Pagado", substring = true), "no se ve pagada")
+        assertFalse(hay("\$1.292.700"), "la cifra de la derecha no es el extracto entero")
+        assertTrue(hay("\$100.000"), "es lo que salió")
+        // Y la hoja lo dice entero.
         composeRule.abrirLaFactura("Pago tarjeta Nu")
         composeRule.waitForIdle()
         assertTrue(hay("Abonaste \$100.000 · faltan \$1.292.700 del extracto (mínimo: faltan \$80.000)"))

@@ -6,6 +6,7 @@ import com.jvillada.movi.ui.quickadd.pastillaDelAbono
 import com.jvillada.movi.shared.model.abonosPlaneados
 import com.jvillada.movi.ui.credits.ROTULO_DEL_EXTRACTO
 import com.jvillada.movi.ui.credits.montoDelExtracto
+import com.jvillada.movi.ui.credits.loQueFaltaDelExtracto
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -359,6 +360,8 @@ const val ABONO_PLANEADO: String = "Abono planeado"
  * **El renglón de estado de una factura** (vuelta 136), en este orden —lo primero que aplica—:
  *
  * - con una escritura en vuelo, «Guardando…»;
+ * - sellada con el extracto de su tarjeta todavía abierto: [loQueFaltaDelExtracto] («Abonaste $100.000 · faltan
+ *   $1.292.700 del extracto…»), en aviso: no se ve pagada;
  * - **pagada** ([PagoDelPeriodo.hecho]): «Pagado · 25 oct» («Recibido» si es un ingreso, «Mínimo cubierto»
  *   si el mínimo del extracto quedó cubierto sin un pago propio), en el verde de `entra` con el visto;
  * - una tarjeta pagada por debajo de su mínimo: [lineaDelMinimo], en aviso (cortada a un renglón en la fila;
@@ -378,8 +381,13 @@ fun estadoDeLaFactura(
     enVuelo: Boolean = false,
     /** Vuelta 86: la fila no suma en «Falta por pagar» ([porQueNoSuma]); lo dice en aviso. */
     noSuma: PorQueNoSuma? = null,
+    /** Vuelta 62 · el extracto de la tarjeta de esta fila (`extractoDeLaFila`); en una sellada, sigue abierto. */
+    extracto: ExtractoDeLaTarjeta? = null,
 ): EstadoDeLaFactura {
     if (enVuelo) return EstadoDeLaFactura(GUARDANDO_LA_FACTURA, TonoDeSubtitulo.Normal)
+    // Revisión de la 136 (C1): un abono menor que el extracto sella la fila, pero el extracto sigue abierto: la
+    // fila no puede verse pagada. Dice lo que falta, en aviso (la regla de la vuelta 62).
+    if (pago.hecho && extracto != null) return EstadoDeLaFactura(loQueFaltaDelExtracto(extracto), TonoDeSubtitulo.Aviso)
     if (pago.hecho) {
         val estado = when {
             pago.esIngreso -> "Recibido"
@@ -422,8 +430,8 @@ data class CifraDeLaFactura(val texto: String, val estimada: Boolean = false, va
 
 /** Ver [CifraDeLaFactura]. Pura. */
 fun cifraDeLaFactura(pago: PagoDelPeriodo, extracto: ExtractoDeLaTarjeta?): CifraDeLaFactura = when {
-    // Vuelta 62: lo que pide el extracto, no el saldo entero.
-    extracto != null -> CifraDeLaFactura(montoDelExtracto(extracto.facturado, extracto.moneda), despues = ROTULO_DEL_EXTRACTO)
+    // Vuelta 62: lo que pide el extracto, no el saldo entero. Solo sin pagar (C1): sellada, va lo que salió.
+    extracto != null && !pago.hecho -> CifraDeLaFactura(montoDelExtracto(extracto.facturado, extracto.moneda), despues = ROTULO_DEL_EXTRACTO)
     // Vuelta 133/134: la cuota que cambia es una estimación, y se dice («unos $X»), con la regla única.
     com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago) -> CifraDeLaFactura(textoDelMontoDelChecklist(pago), estimada = true)
     // Una tarjeta se paga con su mínimo o su saldo: el monto dice de cuál se habla.
