@@ -116,8 +116,10 @@ class LaCuotaParecidaEnPagosTest {
     fun `la cuota pendiente ofrece el gasto parecido y Si es la cuota hace lo del detalle`() {
         montar(mapOf(claveDeLaCuotaPorSaldar("v4083", "2026-10-27") to parecido))
 
-        // Vuelta 136: la fila lo dice en su renglón de estado; la hoja lo pregunta.
-        assertTrue(composeRule.onAllNodesWithText("¿Es el de \$980.000?", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        // Revisión de la 136 (I1): un gasto parecido no tapa el estado de la cuota («¿Se cobró?»); la hoja lo
+        // pregunta (y «Falta por pagar», si es la más urgente).
+        assertTrue(composeRule.onAllNodes(hasText("¿Es el de \$980.000?") and hasAnyAncestor(hasTestTag(TAG_FILA_DE_FACTURA)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        assertTrue(composeRule.onAllNodes(hasText(PILDORA_SE_COBRO) and hasAnyAncestor(hasTestTag(TAG_FILA_DE_FACTURA)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         abrirLaHoja()
         composeRule.onNodeWithTag(TAG_CUOTA_QUE_SE_PARECE_EN_PAGOS, useUnmergedTree = true).assertExists()
         composeRule.onNodeWithText("¿Es la cuota de Vehículo 4083?").assertExists()

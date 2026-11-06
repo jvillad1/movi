@@ -366,8 +366,9 @@ const val ABONO_PLANEADO: String = "Abono planeado"
  *   si el mínimo del extracto quedó cubierto sin un pago propio), en el verde de `entra` con el visto;
  * - una tarjeta pagada por debajo de su mínimo: [lineaDelMinimo], en aviso (cortada a un renglón en la fila;
  *   la hoja la dice entera);
- * - con un movimiento que Movi propone ([candidato]: el del server, cerca o lejos del monto, o el gasto que se
- *   parece a la cuota): «¿Es el de $4.000.000?» ([enlaceDeLaPropuestaLejana]), en el azul del enlace;
+ * - con un movimiento que Movi propone **cerca del monto** ([candidato]; revisión de la 136, I1: uno lejano o el
+ *   gasto que se parece a la cuota no tapan el vencimiento, se ven en la hoja): «¿Es el de $4.000.000?»
+ *   ([enlaceDeLaPropuestaLejana]), en el azul del enlace;
  * - una fila que no suma en «Falta por pagar» (vuelta 86): «No suma: falta el mínimo» ([pildoraDeLoQueNoSuma]), en aviso;
  * - un abono: «Abono planeado · el día 15» ([pastillaDelAbono]);
  * - lo demás, la pastilla de vencimiento de siempre ([pastillaDeVencimiento]: «Vence el 17 nov», «Venció hace 3

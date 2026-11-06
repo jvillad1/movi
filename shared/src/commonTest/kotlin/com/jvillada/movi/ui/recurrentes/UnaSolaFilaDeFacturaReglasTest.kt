@@ -142,6 +142,9 @@ class UnaSolaFilaDeFacturaReglasTest {
         fun lo(p: PagoDelPeriodo) = loDeLaFactura(p, emptySet(), false, emptyMap(), emptyMap(), emptyMap(), enElTotal = true)
         assertTrue(lo(cerca).conPropuesta)
         assertFalse(lo(lejos).conPropuesta)
+        // Revisión de la 136 (I1): la cercana se pregunta en la fila; la lejana no tapa el vencimiento.
+        assertEquals("¿Es el de \$53.000?", lo(cerca).estado.texto)
+        assertEquals(EstadoDeLaFactura("Venció hace 3 días", TonoDeSubtitulo.Aviso), lo(lejos).estado)
         assertEquals(tanqueo, lo(lejos).candidato)
         assertNull(lo(porVencer).candidato)
         // «No fue este» en esta sesión: la fila deja de preguntar.

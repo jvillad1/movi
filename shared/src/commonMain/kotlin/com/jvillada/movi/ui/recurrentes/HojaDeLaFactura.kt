@@ -88,8 +88,11 @@ internal data class LoDeLaFactura(
     /** El movimiento por el que Movi pregunta, si hay uno. */
     val candidato: FinancialEvent? get() = propuesta ?: parecido?.gasto
 
-    /** El renglón de estado de la fila. */
-    val estado: EstadoDeLaFactura get() = estadoDeLaFactura(pago, candidato, enVuelo, noSuma, extracto)
+    /**
+     * El renglón de estado de la fila. Revisión de la 136 (I1): «¿Es el de $X?» solo con la propuesta **cerca**
+     * del monto; un candidato lejano o un gasto parecido no tapan «Venció hace N días» (queda en la hoja).
+     */
+    val estado: EstadoDeLaFactura get() = estadoDeLaFactura(pago, propuesta?.takeIf { conPropuesta }, enVuelo, noSuma, extracto)
 }
 
 /** Arma [LoDeLaFactura]. [enElTotal]: la fila es del período (las de antes no suman en nada). Pura. */
