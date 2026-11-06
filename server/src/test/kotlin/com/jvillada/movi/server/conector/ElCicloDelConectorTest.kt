@@ -29,6 +29,7 @@ import org.jetbrains.exposed.sql.deleteAll
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.update
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -153,22 +154,40 @@ class ElCicloDelConectorTest {
     }
 
     @Test
-    fun `un refresco repetido dentro de dos minutos no corta la conexion`() = testApplication {
+    fun `un refresco repetido dentro de dos minutos no corta la conexion pero revoca la rotacion huerfana`() = testApplication {
         with(c) { montar() }
         val (_, refresco) = with(c) { conectar() }
         val rotado = with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to refresco, "client_id" to CIMD_DE_CLAUDE)) }
-        val (acceso2, _) = c.tokensDe(rotado.bodyAsText())
-        transaction { TokensDelConector.update({ TokensDelConector.hash eq LasConcesiones.hash(refresco) }) { it[revocadoEn] = System.currentTimeMillis() - 90_000 } }
+        val (acceso2, refresco2) = c.tokensDe(rotado.bodyAsText())
+        // El reintento llega 90 s después: dentro de la gracia.
+        transaction {
+            val antes = System.currentTimeMillis() - 90_000
+            TokensDelConector.update({ TokensDelConector.hash eq LasConcesiones.hash(refresco) }) { it[revocadoEn] = antes }
+            TokensDelConector.update({ (TokensDelConector.hash eq LasConcesiones.hash(acceso2)) or (TokensDelConector.hash eq LasConcesiones.hash(refresco2)) }) { it[creadoEn] = antes }
+        }
         assertEquals(HttpStatusCode.BadRequest, with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to refresco, "client_id" to CIMD_DE_CLAUDE)) }.status)
-        assertEquals(HttpStatusCode.OK, with(c) { mcp(acceso2, "ping") }.status, "a los 90 s sigue conectado")
+        // La concesión sigue sin revocar, pero lo que salió de esa rotación ya no sirve, y no queda como conexión de más.
+        transaction { assertEquals(null, ConcesionesDelConector.selectAll().single()[ConcesionesDelConector.revocadaEn]) }
+        assertEquals(HttpStatusCode.Unauthorized, with(c) { mcp(acceso2, "ping") }.status)
+        val lista = c.json.decodeFromString(
+            com.jvillada.movi.shared.model.ConectorDeClaude.serializer(),
+            client.get("/api/conector") { with(c.a) { como(c.a.duenoA) } }.bodyAsText(),
+        )
+        assertTrue(lista.conexiones.isEmpty(), "${lista.conexiones}")
     }
 
     @Test
-    fun `una conexion sin uso en 90 dias ya no sirve`() = testApplication {
+    fun `una conexion vale un ano desde que se concedio, aunque se use`() = testApplication {
         with(c) { montar() }
-        val (acceso, _) = with(c) { conectar() }
-        transaction { ConcesionesDelConector.update({ ConcesionesDelConector.userId eq c.a.duenoA }) { it[ultimoUso] = System.currentTimeMillis() - 91 * dia } }
+        val (acceso, refresco) = with(c) { conectar() }
+        transaction {
+            ConcesionesDelConector.update({ ConcesionesDelConector.userId eq c.a.duenoA }) {
+                it[creadaEn] = System.currentTimeMillis() - 366 * dia
+                it[ultimoUso] = System.currentTimeMillis()
+            }
+        }
         assertEquals(HttpStatusCode.Unauthorized, with(c) { mcp(acceso, "ping") }.status)
+        assertEquals(HttpStatusCode.BadRequest, with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to refresco, "client_id" to CIMD_DE_CLAUDE)) }.status)
     }
 
     @Test

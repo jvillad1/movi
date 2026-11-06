@@ -141,6 +141,7 @@ class MoviEnClaudeTest {
         assertTrue(hay(QUE_VE_CLAUDE))
         assertTrue(hay("Agregar conector personalizado"))
         assertTrue(hay(SIN_CONEXIONES))
+        assertTrue(hay(CADA_CONEXION_DURA))
         tocar(COPIAR)
         assertEquals(listOf(URL), hoja.copiados)
         assertTrue(hay(COPIADO))

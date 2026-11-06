@@ -79,6 +79,9 @@ const val PASOS_EN_CLAUDE: String =
 const val PASO_EN_CLAUDE_CODE: String = "En Claude Code, corre este comando y después escribe /mcp para entrar:"
 
 const val SIN_CONEXIONES: String = "Todavía no has conectado Claude."
+
+/** Vuelta 135 (N5 de la re-revisión): la vida máxima de una conexión, dicha donde se ven las conexiones. */
+const val CADA_CONEXION_DURA: String = "Cada conexión dura hasta un año; después vuelves a entrar desde Claude."
 const val NO_SE_PUDO_LEER_EL_CONECTOR: String = "No pudimos leer tus conexiones con Claude."
 const val NO_SE_PUDO_DESCONECTAR: String = "No pudimos desconectar. Revisa tu conexión e inténtalo de nuevo."
 const val DESCONECTAR: String = "Desconectar"
@@ -220,6 +223,8 @@ fun MoviEnClaudeScreen(
                     item(key = "conexiones-titulo") {
                         Column {
                             Seccion("Conexiones")
+                            Text(CADA_CONEXION_DURA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                            Spacer(Modifier.height(Espacio.xs))
                             error?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.sale) }
                             if (e.conector.conexiones.isEmpty()) {
                                 Text(SIN_CONEXIONES, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)

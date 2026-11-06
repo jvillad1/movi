@@ -149,8 +149,9 @@ class ConectorOAuthTest {
         val viejo = with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to refresco, "client_id" to CIMD_DE_CLAUDE)) }
         assertEquals(HttpStatusCode.BadRequest, viejo.status)
         assertEquals("invalid_grant", c.json.parseToJsonElement(viejo.bodyAsText()).jsonObject["error"]!!.jsonPrimitive.content)
-        // …pero dentro de la gracia (una carrera inocente) no corta la conexión.
-        assertEquals(HttpStatusCode.OK, with(c) { mcp(acceso2, "ping") }.status)
+        // …y dentro de la gracia no corta la concesión, pero sí la rotación que salió de él (N5 de la re-revisión).
+        assertEquals(HttpStatusCode.Unauthorized, with(c) { mcp(acceso2, "ping") }.status)
+        transaction { assertNull(ConcesionesDelConector.selectAll().single()[ConcesionesDelConector.revocadaEn]) }
     }
 
     @Test
