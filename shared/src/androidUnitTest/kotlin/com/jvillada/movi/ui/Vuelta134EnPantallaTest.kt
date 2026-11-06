@@ -281,7 +281,12 @@ class Vuelta134EnPantallaTest {
         montar { PlanScreen(onNavigate = {}, segmento = SEGMENTO_PAGOS) }
         esperarTag(TAG_FILA_DE_FACTURA)
         val filas = conTag(TAG_FILA_DE_FACTURA)
-        val laQueCambia = filas.single { "Libre inversión" in todoElTexto(it) }
+        // Revisión de la 136 (I2): un nombre que no cabe se ve cortado por el principio y el lector lo oye entero
+        // (sin disposición de texto propia): se busca por todo el texto de la fila, no solo el que se dibuja.
+        fun textoCompleto(n: SemanticsNode): String =
+            (n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()) + " " +
+                n.children.joinToString(" ") { textoCompleto(it) }
+        val laQueCambia = filas.single { "Libre inversión" in textoCompleto(it) }
         assertTrue("unos" in todoElTexto(laQueCambia), todoElTexto(laQueCambia))
         // Vuelta 136: la fila es la de todas (el nombre en dos renglones con «…» si no cabe); su cifra con
         // «unos» y su fecha no se cortan, y «Como la de octubre» lo dice la hoja de la factura, entera.

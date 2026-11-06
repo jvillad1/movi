@@ -130,7 +130,8 @@ class UnaSolaFilaDeFacturaReglasTest {
             estimacion = null, extracto = null, noSuma = null, evidencia = null,
         )
         assertEquals(PrincipalDeLaHoja.ANOTAR, principalDeLaHoja(lo(porVencer)))
-        assertEquals(PrincipalDeLaHoja.EL_CANDIDATO, principalDeLaHoja(lo(vencida, tanqueo, conPropuesta = true)))
+        // Revisión (duda 1): con el candidato del mismo monto, «Sí, fue este» es el amarillo.
+        assertEquals(PrincipalDeLaHoja.EL_CANDIDATO, principalDeLaHoja(lo(vencida, tanqueo.copy(amount = vencida.monto), conPropuesta = true)))
         // La lejana: «Anotar pago» sigue siendo lo principal.
         assertEquals(PrincipalDeLaHoja.ANOTAR, principalDeLaHoja(lo(vencida, tanqueo, conPropuesta = false)))
         assertEquals(PrincipalDeLaHoja.NINGUNA, principalDeLaHoja(lo(pagada)))
