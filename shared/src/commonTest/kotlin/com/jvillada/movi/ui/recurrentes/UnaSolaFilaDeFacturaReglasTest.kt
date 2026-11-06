@@ -109,6 +109,11 @@ class UnaSolaFilaDeFacturaReglasTest {
         assertEquals("Celular", com.jvillada.movi.ui.components.ds.recortarPorElPrincipio("Celular", cabeEn(20)))
         assertEquals("…Master Black 3684", com.jvillada.movi.ui.components.ds.recortarPorElPrincipio("Pago tarjeta Master Black 3684", cabeEn(18)))
         assertEquals("…Papá (Davibank)", com.jvillada.movi.ui.components.ds.recortarPorElPrincipio("Cuota Hipoteca Papá (Davibank)", cabeEn(16)))
+        // Re-revisión (3): en el borde de una palabra, aunque quepa una letra más («…aster Black 3684» no).
+        assertEquals("…Black 3684", com.jvillada.movi.ui.components.ds.recortarPorElPrincipio("Pago tarjeta Master Black 3684", cabeEn(17)))
+        assertEquals("…Libre inversión 9695", com.jvillada.movi.ui.components.ds.recortarPorElPrincipio("Abono extra a Libre inversión 9695", cabeEn(22)))
+        // Solo si ni la última palabra cabe, por carácter.
+        assertEquals("…3684", com.jvillada.movi.ui.components.ds.recortarPorElPrincipio("Pago tarjeta Master Black 123456783684", cabeEn(5)))
     }
 
     @Test

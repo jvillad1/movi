@@ -493,12 +493,24 @@ const val PUNTOS_DEL_PRINCIPIO: String = "…"
 
 /**
  * **Un texto cortado por el principio** (revisión de la vuelta 136): [texto] entero si [cabe]; si no, «…» y la
- * cola más larga que quepa («…Master Black 3684»), sin espacios sueltos después de los puntos. [cabe] mide con la
- * letra de verdad; aquí solo se busca (binaria) dónde cortar. Pura.
+ * cola más larga que quepa, **empezando en una palabra** cuando se puede («…Master Black 3684», no «…aster Black
+ * 3684»; re-revisión, punto 3). Solo si ni la última palabra cabe, corta por carácter. Sin espacios sueltos después
+ * de los puntos. [cabe] mide con la letra de verdad; aquí solo se busca (binaria) dónde cortar. Pura.
  */
 fun recortarPorElPrincipio(texto: String, cabe: (String) -> Boolean): String {
     if (cabe(texto)) return texto
     fun desde(i: Int) = PUNTOS_DEL_PRINCIPIO + texto.substring(i).trimStart()
+    // Primero, entre los comienzos de palabra (de izquierda a derecha: la primera que cabe deja la cola más larga).
+    val palabras = texto.indices.filter { it > 0 && texto[it - 1] == ' ' && texto[it] != ' ' }
+    if (palabras.isNotEmpty() && cabe(desde(palabras.last()))) {
+        var bajo = 0
+        var alto = palabras.lastIndex
+        while (bajo < alto) {
+            val medio = (bajo + alto) / 2
+            if (cabe(desde(palabras[medio]))) alto = medio else bajo = medio + 1
+        }
+        return desde(palabras[bajo])
+    }
     var bajo = 1
     var alto = texto.length
     while (bajo < alto) {

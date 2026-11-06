@@ -44,13 +44,18 @@ class ElNombreDeLaFacturaSeCortaPorElPrincipioTest {
         diasParaVencer = 8, vence = "2026-11-14", categoria = "Tarjetas",
     )
 
+    private val abono = PagoDelPeriodo(
+        ruleId = "rr_abono", nombre = "Abono extra a Libre inversión 9695", monto = 2_228_152, pagado = false,
+        diasParaVencer = 9, vence = "2026-11-15", haciaDeuda = "l9695", categoria = "Traspaso",
+    )
+
     private fun montarYMirar() {
         composeRule.setContent {
             val base = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
                 MoviTheme {
                     Column(Modifier.fillMaxWidth()) {
-                        for (pago in listOf(hipoteca, master)) {
+                        for (pago in listOf(hipoteca, master, abono)) {
                             FilaDeFactura(pago = pago, estado = estadoDeLaFactura(pago, null), extracto = null, onAbrir = {})
                         }
                     }
@@ -58,13 +63,18 @@ class ElNombreDeLaFacturaSeCortaPorElPrincipioTest {
             }
         }
         composeRule.waitForIdle()
-        for ((nombre, cola) in listOf(hipoteca.nombre to "(Davibank)", master.nombre to "3684")) {
+        for ((nombre, cola) in listOf(hipoteca.nombre to "(Davibank)", master.nombre to "3684", abono.nombre to "9695")) {
             // El lector oye el nombre entero…
             val nodo = composeRule.onAllNodesWithText(nombre, useUnmergedTree = true).fetchSemanticsNodes().single()
             // …y lo que se ve termina en lo que distingue la factura.
             val visible = nodo.config.getOrNull(TituloVisibleDeFilaKey)
             assertTrue(visible != null && visible.endsWith(cola), "«$nombre» se ve como «$visible»")
             assertTrue(visible == nombre || visible.startsWith(PUNTOS_DEL_PRINCIPIO), "«$visible» se corta por el principio")
+            // Re-revisión (3): en el borde de una palabra («…Master Black 3684», no «…aster Black 3684»).
+            if (visible != nombre) {
+                val cola = visible.removePrefix(PUNTOS_DEL_PRINCIPIO)
+                assertTrue(nombre.endsWith(" $cola"), "«$visible» empieza en una palabra de «$nombre»")
+            }
         }
     }
 
