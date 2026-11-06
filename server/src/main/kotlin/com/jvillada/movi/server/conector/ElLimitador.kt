@@ -147,4 +147,6 @@ internal class AvisoConTope(
     }
 }
 
-internal val avisosDelConector = AvisoConTope()
+/** Los avisos con tope del conector. Las pruebas lo cambian por uno que anota en una lista. */
+@Volatile
+internal var avisosDelConector = AvisoConTope()

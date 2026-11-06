@@ -12,7 +12,8 @@ import io.ktor.server.response.respond
 import com.jvillada.movi.server.conector.revocarPorToken
 import com.jvillada.movi.server.conector.credencialDe
 import com.jvillada.movi.server.conector.claveDeIp
-import com.jvillada.movi.server.conector.esIpDeAnthropic
+import com.jvillada.movi.server.conector.avisosDelConector
+import com.jvillada.movi.server.conector.rangoDeAnthropic
 import com.jvillada.movi.server.conector.LIMITE_DE_TOKEN_DE_ANTHROPIC
 import com.jvillada.movi.server.conector.LIMITE_DE_REGISTRO_DE_ANTHROPIC
 import com.jvillada.movi.server.conector.clientIdConForma
@@ -319,17 +320,20 @@ private val jsonDelRegistro = Json { ignoreUnknownKeys = true }
  */
 internal const val LIMITE_DE_TOKEN_POR_IP = 120
 
-private val logDeLimites = org.slf4j.LoggerFactory.getLogger("ConectorDeClaude")
 
 /**
  * El balde por IP (o `/64`) de [ruta], con el tope de Anthropic si la IP es de su rango de salida (ver
- * `RANGOS_DE_ANTHROPIC`). Un 429 a una IP de Anthropic deja un WARN: es tráfico de todos los usuarios de Claude.
+ * `RANGOS_DE_ANTHROPIC`). Un 429 a una IP de Anthropic deja un WARN con tope: es tráfico de todos los usuarios de Claude.
  */
 private fun ApplicationCall.permitirPorIp(ruta: String, normal: Int, deAnthropic: Int): Boolean {
     val ip = ipDelPedido(this)
-    val esDeAnthropic = esIpDeAnthropic(ip)
-    val bien = limitadorDelConector.permitir("$ruta:ip:${claveDeIp(ip)}", if (esDeAnthropic) deAnthropic else normal, 60_000L)
-    if (!bien && esDeAnthropic) logDeLimites.warn("Conector: 429 en /oauth/$ruta a una IP de Anthropic ($ip, tope $deAnthropic por minuto)")
+    val rango = rangoDeAnthropic(ip)
+    val bien = limitadorDelConector.permitir("$ruta:ip:${claveDeIp(ip)}", if (rango != null) deAnthropic else normal, 60_000L)
+    // El WARN lleva tope (uno por minuto por ruta y rango, con el conteo de lo omitido): si Claude reintentara en
+    // bucle, serían miles de líneas por minuto.
+    if (!bien && rango != null) {
+        avisosDelConector.avisar("429:$ruta:$rango") { "Conector: 429 en /oauth/$ruta a una IP de Anthropic ($rango, tope $deAnthropic por minuto)" }
+    }
     return bien
 }
 internal const val LIMITE_DE_TOKEN_POR_CONCESION = 20

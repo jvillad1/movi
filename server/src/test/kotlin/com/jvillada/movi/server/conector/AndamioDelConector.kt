@@ -69,6 +69,7 @@ internal class AndamioDelConector(nombreDeLaBase: String, tablasDeMas: Array<Tab
         olvidarLosCimdEnMemoria()
         RateLimiter.reset()
         limitadorDelConector.olvidar()
+        avisosDelConector = AvisoConTope()
         transaction {
             listOf(a.duenoA to contrasenaDeA, a.duenoB to contrasenaDeB).forEach { (uid, clave) ->
                 Users.update({ Users.id eq uid }) { it[passwordHash] = BCrypt.withDefaults().hashToString(4, clave.toCharArray()) }
@@ -84,6 +85,7 @@ internal class AndamioDelConector(nombreDeLaBase: String, tablasDeMas: Array<Tab
         olvidarLosCimdEnMemoria()
         RateLimiter.reset()
         limitadorDelConector.olvidar()
+        avisosDelConector = AvisoConTope()
     }
 
     /** Las rutas del conector (públicas), las de la app que se pidan (con el JWT) y «Movi en Claude». */

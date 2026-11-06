@@ -165,4 +165,20 @@ class ElLimiteDelTokenTest {
         repeat(61) { assertEquals(HttpStatusCode.Unauthorized, mcpDesde("153.61.208.9", "mvc_a_" + "g".repeat(43)).status) }
         assertEquals(HttpStatusCode.OK, mcpDesde("153.61.208.9", acceso).status)
     }
+
+    @Test
+    fun `el WARN del 429 a una IP de Anthropic sale uno por minuto, con lo omitido`() = testApplication {
+        with(c) { montar() }
+        val escritos = mutableListOf<String>()
+        avisosDelConector = AvisoConTope { escritos += it }
+        suspend fun registrar() = client.post("/oauth/register") {
+            header("X-Forwarded-For", "160.79.106.3")
+            contentType(ContentType.Application.Json)
+            setBody("""{"redirect_uris":["$RETORNO_DE_CLAUDE"]}""")
+        }
+        repeat(com.jvillada.movi.server.conector.LIMITE_DE_REGISTRO_DE_ANTHROPIC) { registrar() }
+        repeat(50) { assertEquals(HttpStatusCode.TooManyRequests, registrar().status) }
+        assertEquals(1, escritos.size, "$escritos")
+        assertTrue("160.79.104.0/21" in escritos.single())
+    }
 }
