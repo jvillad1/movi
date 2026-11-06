@@ -5560,6 +5560,28 @@ Una pantalla de información sobre plata de terceros (`ui/seguros/TusSegurosScre
   `FlowRow` que baja de renglón («¿Tu cuota es siempre la misma?» · Sí · No, cambia; el porqué; «¿Cambia la
   cuota o el plazo?»). Sí por defecto, ningún amarillo nuevo.
 
+## Vuelta 134 · Las categorías del número y la nota
+
+Cuando un mismo número (llave o cuenta) se ha anotado con varias categorías, Movi no adivina: las pone
+a la vista. El patrón:
+
+- **Una línea dice por qué**: «A esta llave le pusiste Parqueadero 3 veces, Gasolina 2 y Comercio 1 vez»
+  (`lineaDelNumero`, texto `apoyo`, `TAG_LINEA_DEL_NUMERO`), encima de las pastillas. Con más de tres,
+  «… y 2 más»; «cuenta» en vez de «llave» si es un número de cuenta. Con una sola categoría no hay línea:
+  la frase de siempre («Así lo anotaste 3 veces») ya lo explica.
+- **Las del número van primero** en las pastillas, de la más usada a la menos, y después las frecuentes de
+  siempre sin repetir. Las categorías que ningún selector ofrece no entran.
+- **Las pastillas abren solas, sin mover la pantalla**: en Revisar aviso y en la tarjeta de Por revisar
+  (donde «Elegir categoría» o «Cambiar» ya las abrían) llegan abiertas cuando llega la lectura; la pantalla
+  no se desplaza hacia ellas (solo lo hace si las abrió el dueño con su toque). Si el dueño las cierra, se
+  quedan cerradas.
+- **La fila «Nota»** (`Campo`, rótulo «Nota», guía «¿Para qué fue? (opcional)», hasta 80 caracteres) va
+  debajo de la categoría en Revisar aviso; lo escrito queda en el movimiento después del comercio
+  («Pago QR · llave 0099887766 · parqueadero del centro»).
+- **Lo que no hace**: no elige por el dueño ni confirma solo; el aviso con varias categorías **no entra a
+  «Confirmar los N»** (hay que mirarlo), salvo que el mismo monto ya se le haya mandado a esa persona por
+  un motivo. La Nota no aparece con «Es este» (no se crea nada) ni en «Repartir en partes».
+
 ## Vuelta 135 · «Movi en Claude»: una dirección para copiar y conexiones que se cortan
 
 - **Dónde**: una `Fila` más en Tú → Ajustes → «Movi», debajo de «Qué ve la IA» (ícono `Link`, «Conecta Claude
