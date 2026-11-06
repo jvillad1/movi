@@ -1063,6 +1063,9 @@ data class ElSaldoDelPlanEnLaFicha(val saldo: Long, val ultimaCuota: PeriodoFina
 fun saldoDelPlanEnLaFicha(credit: CreditSummary, hoy: LocalDate): ElSaldoDelPlanEnLaFicha? {
     if (!com.jvillada.movi.shared.model.creditoSinSaldo(credit)) return null
     val t = credit.terms ?: return null
+    // Revisión de la vuelta 133: en UVR el saldo en pesos de hoy depende de la UVR de cada mes, que Movi no
+    // tiene: no hay una cifra honesta que proponer, así que la ficha ofrece «Cargarlo» y no «Usar este».
+    if (t.tipoDeCuota == com.jvillada.movi.shared.model.TipoDeCuota.UVR) return null
     val desde = runCatching { LocalDate.parse(t.startDate.trim()) }.getOrNull()
     val plan = saldoSegunElPlan(
         capital = t.principal,
@@ -1075,6 +1078,7 @@ fun saldoDelPlanEnLaFicha(credit: CreditSummary, hoy: LocalDate): ElSaldoDelPlan
         diaDePago = t.dayOfMonth,
         desde = desde,
         hoy = hoy,
+        capitalFijo = com.jvillada.movi.shared.model.capitalFijoDe(t),
     )
     val saldo = plan.saldo ?: return null
     val ultima = if (saldo <= 0L || desde == null) null else {
@@ -1192,6 +1196,8 @@ fun lineasDeLaCuotaQueCambia(
     t: CreditTerms,
     ultima: com.jvillada.movi.shared.model.CuotaPagada?,
     plan: PlanDelCredito?,
+    /** Revisión de la vuelta 133: si la cuota de este período ya se pagó, se dice lo pagado, no «unos». */
+    periodoActual: PeriodoFinanciero? = null,
 ): List<String> {
     val tipo = t.tipoDeCuota?.takeIf { t.cuotaCambia() } ?: return emptyList()
     val monto = com.jvillada.movi.shared.model.cuotaDeEsteMes(t, ultima)
@@ -1202,7 +1208,8 @@ fun lineasDeLaCuotaQueCambia(
     ) else emptyList()
     return listOfNotNull(
         listOfNotNull(porQue).plus(tasaVariable).joinToString(" · "),
-        "Este mes, " + com.jvillada.movi.shared.model.textoDeLaCuotaQueCambia(monto, ultima),
+        if (ultima != null && periodoActual != null && ultima.periodo == periodoActual.prefijo) "Este mes pagaste ${formatCOP(ultima.monto)}"
+        else "Este mes, " + com.jvillada.movi.shared.model.textoDeLaCuotaQueCambia(monto, ultima),
         com.jvillada.movi.shared.model.loQueSuponeElPlan(tipo, t.rateEa),
         plan?.cuotaAlFinal?.let { "La última cuota sería de unos ${formatCOP(it)}." },
         plan?.cuotaEnUnAno?.let { "En un año, la cuota sería de unos ${formatCOP(it)}." },

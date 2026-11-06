@@ -1,5 +1,6 @@
 package com.jvillada.movi.shared.model
 
+import kotlin.math.pow
 import kotlinx.serialization.Serializable
 
 /**
@@ -261,6 +262,9 @@ fun planDeSalida(
     )
 }
 
+/** La inflación mensual de [INFLACION_SUPUESTA_PARA_LA_UVR], la misma de la ficha. */
+private val INFLACION_MENSUAL_DE_LA_UVR: Double = inflacionMensualDe(INFLACION_SUPUESTA_PARA_LA_UVR)
+
 private class Recorrido(var saldo: Long) {
     var meses: Int? = null
     var interes: Long = 0L
@@ -279,7 +283,11 @@ private fun simular(deudas: List<DeudaParaSalir>, abonoMensual: Long): List<Reco
             val r = recorridos[i]
             if (r.meses != null) return@forEachIndexed
             val interes = interesDelPeriodo(r.saldo, d.tasaMensualParaElPlan)
-            r.interes += interes
+            // Revisión de la vuelta 133: en UVR, el interés a pesos corrientes con la misma inflación supuesta
+            // que la ficha (`planDeUnaDeuda`): sin abono, los dos dicen el mismo interés por pagar.
+            r.interes += if (d.tipoDeCuota == TipoDeCuota.UVR) {
+                kotlin.math.round(interes * (1.0 + INFLACION_MENSUAL_DE_LA_UVR).pow((mes - 1).toDouble())).toLong()
+            } else interes
             // Vuelta 133: un abono constante abona su capital fijo (la cuota baja sola); los demás, la cuota.
             val capital = d.capitalFijo?.let { minOf(it, r.saldo) } ?: ((d.cuota ?: 0L) - interes - d.noAmortiza)
             r.saldo -= capital

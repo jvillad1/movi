@@ -233,8 +233,11 @@ fun supuestoDeLasCuotasQueCambian(deudas: List<com.jvillada.movi.shared.model.De
     val tipos = deudas.mapNotNull { it.tipoDeCuota }.toSet()
     if (tipos.isEmpty()) return null
     val partes = buildList {
-        if (com.jvillada.movi.shared.model.TipoDeCuota.TASA_VARIABLE in tipos || com.jvillada.movi.shared.model.TipoDeCuota.UVR in tipos) {
-            add("una cuota que cambia (tasa variable o UVR) se cuenta con la de este mes, sin adivinar el IBR ni la inflación")
+        if (com.jvillada.movi.shared.model.TipoDeCuota.TASA_VARIABLE in tipos) {
+            add("una cuota de tasa variable se cuenta con la de este mes y la tasa de hoy, sin adivinar el IBR")
+        }
+        if (com.jvillada.movi.shared.model.TipoDeCuota.UVR in tipos) {
+            add("una cuota en UVR se cuenta con la de este mes y una inflación de 3 % al año (la meta del Banco de la República), como en su ficha")
         }
         if (com.jvillada.movi.shared.model.TipoDeCuota.ABONO_CONSTANTE in tipos) add("un abono constante abona su capital fijo y la cuota baja sola")
     }

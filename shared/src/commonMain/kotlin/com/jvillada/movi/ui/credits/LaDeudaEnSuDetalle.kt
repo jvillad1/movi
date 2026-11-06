@@ -342,7 +342,7 @@ private fun LoQueDiceElPrestamo(
     )
     BajoLaFila {
         // Vuelta 133: una cuota que cambia dice por qué, que es una estimación y cuánto fue la última.
-        lineasDeLaCuotaQueCambia(t, credit.ultimaCuotaPagada, plan).forEach { linea ->
+        lineasDeLaCuotaQueCambia(t, credit.ultimaCuotaPagada, plan, periodoActual).forEach { linea ->
             Text(linea, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, modifier = Modifier.testTag(TAG_CUOTA_QUE_CAMBIA))
         }
         // Quién la paga, si no es el dueño: un estado de la cuota, en una píldora.
