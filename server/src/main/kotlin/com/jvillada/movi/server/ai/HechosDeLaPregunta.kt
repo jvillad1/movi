@@ -190,7 +190,11 @@ internal fun hechosDelCredito(c: CreditoParaContexto): String = buildString {
     } else {
         appendLine("- Tasa: ${porcentaje(c.tasaEa, 2)} EA (${porcentaje(tasaMensualDeUnaEA(c.tasaEa) * 100, 2)} mensual)")
     }
-    appendLine("- Cuota: ${pesos(c.cuota)} el día ${c.dia}; plazo pactado ${c.plazoMeses} meses")
+    // Revisión de la vuelta 133: una cuota que cambia es una estimación, y los hechos exactos lo dicen igual
+    // que el renglón del contexto (`renglonDelCredito`): el verificador de cifras toma esto como verdad.
+    val porQueCambia = c.tipoDeCuota?.let { com.jvillada.movi.shared.model.porQueCambiaLaCuota(it) }
+    if (porQueCambia != null) appendLine("- Cuota: NO es fija (${porQueCambia.replaceFirstChar { it.lowercase() }}); la de este mes es de unos ${pesos(c.cuota)} (${c.deDondeSaleLaCuota}), el día ${c.dia}; plazo pactado ${c.plazoMeses} meses")
+    else appendLine("- Cuota: ${pesos(c.cuota)} el día ${c.dia}; plazo pactado ${c.plazoMeses} meses")
     val seguro = c.seguroMensual?.takeIf { it > 0L } ?: 0L
     val otros = c.otrosCargosMensuales?.takeIf { it > 0L } ?: 0L
     // «Seguros» en plural y sin apellido: el campo suma todos (vida, incendio, terremoto). Ver

@@ -38,7 +38,8 @@ class LaCuotaQueCambiaEnPantallaTest {
             ruleId = "credit_l9695", nombre = "Cuota Libre inversión 9695", monto = 1_262_300, pagado = false,
             diasParaVencer = 3, cuotaQueCambia = LaCuotaQueCambia(octubre),
         )
-        assertEquals("La de octubre fue \$1.262.300", lineaDeLaCuotaAnterior(fila))
+        assertEquals("Como la de octubre", lineaDeLaCuotaAnterior(fila), "la estimación es la anterior")
+        assertEquals("La de octubre fue \$1.262.300", lineaDeLaCuotaAnterior(fila.copy(monto = 1_300_000)))
         assertNull(lineaDeLaCuotaAnterior(fila.copy(cuotaQueCambia = null)), "una cuota fija no dice nada más")
         assertNull(lineaDeLaCuotaAnterior(fila.copy(cuotaQueCambia = LaCuotaQueCambia(null))))
     }
@@ -48,7 +49,9 @@ class LaCuotaQueCambiaEnPantallaTest {
         val variable = terms.copy(tipoDeCuota = TipoDeCuota.TASA_VARIABLE, puntosSobreElIndice = 8.5)
         val lineas = lineasDeLaCuotaQueCambia(variable, octubre, plan = null)
         assertTrue(lineas.first().startsWith("La tasa es variable (IBR + puntos) · IBR + 8,5"), lineas.toString())
-        assertEquals("Este mes, unos \$1.262.300 (la de octubre fue \$1.262.300)", lineas[1])
+        assertEquals("Este mes, unos \$1.262.300, como la de octubre", lineas[1])
+        // Con la cuota de este período ya pagada se dice lo pagado, no una estimación.
+        assertEquals("Este mes pagaste \$1.262.300", lineasDeLaCuotaQueCambia(variable, octubre, plan = null, periodoActual = PeriodoFinanciero(2026, 10))[1])
         assertTrue(lineasDeLaCuotaQueCambia(terms, octubre, plan = null).isEmpty(), "una cuota fija no lleva líneas")
         val boton = textoDeLaCuotaEnLaFicha(LaCuotaEnLaFicha(PeriodoFinanciero(2026, 11), pagada = false, monto = 1_262_300, cambia = true, anterior = octubre))
         assertEquals("Pagar la cuota de noviembre · unos \$1.262.300", boton)

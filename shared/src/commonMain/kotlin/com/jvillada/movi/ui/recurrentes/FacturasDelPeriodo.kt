@@ -217,7 +217,8 @@ fun lineaDeLaCuotaAnterior(pago: PagoDelPeriodo): String? {
     if (pago.hecho) return null
     val anterior = pago.cuotaQueCambia?.anterior?.takeIf { it.monto > 0L } ?: return null
     val mes = com.jvillada.movi.shared.model.mesDeLaCuotaPagada(anterior.periodo) ?: return null
-    return "La de $mes fue ${formatCOP(anterior.monto)}"
+    // Revisión de la vuelta 133: la estimación es la anterior; con la misma cifra, «Como la de octubre».
+    return if (anterior.monto == pago.monto) "Como la de $mes" else "La de $mes fue ${formatCOP(anterior.monto)}"
 }
 
 /** Vuelta 126 · el tag de la cadencia de una factura no mensual («Cada 3 meses»). */

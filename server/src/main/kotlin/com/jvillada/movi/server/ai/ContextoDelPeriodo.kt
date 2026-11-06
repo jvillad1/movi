@@ -189,7 +189,13 @@ internal data class CreditoParaContexto(
      * «unos $X»: el asistente no puede afirmar una cuota que cambia como si fuera fija.
      */
     val tipoDeCuota: com.jvillada.movi.shared.model.TipoDeCuota? = null,
+    /** Revisión de la vuelta 133 · ¿[cuota] es la última pagada de verdad (y no la pactada)? */
+    val cuotaEsLaUltimaPagada: Boolean = false,
+    /** Revisión de la vuelta 133 · en un abono constante, lo que se abona a capital cada mes (`capitalFijoDe`). */
+    val capitalFijo: Long? = null,
 ) {
+    /** «es la última que pagó» o «es la que pactó»: de dónde sale la cuota estimada. */
+    val deDondeSaleLaCuota: String get() = if (cuotaEsLaUltimaPagada) "es la última que pagó" else "es la que pactó; todavía no hay un pago"
     /** ¿La cuota sale de su cuenta? La misma regla que la pantalla de Créditos ([saleDeTuBolsillo]). */
     val saleDeSuBolsillo: Boolean get() = !porNomina && loPaga.isNullOrBlank()
 
@@ -208,9 +214,9 @@ internal data class CreditoParaContexto(
                 otrosCargosMensuales = otrosCargosMensuales,
                 saleDeTuBolsillo = saleDeSuBolsillo,
                 sinIntereses = sinIntereses,
-                // Vuelta 133: la UVR y la tasa variable proyectan como la pantalla (sin capital fijo acá:
-                // el contexto no lleva el principal; un abono constante se proyecta con su cuota).
-                tipoDeCuota = tipoDeCuota?.takeIf { it != com.jvillada.movi.shared.model.TipoDeCuota.ABONO_CONSTANTE },
+                // Vuelta 133: proyecta como la pantalla (la UVR con su inflación, el abono constante con su capital fijo).
+                tipoDeCuota = tipoDeCuota,
+                capitalFijo = capitalFijo,
             )
         }
 }
@@ -484,6 +490,8 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
                 tasaEa = fila[Credits.rateEa],
                 cuota = cuotaDeEsteMes(condiciones, ultima),
                 tipoDeCuota = condiciones.tipoDeCuota?.takeIf { condiciones.cuotaCambia() },
+                cuotaEsLaUltimaPagada = ultima != null && ultima.monto > 0L,
+                capitalFijo = com.jvillada.movi.shared.model.capitalFijoDe(condiciones),
                 plazoMeses = fila[Credits.termMonths],
                 dia = fila[Credits.dayOfMonth],
                 seguroMensual = fila[Credits.insuranceMonthly],
@@ -722,7 +730,7 @@ internal fun renglonDelCredito(c: CreditoParaContexto): String = buildString {
     c.saldo?.let { append("debe \$$it; ") }
     // Vuelta 133: una cuota que cambia es una estimación (la última que pagó), y se dice así.
     val porQueCambia = c.tipoDeCuota?.let { com.jvillada.movi.shared.model.porQueCambiaLaCuota(it) }
-    if (porQueCambia != null) append("cuota de unos \$${c.cuota} el día ${c.dia} (no es fija: ${porQueCambia.replaceFirstChar { it.lowercase() }}; es la última que pagó), ")
+    if (porQueCambia != null) append("cuota de unos \$${c.cuota} el día ${c.dia} (no es fija: ${porQueCambia.replaceFirstChar { it.lowercase() }}; ${c.deDondeSaleLaCuota}), ")
     else append("cuota \$${c.cuota} el día ${c.dia}, ")
     if (c.sinIntereses) append("NO cobra intereses") else append("tasa ${c.tasaEa} % EA")
     append(", plazo ${c.plazoMeses} meses")

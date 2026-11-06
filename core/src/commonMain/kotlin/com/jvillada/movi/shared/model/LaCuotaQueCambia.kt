@@ -64,6 +64,12 @@ enum class AlCambiarLaTasa { CAMBIA_LA_CUOTA, CAMBIA_EL_PLAZO }
 fun CreditTerms.cuotaCambia(): Boolean = tipoDeCuota != null && tipoDeCuota != TipoDeCuota.FIJA
 
 /**
+ * Revisión de la vuelta 133 · ¿se puede comparar un pago contra la cuota pactada («pagaste $X más que la
+ * cuota»)? Solo con una cuota fija: en una que cambia, la pactada ya no es la cuota del mes.
+ */
+fun esCuotaQueSeComparaConLaPactada(terms: CreditTerms): Boolean = !terms.cuotaCambia()
+
+/**
  * **Lo último que se pagó de verdad por la cuota de un crédito**: la pata del dinero del último pago de
  * cuota (lo que salió de la cuenta, seguros incluidos), y la cuota que saldó (`"2026-10"`).
  */
@@ -114,7 +120,12 @@ fun mesDeLaCuotaPagada(periodo: String): String? {
 fun textoDeLaCuotaQueCambia(monto: Long, anterior: CuotaPagada?): String {
     val base = "unos ${pesos(monto)}"
     val delMes = anterior?.takeIf { it.monto > 0L }?.let { a -> mesDeLaCuotaPagada(a.periodo)?.let { it to a.monto } }
-    return if (delMes == null) base else "$base (la de ${delMes.first} fue ${pesos(delMes.second)})"
+    return when {
+        delMes == null -> base
+        // Revisión de la vuelta 133: la estimación ES la anterior; repetir la cifra no decía nada.
+        delMes.second == monto -> "$base, como la de ${delMes.first}"
+        else -> "$base (la de ${delMes.first} fue ${pesos(delMes.second)})"
+    }
 }
 
 /**
