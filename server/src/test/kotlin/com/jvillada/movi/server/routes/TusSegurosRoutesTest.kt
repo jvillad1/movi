@@ -207,6 +207,23 @@ class TusSegurosRoutesTest {
     }
 
     @Test
+    fun `un credito cuyo unico movimiento se anulo no se toma por pagado`() = testApplication {
+        application { testModule() }
+        transaction {
+            cuenta("acc_libre", dueno, "Libre inversión 9695", "LOAN")
+            evento(dueno, "ev_desembolso", "acc_libre", "EXPENSE", 40_000_000L, "Deuda inicial", "Saldo inicial", diasAtras = 30)
+            VoidEvents.insert { it[id] = "void_desembolso"; it[userId] = dueno; it[originalEventId] = "ev_desembolso"; it[timestamp] = 1L }
+            Credits.insert {
+                it[accountId] = "acc_libre"; it[userId] = dueno; it[bank] = "Bancolombia"; it[principal] = 40_000_000L
+                it[rateEa] = 24.5; it[termMonths] = 60; it[installment] = 1_286_548L; it[dayOfMonth] = 15
+                it[startDate] = "2026-01-15"; it[remindMe] = true; it[insuranceMonthly] = 108_800L
+            }
+        }
+        // Saldo 0 y el único movimiento anulado: «no se registró nada», no «pagado». El seguro sigue.
+        assertTrue(leer().seguros.any { it.clave == "credito:acc_libre" })
+    }
+
+    @Test
     fun `una clave que no existe o vacia no guarda nada`() = testApplication {
         application { testModule() }
         assertEquals(HttpStatusCode.NotFound, responder("no-es", "acc_ahorros:panaderia").status)
@@ -254,6 +271,8 @@ class TusSegurosRoutesTest {
         assertEquals(89_100L + 32_000L + 31_667L, anual.alMes)
         assertEquals(setOf("seguro-si:$eps", "seguro-cada:$eps:12"), huellasDeSeguros())
         assertEquals(HttpStatusCode.BadRequest, responder("cada-cuanto", eps, meses = 7).status)
+        assertEquals(HttpStatusCode.OK, responder("cada-cuanto", eps, meses = 3).status)
+        assertEquals(setOf("seguro-si:$eps", "seguro-cada:$eps:3"), huellasDeSeguros(), "cada 3 meses reemplaza a cada año")
         assertEquals(HttpStatusCode.BadRequest, responder("cada-cuanto", eps).status)
         assertEquals(HttpStatusCode.NotFound, responder("cada-cuanto", "acc_ahorros:nada", meses = 1).status)
     }

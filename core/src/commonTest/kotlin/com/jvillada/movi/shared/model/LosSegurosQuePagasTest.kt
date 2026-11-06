@@ -202,6 +202,82 @@ class LosSegurosQuePagasTest {
     }
 
     @Test
+    fun `N1 · marzo y octubre no son mensuales, van como pagos de una vez, todos sumados aparte`() {
+        val r = detectar(eventos = listOf(
+            gasto("ev_mar", "2026-03-10", 2_400_000, "PAGO PSE SEGUROS BOLIVAR"),
+            gasto("ev_oct", "2026-10-25", 1_800_000, "PAGO PSE SEGUROS BOLIVAR"),
+        ))
+        val s = r.seguros.single()
+        assertTrue(s.pagadoUnaVez, "dos cobros con siete meses de hueco no dicen «todos los meses»")
+        assertEquals(2, s.cobros.size)
+        assertEquals(0, r.alMes)
+        assertEquals(1_800_000, s.montoDelCiclo, "el último")
+        assertEquals(4_200_000, r.enPagosDeUnaVez)
+    }
+
+    @Test
+    fun `N1 · un trimestral sin regla pregunta, y con cada 3 meses se reparte`() {
+        val trimestral = listOf("2026-02", "2026-05", "2026-08", "2026-11").mapIndexed { i, m ->
+            gasto("ev_tri_$i", "$m-03", 300_000, "POLIZA HOGAR ALLIANZ")
+        }
+        val antes = detectar(eventos = trimestral)
+        assertTrue(antes.seguros.single().pagadoUnaVez)
+        assertEquals(0, antes.alMes)
+        val clave = antes.seguros.single().clave
+        val cada3 = detectar(eventos = trimestral, cadaCuanto = mapOf(clave to 3))
+        assertEquals(100_000, cada3.alMes)
+        assertEquals(1_200_000, cada3.alAno)
+        assertTrue(cada3.seguros.single().sigueCobrandose)
+        assertEquals(0, cada3.enPagosDeUnaVez)
+    }
+
+    @Test
+    fun `N1 · la renovacion de un anual que llego unos dias antes no lo vuelve mensual`() {
+        val renovacion = listOf(
+            gasto("ev_r1", "2025-11-08", 1_200_000, "POLIZA VIDA ALLIANZ"),
+            gasto("ev_r2", "2026-11-03", 1_250_000, "POLIZA VIDA ALLIANZ"),
+        )
+        val r = detectar(eventos = renovacion)
+        assertTrue(r.seguros.single().pagadoUnaVez)
+        assertEquals(0, r.alMes)
+        val anual = detectar(eventos = renovacion, cadaCuanto = mapOf(r.seguros.single().clave to 12))
+        assertEquals((1_250_000L + 6) / 12, anual.alMes)
+        assertEquals(1_250_000, anual.alAno)
+    }
+
+    @Test
+    fun `N1 · meses casi seguidos si son mensuales`() {
+        assertTrue(pareceMensual(listOf("2026-09", "2026-10")))
+        assertTrue(pareceMensual(listOf("2026-09", "2026-11")), "un mes sin cobro de por medio")
+        assertTrue(pareceMensual(listOf("2025-12", "2026-01", "2026-02")), "cruza el año")
+        assertFalse(pareceMensual(listOf("2026-03", "2026-10")))
+        assertFalse(pareceMensual(listOf("2026-02", "2026-05", "2026-08")))
+        assertFalse(pareceMensual(listOf("2025-11", "2026-11")))
+        assertFalse(pareceMensual(listOf("2026-10")))
+        val dosSeguidos = detectar(eventos = mensual("sep", listOf("2026-09", "2026-11"), 40_000, "SEGURO VIDA ALLIANZ"))
+        assertEquals(40_000, dosSeguidos.alMes)
+    }
+
+    @Test
+    fun `el vida deudor de una tarjeta no se toma por el seguro del credito`() {
+        val tarjeta = mensual("tc", listOf("2026-10", "2026-11"), 250_000, "SEGURO VIDA DEUDOR TC", master)
+        val r = detectar(eventos = tarjeta, creditos = listOf(credito(hipoteca, 250_000, banco = "Davivienda")))
+        assertTrue(r.porConfirmar.isEmpty())
+        assertEquals(500_000, r.alMes)
+    }
+
+    @Test
+    fun `el mismo comercio en pesos y en dolares son dos seguros`() {
+        val r = detectar(eventos =
+            mensual("cop", listOf("2026-10", "2026-11"), 40_000, "ALLIANZ ASISTENCIA VIAJE", master) +
+                mensual("usd", listOf("2026-10", "2026-11"), 10, "ALLIANZ ASISTENCIA VIAJE", master).map { it.copy(currency = "USD") },
+        )
+        assertEquals(setOf("COP", "USD"), r.seguros.map { it.moneda }.toSet())
+        assertEquals(40_000, r.alMes)
+        assertEquals(mapOf("USD" to 10L), r.otrasMonedas)
+    }
+
+    @Test
     fun `una regla mensual de seguros basta para decir mensual con un solo cobro`() {
         val regla = RecurringRule(id = "rr_vida", name = "Seguro de vida", category = "Seguros", amount = 80_000, dayOfMonth = 5, type = TransactionType.EXPENSE)
         val s = detectar(eventos = listOf(gasto("ev_vida", "2026-11-01", 80_000, "Seguro de vida")), reglas = listOf(regla)).seguros.single()
@@ -364,11 +440,11 @@ class LosSegurosQuePagasTest {
     fun `las respuestas salen de las huellas, y gana la ultima de cada cuanto`() {
         val r = respuestasDeLasHuellas(listOf(
             huellaDelSeguro("acc_a:x"), huellaDelSeguroConfirmado("acc_b:y"), huellaDeCadaCuanto("acc_c:z", 12),
-            HUELLA_DE_ME_INTERESA, "extracto:acc_nu:2026-10-12", huellaDeCadaCuanto("acc_d:w", 7),
+            HUELLA_DE_ME_INTERESA, "extracto:acc_nu:2026-10-12", huellaDeCadaCuanto("acc_d:w", 7), huellaDeCadaCuanto("acc_e:v", 3),
         ))
         assertEquals(setOf("acc_a:x"), r.descartados)
         assertEquals(setOf("acc_b:y"), r.confirmados)
-        assertEquals(mapOf("acc_c:z" to 12), r.cadaCuanto, "un 7 no es una respuesta")
+        assertEquals(mapOf("acc_c:z" to 12, "acc_e:v" to 3), r.cadaCuanto, "un 7 no es una respuesta")
         assertTrue(r.meInteresa)
     }
 

@@ -35,8 +35,6 @@ import kotlinx.serialization.Serializable
 enum class TipoDeSeguro {
     /** El seguro que va dentro de la cuota de un crédito ([CreditTerms.insuranceMonthly], sin tipo). */
     DEL_CREDITO,
-    /** Incendio o terremoto cobrado aparte por un crédito (solo por texto: el crédito no lo guarda). */
-    HOGAR_DEL_CREDITO,
     /** El seguro que cobra una tarjeta de crédito (vida deudor de la tarjeta). */
     DE_TARJETA,
     /** SOAT o el seguro del vehículo. */
@@ -92,6 +90,11 @@ data class SeguroDetectado(
      * pantalla pregunta «¿Cada cuánto lo pagas?».
      */
     val pagadoUnaVez: Boolean = false,
+    /**
+     * Lo pagado en la ventana por un [pagadoUnaVez]: su único cobro o, si fueron varios sin ritmo mensual
+     * («varios pagos»: marzo y octubre), todos. Es lo que suma [SegurosQuePagas.enPagosDeUnaVez].
+     */
+    val pagadoSinRitmo: Long? = null,
     /** ISO; `null` en un crédito sin cuotas anotadas en la ventana. */
     val ultimoCobro: String? = null,
     /** Cobrado hace [DIAS_PARA_SEGUIR_COBRANDOSE] días o menos (o dentro de su ciclo); un crédito vivo, siempre. */
@@ -150,8 +153,15 @@ const val DIAS_PARA_SEGUIR_COBRANDOSE: Int = 45
 /** Un cargo «se parece» al seguro de un crédito con el monto a ±10 % del de la cuota. Elegido, no medido. */
 const val TOLERANCIA_DEL_DUPLICADO_PORCIENTO: Long = 10L
 
-/** Las dos respuestas a «¿Cada cuánto lo pagas?». */
-val MESES_QUE_SE_PUEDEN_RESPONDER: Set<Int> = setOf(1, 12)
+/** Las respuestas a «¿Cada cuánto lo pagas?»: cada mes, cada 3 meses, cada 6 meses o cada año. */
+val MESES_QUE_SE_PUEDEN_RESPONDER: Set<Int> = setOf(1, 3, 6, 12)
+
+/**
+ * Un grupo sin señal es **mensual** solo si sus cobros caen en meses casi seguidos: entre dos meses con
+ * cobro hay a lo sumo esto. Elegido, no medido: deja pasar un mes que el banco no cobró (o que se cobró
+ * doble el siguiente) sin llamar «mensual» a dos pagos de marzo y octubre.
+ */
+const val HUECO_MAXIMO_DE_UN_MENSUAL_EN_MESES: Int = 2
 
 /** El prefijo de la huella de «No es un seguro» en `anomalias_descartadas`. */
 const val PREFIJO_DE_LA_HUELLA_DEL_SEGURO: String = "seguro:"
@@ -361,6 +371,10 @@ private data class CreditoConSeguro(val id: String, val nombre: String, val segu
  * en «Gastos» ([cuentaEnGastosEIngresos]: ni por confirmar, ni una liquidación a otra persona, ni una
  * cuenta de deuda), que no es de una categoría reservada (pago de tarjeta, traspaso, ajuste…) ni de dos
  * patas, que te tocó a ti ([montoContado]) y que no es parte de un traspaso.
+ *
+ * Por eso **nada de lo anotado dentro de una cuenta de crédito entra** (`isCashFlow` saca las `LOAN`): un
+ * todo riesgo financiado dentro del crédito del carro no se ve. Es un falso negativo conocido; el seguro
+ * que sí se ve de un crédito es el de sus condiciones ([CreditTerms.insuranceMonthly]).
  */
 private fun entraAlDetector(e: FinancialEvent): Boolean =
     e.type == TransactionType.EXPENSE &&
@@ -415,7 +429,6 @@ fun segurosDetectados(
 
     val candidatos = vivos.asSequence()
         .filter(::entraAlDetector)
-        .filter { it.accountId !in creditosConSeguro.map { c -> c.id } }
         .filter { diaDe(it.timestamp) in desde..hoy }
         .mapNotNull { e ->
             val texto = listOfNotNull(e.description, e.merchant).joinToString(" ")
@@ -442,7 +455,11 @@ fun segurosDetectados(
         .toList()
 
     val porCobros = candidatos
-        .groupBy { "${it.evento.accountId}:${(claveDeComercio(it.evento) ?: it.evento.id).take(120)}" }
+        // La moneda va en la clave cuando no es pesos: un comercio cobrado en COP y en USD son dos grupos.
+        .groupBy {
+            val moneda = it.evento.currency.takeIf { m -> m != "COP" }?.let { m -> ":$m" }.orEmpty()
+            "${it.evento.accountId}:${(claveDeComercio(it.evento) ?: it.evento.id).take(120)}$moneda"
+        }
         .map { (clave, delGrupo) ->
             val c = clave.take(MAX_CLAVE_DE_SEGURO)
             seguroDelGrupo(c, delGrupo, cuentaPorId, hoyFecha, diaDe, cadaCuanto[c], creditosConSeguro)
@@ -491,7 +508,7 @@ fun conLoQueDijoElDueno(detectados: List<SeguroDetectado>, respuestas: Respuesta
         alMes = enPesos.sumOf { it.alMes },
         alAno = enPesos.sumOf { s -> if (s.mesesEntreCobros > 1) (s.montoDelCiclo ?: 0L) * (12 / s.mesesEntreCobros) else s.alMes * 12 },
         conAnuales = enPesos.any { it.mesesEntreCobros > 1 },
-        enPagosDeUnaVez = cuentan.filter { it.pagadoUnaVez && it.moneda == "COP" }.sumOf { it.montoDelCiclo ?: 0L },
+        enPagosDeUnaVez = cuentan.filter { it.pagadoUnaVez && it.moneda == "COP" }.sumOf { it.pagadoSinRitmo ?: it.montoDelCiclo ?: 0L },
         otrasMonedas = vivos.filter { it.moneda != "COP" }.groupBy { it.moneda }.mapValues { (_, l) -> l.sumOf { it.alMes } },
         meInteresa = respuestas.meInteresa,
     )
@@ -522,6 +539,21 @@ private fun segurosDeLosCreditos(creditos: List<CreditSummary>, eventos: List<Fi
         )
     }
 
+/**
+ * ¿Los meses con cobro ([meses], «2026-09») dicen «todos los meses»? Dos o más, y entre dos seguidos a lo
+ * sumo [HUECO_MAXIMO_DE_UN_MENSUAL_EN_MESES]. Marzo y octubre no; un trimestral tampoco; la renovación de
+ * un anual que llegó unos días antes (noviembre y noviembre) tampoco.
+ */
+internal fun pareceMensual(meses: Collection<String>): Boolean {
+    val indices = meses.mapNotNull { m ->
+        val anio = m.take(4).toIntOrNull()
+        val mes = m.drop(5).take(2).toIntOrNull()
+        if (anio == null || mes == null) null else anio * 12 + (mes - 1)
+    }.distinct().sorted()
+    if (indices.size < 2) return false
+    return indices.zipWithNext().all { (a, b) -> b - a <= HUECO_MAXIMO_DE_UN_MENSUAL_EN_MESES }
+}
+
 private fun seguroDelGrupo(
     clave: String,
     delGrupo: List<Candidato>,
@@ -535,11 +567,9 @@ private fun seguroDelGrupo(
     val ultimo = ordenados.first()
     val cuenta = cuentaPorId[ultimo.evento.accountId]
     val esTarjeta = cuenta?.type == AccountType.CREDIT_CARD
-    val esCredito = cuenta?.type == AccountType.LOAN
     val leido = ordenados.firstNotNullOfOrNull { it.lectura.tipo }
     val textos = ordenados.map { listOfNotNull(it.evento.description, it.evento.merchant).joinToString(" ") }
     val tipo = when {
-        leido == TipoDeSeguro.HOGAR && esCredito -> TipoDeSeguro.HOGAR_DEL_CREDITO
         esTarjeta && (leido == null || leido == TipoDeSeguro.DE_TARJETA ||
             (leido == TipoDeSeguro.VIDA && textos.any { "deudor" in palabrasDe(it) })) -> TipoDeSeguro.DE_TARJETA
         leido == TipoDeSeguro.DE_TARJETA && !esTarjeta -> TipoDeSeguro.OTRO
@@ -552,9 +582,11 @@ private fun seguroDelGrupo(
     // dos meses distintos = mensual. Un solo cobro sin señal no se sabe: «pagado una vez».
     val meses: Int? = respuesta
         ?: ordenados.mapNotNull { it.meses }.maxOrNull()
-        ?: if (porMes.size >= 2) 1 else null
+        ?: if (pareceMensual(porMes.keys)) 1 else null
     val pagadoUnaVez = meses == null
     val montoDelCiclo = if (pagadoUnaVez || (meses ?: 1) > 1) delUltimoMes else null
+    // Lo pagado sin saber cada cuánto: todo lo de la ventana (va aparte, en «pagos de una vez»).
+    val sinRitmo = if (pagadoUnaVez) porMes.values.sum() else null
     val alMes = when {
         pagadoUnaVez -> 0L
         meses!! > 1 -> (delUltimoMes + meses / 2) / meses
@@ -571,7 +603,10 @@ private fun seguroDelGrupo(
         creditosConSeguro.firstOrNull { c ->
             val parecido = kotlin.math.abs(montoContado(ultimo.evento) - c.seguro) * 100 <= c.seguro * TOLERANCIA_DEL_DUPLICADO_PORCIENTO
             val delMismoBanco = c.banco.isNotEmpty() && c.banco.all { it in palabras }
-            parecido && (delMismoBanco || hablaDelSeguroDeUnCredito(palabras))
+            // En una tarjeta, «deudor» es el vida deudor de la propia tarjeta, no el del crédito: ahí solo
+            // cuenta el banco (o incendio, terremoto, hipoteca).
+            val porTexto = if (esTarjeta) hablaDelSeguroDeUnCredito(palabras.filter { it != "deudor" }) else hablaDelSeguroDeUnCredito(palabras)
+            parecido && (delMismoBanco || porTexto)
         }?.nombre
     } else null
     val concluyente = ordenados.any { it.lectura.concluyente } && duplicadoDe == null
@@ -587,6 +622,7 @@ private fun seguroDelGrupo(
         mesesEntreCobros = meses ?: 0,
         montoDelCiclo = montoDelCiclo,
         pagadoUnaVez = pagadoUnaVez,
+        pagadoSinRitmo = sinRitmo,
         ultimoCobro = fechaUltima,
         sigueCobrandose = sigue,
         concluyente = concluyente,
@@ -609,7 +645,6 @@ private fun nombreDelSeguro(tipo: TipoDeSeguro, cuenta: String?, texto: String, 
     val p = palabrasDe(texto)
     return when (tipo) {
         TipoDeSeguro.DEL_CREDITO -> "Seguro del crédito · ${cuenta.orEmpty()}"
-        TipoDeSeguro.HOGAR_DEL_CREDITO -> "Seguro de hogar · ${cuenta.orEmpty()}"
         TipoDeSeguro.DE_TARJETA -> if (cuenta.isNullOrBlank()) "Seguro de la tarjeta" else "Seguro de la tarjeta $cuenta"
         TipoDeSeguro.AUTO -> if ("soat" in p) "SOAT" else "Seguro del vehículo"
         TipoDeSeguro.SALUD -> if ("prepagada" in p || p.contieneFrase(listOf("coomeva", "mp"))) "Medicina prepagada" else "Seguro de salud"
@@ -625,7 +660,7 @@ private fun nombreDelSeguro(tipo: TipoDeSeguro, cuenta: String?, texto: String, 
 
 /** El título del bloque de cada tipo en la pantalla, en este orden. */
 fun tituloDelTipoDeSeguro(tipo: TipoDeSeguro): String = when (tipo) {
-    TipoDeSeguro.DEL_CREDITO, TipoDeSeguro.HOGAR_DEL_CREDITO -> "Dentro de tus créditos"
+    TipoDeSeguro.DEL_CREDITO -> "Dentro de tus créditos"
     TipoDeSeguro.DE_TARJETA -> "De tus tarjetas"
     TipoDeSeguro.AUTO -> "Vehículo"
     TipoDeSeguro.SALUD -> "Salud"

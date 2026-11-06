@@ -3,7 +3,8 @@ package com.jvillada.movi.ui.seguros
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -99,8 +100,8 @@ const val DE_DONDE_SALEN_LOS_SEGUROS: String =
     "Sale de tus movimientos de los últimos 12 meses y de las cuotas de tus créditos."
 const val VACIO_DE_SEGUROS: String = "Movi todavía no ve seguros en tus movimientos"
 const val COMO_LOS_VERIA: String =
-    "Los verá cuando subas el extracto de tu tarjeta o de tu crédito, o cuando conectes la captura del banco: " +
-        "el seguro de la cuota y los cobros de pólizas aparecen solos."
+    "Aparecen cuando confirmas los movimientos de tu extracto (esperan en «Por confirmar») o los avisos del " +
+        "banco que llegan con la captura conectada. El seguro de la cuota de un crédito se ve en cuanto cargas sus condiciones."
 const val TITULO_SON_SEGUROS: String = "¿Son seguros?"
 const val PREGUNTA_DE_AYUDA: String = "¿Quieres que Movi te ayude con tus seguros?"
 const val TEXTO_DE_AYUDA: String =
@@ -121,11 +122,23 @@ const val TAG_NO_ES_UN_SEGURO: String = "seguros:no-es"
 const val TAG_SI_ES: String = "seguros:si-es"
 const val TAG_NO_ES: String = "seguros:no"
 const val TAG_CADA_MES: String = "seguros:cada-mes"
+const val TAG_CADA_3_MESES: String = "seguros:cada-3-meses"
+const val TAG_CADA_6_MESES: String = "seguros:cada-6-meses"
 const val TAG_CADA_ANO: String = "seguros:cada-ano"
 
 const val PREGUNTA_CADA_CUANTO: String = "¿Cada cuánto lo pagas?"
 const val CADA_MES: String = "Cada mes"
+const val CADA_3_MESES: String = "Cada 3 meses"
+const val CADA_6_MESES: String = "Cada 6 meses"
 const val CADA_ANO: String = "Cada año"
+
+/** Las respuestas a «¿Cada cuánto lo pagas?»: los meses (`MESES_QUE_SE_PUEDEN_RESPONDER`), el rótulo y el tag. */
+val OPCIONES_DE_CADA_CUANTO: List<Triple<Int, String, String>> = listOf(
+    Triple(1, CADA_MES, TAG_CADA_MES),
+    Triple(3, CADA_3_MESES, TAG_CADA_3_MESES),
+    Triple(6, CADA_6_MESES, TAG_CADA_6_MESES),
+    Triple(12, CADA_ANO, TAG_CADA_ANO),
+)
 const val ES_EL_MISMO: String = "Es el mismo"
 const val ES_OTRO: String = "Es otro"
 
@@ -144,8 +157,18 @@ fun lineaDeOtrasMonedas(s: SegurosQuePagas): String? =
     }
 
 /** Lo que dice la fila «Tus seguros» de Tú: «$121.100 al mes», o qué hay adentro sin datos. */
-fun subtituloDeLaFilaDeSeguros(s: SegurosQuePagas?): String =
-    if (s == null || s.alMes <= 0L) SIN_DATOS_DE_SEGUROS else "${formatCOP(s.alMes)} al mes"
+fun subtituloDeLaFilaDeSeguros(s: SegurosQuePagas?): String = when {
+    s == null -> SIN_DATOS_DE_SEGUROS
+    s.alMes > 0L -> "${formatCOP(s.alMes)} al mes"
+    s.enPagosDeUnaVez > 0L -> "${formatCOP(s.enPagosDeUnaVez)} en pagos de una vez"
+    else -> SIN_DATOS_DE_SEGUROS
+}
+
+/** Con solo pagos de una vez, la cifra de arriba dice lo pagado y no «$0 al mes». */
+fun soloPagosDeUnaVez(s: SegurosQuePagas): Boolean = s.alMes <= 0L && s.enPagosDeUnaVez > 0L
+
+/** El rótulo de abajo de la cifra cuando solo hay pagos de una vez. */
+const val EN_PAGOS_DE_UNA_VEZ: String = "en seguros que pagaste de una vez, en los últimos 12 meses"
 
 /** «unos $1.453.200 al año», y si hay anuales, que se repartieron. */
 fun lineaDelAnoDeLosSeguros(s: SegurosQuePagas): String =
@@ -158,6 +181,8 @@ fun lineaDeLaFilaDelSeguro(s: SeguroDetectado): String {
         if (s.dentroDeLaCuota) add("Va dentro de la cuota") else if (s.cuentaNombre.isNotBlank()) add(s.cuentaNombre)
         when {
             // Un solo cobro sin saber cada cuánto: lo que pasó, sin inventar que se repite ni que se acabó.
+            s.pagadoUnaVez && s.cobros.size > 1 ->
+                add("Varios pagos · el último, ${formatMoney(s.montoDelCiclo ?: 0L, s.moneda)}" + (cuando?.let { " el $it" } ?: ""))
             s.pagadoUnaVez -> add("Pagado una vez · ${formatMoney(s.montoDelCiclo ?: 0L, s.moneda)}" + (cuando?.let { " el $it" } ?: ""))
             !s.sigueCobrandose && cuando != null -> add("Dejó de cobrarse · último: $cuando")
             cuando != null -> add("Último cobro: $cuando")
@@ -178,7 +203,7 @@ fun montoDeLaFilaDelSeguro(s: SeguroDetectado): Long =
     if (s.pagadoUnaVez || s.mesesEntreCobros > 1) s.montoDelCiclo ?: s.alMes else s.alMes
 
 private fun iconoDelSeguro(tipo: TipoDeSeguro): ImageVector = when (tipo) {
-    TipoDeSeguro.DEL_CREDITO, TipoDeSeguro.HOGAR_DEL_CREDITO -> Icons.Rounded.AccountBalance
+    TipoDeSeguro.DEL_CREDITO -> Icons.Rounded.AccountBalance
     TipoDeSeguro.DE_TARJETA -> Icons.Rounded.CreditCard
     TipoDeSeguro.AUTO -> Icons.Rounded.DirectionsCar
     TipoDeSeguro.SALUD -> Icons.Rounded.MedicalServices
@@ -293,15 +318,13 @@ fun TusSegurosScreen(onNavigate: (Screen) -> Unit) {
                                         if (i > 0) Separador()
                                         FilaDelSeguro(seguro, onClick = { abierto = seguro })
                                         if (seguro.pagadoUnaVez) {
+                                            // Las cuatro respuestas pesan lo mismo.
                                             PreguntaDeLaFila(
                                                 pregunta = PREGUNTA_CADA_CUANTO,
-                                                si = CADA_MES to TAG_CADA_MES,
-                                                no = CADA_ANO to TAG_CADA_ANO,
                                                 ocupado = enVuelo != null,
-                                                onSi = { cadaCuanto(seguro, 1) },
-                                                onNo = { cadaCuanto(seguro, 12) },
-                                                // Las dos respuestas pesan lo mismo.
-                                                noEsFantasma = false,
+                                                respuestas = OPCIONES_DE_CADA_CUANTO.map { (meses, texto, tag) ->
+                                                    Respuesta(texto, tag) { cadaCuanto(seguro, meses) }
+                                                },
                                             )
                                         }
                                     }
@@ -362,11 +385,18 @@ fun TusSegurosScreen(onNavigate: (Screen) -> Unit) {
 private fun CifraDeLosSeguros(s: SegurosQuePagas) {
     Superficie {
         Column(verticalArrangement = Arrangement.spacedBy(Espacio.xxs)) {
-            Text("Pagas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
-            Cifra(s.alMes, variante = VarianteDeCifra.Heroe)
-            Text("al mes en seguros", style = Movi.textos.cuerpo, color = Movi.colores.texto)
-            lineaDeLosPagosDeUnaVez(s)?.let { Text(it, style = Movi.textos.cuerpo, color = Movi.colores.texto) }
-            Text(lineaDelAnoDeLosSeguros(s), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            if (soloPagosDeUnaVez(s)) {
+                // Sin nada mensual, un «$0 al mes · unos $0 al año» le diría que no paga nada.
+                Text("Pagaste", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Cifra(s.enPagosDeUnaVez, variante = VarianteDeCifra.Heroe)
+                Text(EN_PAGOS_DE_UNA_VEZ, style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            } else {
+                Text("Pagas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+                Cifra(s.alMes, variante = VarianteDeCifra.Heroe)
+                Text("al mes en seguros", style = Movi.textos.cuerpo, color = Movi.colores.texto)
+                lineaDeLosPagosDeUnaVez(s)?.let { Text(it, style = Movi.textos.cuerpo, color = Movi.colores.texto) }
+                Text(lineaDelAnoDeLosSeguros(s), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
             lineaDeOtrasMonedas(s)?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
             Spacer(Modifier.height(Espacio.xs))
             Text(DE_DONDE_SALEN_LOS_SEGUROS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
@@ -400,35 +430,33 @@ private fun CifraConPeriodo(s: SeguroDetectado) {
     }
 }
 
+/** Una respuesta de [PreguntaDeLaFila]: su rótulo, su tag, si pesa menos (`Fantasma`) y qué hace. */
+private class Respuesta(val texto: String, val tag: String, val fantasma: Boolean = false, val onClick: () -> Unit)
+
 /**
- * Una pregunta de dos respuestas debajo de una fila: «¿Cada cuánto lo pagas?» (Cada mes · Cada año),
- * «¿Es el mismo seguro de tu crédito X?» (Es el mismo · Es otro) o, sin pregunta, «Sí» · «No». Nunca amarillo.
+ * Una pregunta debajo de una fila: «¿Cada cuánto lo pagas?» (Cada mes · Cada 3 meses · Cada 6 meses ·
+ * Cada año), «¿Es el mismo seguro de tu crédito X?» (Es otro · Es el mismo) o, sin pregunta, «Sí» · «No».
+ * Las respuestas bajan de renglón si no caben (`FlowRow`). Nunca amarillo.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PreguntaDeLaFila(
-    pregunta: String?,
-    si: Pair<String, String>,
-    no: Pair<String, String>,
-    ocupado: Boolean,
-    onSi: () -> Unit,
-    onNo: () -> Unit,
-    noEsFantasma: Boolean = true,
-) {
+private fun PreguntaDeLaFila(pregunta: String?, ocupado: Boolean, respuestas: List<Respuesta>) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s),
         verticalArrangement = Arrangement.spacedBy(Espacio.xs),
     ) {
         pregunta?.let { Text(it, style = Movi.textos.cuerpo, color = Movi.colores.texto) }
-        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
-            Boton(
-                si.first, onClick = onSi, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S,
-                habilitado = !ocupado, modifier = Modifier.testTag(si.second),
-            )
-            Boton(
-                no.first, onClick = onNo,
-                variante = if (noEsFantasma) VarianteDeBoton.Fantasma else VarianteDeBoton.Secundario,
-                tamano = TamanoDeBoton.S, habilitado = !ocupado, modifier = Modifier.testTag(no.second),
-            )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+        ) {
+            respuestas.forEach { r ->
+                Boton(
+                    r.texto, onClick = r.onClick,
+                    variante = if (r.fantasma) VarianteDeBoton.Fantasma else VarianteDeBoton.Secundario,
+                    tamano = TamanoDeBoton.S, habilitado = !ocupado, modifier = Modifier.testTag(r.tag),
+                )
+            }
         }
     }
 }
@@ -443,7 +471,7 @@ private fun FilaPorConfirmar(s: SeguroDetectado, ocupado: Boolean, onAbrir: () -
             lineasDelTitulo = 3,
             inicio = { IconoEnCirculo(iconoDelSeguro(s.tipo), tono = TonoDeIcono.Neutro) },
             // Un pago de una vez ya dice su monto en el subtítulo: el ancho es para la frase.
-        final = if (s.pagadoUnaVez) null else { { CifraConPeriodo(s) } },
+            final = if (s.pagadoUnaVez) null else { { CifraConPeriodo(s) } },
             chevron = true,
             onClick = onAbrir,
             entidadDeUso = s.cuentaId,
@@ -453,15 +481,15 @@ private fun FilaPorConfirmar(s: SeguroDetectado, ocupado: Boolean, onAbrir: () -
             // «Es el mismo» lo descarta (no suma dos veces); «Es otro» lo cuenta aparte.
             PreguntaDeLaFila(
                 pregunta = preguntaDelDuplicado(credito),
-                si = ES_OTRO to TAG_SI_ES,
-                no = ES_EL_MISMO to TAG_NO_ES,
                 ocupado = ocupado,
-                onSi = onSi,
-                onNo = onNo,
-                noEsFantasma = false,
+                respuestas = listOf(Respuesta(ES_OTRO, TAG_SI_ES, onClick = onSi), Respuesta(ES_EL_MISMO, TAG_NO_ES, onClick = onNo)),
             )
         } else {
-            PreguntaDeLaFila(pregunta = null, si = "Sí" to TAG_SI_ES, no = "No" to TAG_NO_ES, ocupado = ocupado, onSi = onSi, onNo = onNo)
+            PreguntaDeLaFila(
+                pregunta = null,
+                ocupado = ocupado,
+                respuestas = listOf(Respuesta("Sí", TAG_SI_ES, onClick = onSi), Respuesta("No", TAG_NO_ES, fantasma = true, onClick = onNo)),
+            )
         }
     }
 }

@@ -47,6 +47,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.like
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInList
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.insertIgnore
@@ -221,9 +222,13 @@ private suspend fun fuentesDe(uid: String, hoy: LocalDate): FuentesDeLosSeguros 
     val condiciones = Credits.selectAll().where { Credits.userId eq uid }.associate { it[Credits.accountId] to it.toCreditTerms() }
     val creditos = cuentas.filter { it.type == AccountType.LOAN }.mapNotNull { cuenta ->
         val terms = condiciones[cuenta.id]?.takeIf { (it.insuranceMonthly ?: 0L) > 0L } ?: return@mapNotNull null
-        // Una deuda en $0 sin ningún movimiento es «todavía no se registró nada», no «pagado».
+        // Una deuda en $0 sin ningún movimiento vivo es «todavía no se registró nada», no «pagado» (lo anulado
+        // no cuenta, igual que en `CreditRoutes.summaryFor`).
         val conMovimientos = cuenta.balance != 0L ||
-            Events.select(Events.id).where { (Events.userId eq uid) and (Events.accountId eq cuenta.id) }.limit(1).any()
+            Events.select(Events.id).where {
+                val base = (Events.userId eq uid) and (Events.accountId eq cuenta.id)
+                if (anulados.isEmpty()) base else base and (Events.id notInList anulados.toList())
+            }.limit(1).any()
         CreditSummary(account = cuenta, terms = terms, paidPct = paidPctFor(terms.principal, cuenta.balance), hasMovements = conMovimientos)
     }
     val huellas = AnomaliasDescartadas.selectAll()

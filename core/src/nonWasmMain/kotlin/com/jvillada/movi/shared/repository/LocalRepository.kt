@@ -2306,8 +2306,22 @@ class LocalRepository(
     // apartados) para verse sin señal; las respuestas del dueño y «Me interesa» van al server y piden red.
     override suspend fun getSeguros(enLaPantalla: Boolean): com.jvillada.movi.shared.model.SegurosQuePagas =
         leerUnoConCache("seguros") { remote.getSeguros(enLaPantalla) }
-    override suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean) = remote.responderSiEsUnSeguro(clave, esUnSeguro)
-    override suspend fun cadaCuantoSePagaElSeguro(clave: String, meses: Int) = remote.cadaCuantoSePagaElSeguro(clave, meses)
+    // Cada respuesta contesta el resultado nuevo: se guarda en la misma entrada, para que sin señal se
+    // vea lo último que dijo el dueño y no la lectura de antes.
+    override suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean) =
+        remote.responderSiEsUnSeguro(clave, esUnSeguro).also { guardarLosSeguros(it) }
+    override suspend fun cadaCuantoSePagaElSeguro(clave: String, meses: Int) =
+        remote.cadaCuantoSePagaElSeguro(clave, meses).also { guardarLosSeguros(it) }
+
+    private suspend fun guardarLosSeguros(s: com.jvillada.movi.shared.model.SegurosQuePagas?) {
+        if (s == null) return
+        db.remoteCacheQueries.put(
+            cacheKey = "seguros",
+            userId = userId(),
+            payload = Json.encodeToString(com.jvillada.movi.shared.model.SegurosQuePagas.serializer(), s),
+            updatedAt = Clock.System.now().toEpochMilliseconds(),
+        )
+    }
     override suspend fun meInteresaLaAyudaConLosSeguros() = remote.meInteresaLaAyudaConLosSeguros()
     override suspend fun descartarCierre(periodo: String) = remote.descartarCierre(periodo)
     override suspend fun actualizarCierre(periodo: String) = remote.actualizarCierre(periodo)

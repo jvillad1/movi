@@ -206,7 +206,9 @@ class TusSegurosScreenTest {
         Repositories.sustitutoDePrueba = Repo(SegurosQuePagas())
         montar { TusSegurosScreen(onNavigate = {}) }
         composeRule.waitUntil(5_000) { hay(VACIO_DE_SEGUROS) }
-        assertTrue(hay("subas el extracto"))
+        // Lo del extracto espera en «Por confirmar»: el vacío no promete que aparece solo al subirlo.
+        assertTrue(hay("confirmas los movimientos de tu extracto"))
+        assertFalse(hay("subas el extracto"))
         assertTrue(hay(MOVI_NO_VENDE_SEGUROS))
         assertEquals(0, amarillos())
     }
@@ -269,6 +271,34 @@ class TusSegurosScreenTest {
     }
 
     @Test
+    fun `con solo pagos de una vez la cifra dice lo pagado, nunca $0 al mes`() {
+        val solo = SegurosQuePagas(seguros = listOf(bolivar), enPagosDeUnaVez = 2_400_000)
+        Repositories.sustitutoDePrueba = Repo(solo)
+        montar { TusSegurosScreen(onNavigate = {}) }
+        composeRule.waitUntil(5_000) { hay("Seguros Bolivar") }
+        assertTrue(hay("Pagaste") && hay(EN_PAGOS_DE_UNA_VEZ))
+        assertFalse(hay("al mes en seguros"))
+        assertFalse(hay("\$0"), "ni «$0 al mes» ni «unos $0 al año»")
+        assertEquals("\$2.400.000 en pagos de una vez", subtituloDeLaFilaDeSeguros(solo))
+    }
+
+    @Test
+    fun `N1 · cada cuanto ofrece cada mes, cada 3 meses, cada 6 meses y cada año`() {
+        val repo = Repo(conLoDeLaRevision)
+        Repositories.sustitutoDePrueba = repo
+        montar { TusSegurosScreen(onNavigate = {}) }
+        composeRule.waitUntil(5_000) { hay(PREGUNTA_CADA_CUANTO) }
+        listOf(CADA_MES, CADA_3_MESES, CADA_6_MESES, CADA_ANO).forEach { assertTrue(hay(it), "falta «$it»") }
+        composeRule.onNodeWithTag(TAG_CADA_3_MESES, useUnmergedTree = true).performScrollTo().performClick()
+        composeRule.waitUntil(5_000) { repo.cadaCuanto.isNotEmpty() }
+        assertEquals(listOf(bolivar.clave to 3), repo.cadaCuanto)
+        // Varios pagos sin ritmo dicen el último, no «una vez».
+        val varios = bolivar.copy(cobros = bolivar.cobros + CobroDelSeguro("ev_mar", "2026-03-10", 1_800_000, "PAGO PSE SEGUROS BOLIVAR"))
+        assertTrue(lineaDeLaFilaDelSeguro(varios).contains("Varios pagos · el último, \$2.400.000 el 25 oct"))
+        assertEquals(0, amarillos())
+    }
+
+    @Test
     fun `I1 · el posible duplicado del credito pregunta si es el mismo`() {
         val repo = Repo(conLoDeLaRevision)
         Repositories.sustitutoDePrueba = repo
@@ -308,7 +338,7 @@ class TusSegurosScreenTest {
             "Seguro del crédito · Vehículo 4083", "Seguro de la tarjeta Master Black", "Pago Sura Eps",
             DE_DONDE_SALEN_LOS_SEGUROS, PREGUNTA_DE_AYUDA, TEXTO_DE_AYUDA, MOVI_NO_VENDE_SEGUROS, TITULO_SON_SEGUROS,
             lineaDeLaFilaDelSeguro(deLaTarjeta), ME_INTERESA, lineaDeLaFilaDelSeguro(bolivar), PREGUNTA_CADA_CUANTO,
-            CADA_MES, CADA_ANO, preguntaDelDuplicado("Hipoteca casa"), ES_EL_MISMO, ES_OTRO, "Sí", "No",
+            CADA_MES, CADA_3_MESES, CADA_6_MESES, CADA_ANO, preguntaDelDuplicado("Hipoteca casa"), ES_EL_MISMO, ES_OTRO, "Sí", "No",
             "y \$2.400.000 en pagos de una vez", "\$89.100", "\$32.000", "\$1.200.000", "\$248.000",
         ).forEach { texto ->
             val layout = layoutDe(texto)
