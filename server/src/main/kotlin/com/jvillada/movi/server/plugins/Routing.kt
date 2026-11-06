@@ -89,9 +89,11 @@ fun Application.configureRouting() {
         // abre el navegador, que no manda `Authorization`. La protege un permiso de dos minutos
         // con su propia audiencia y la versión de sesiones. Ver ExportRoutes.kt.
         exportDescargaRoutes()
-        // Vuelta 135 · el conector de Movi para Claude: el OAuth (discovery, autorizar, token, registro).
-        // Público porque Claude no tiene sesión de Movi. Ver ConectorOAuthRoutes.kt.
+        // Vuelta 135 · el conector de Movi para Claude: el OAuth (discovery, autorizar, token, registro) y
+        // `/mcp`. Públicas porque Claude no tiene sesión de Movi; `/mcp` exige su propio token (nunca el JWT de
+        // la app) en cada pedido. Ver ConectorOAuthRoutes.kt y ConectorMcpRoutes.kt.
         conectorOAuthRoutes()
+        conectorMcpRoutes()
 
         authenticate("jwt") {
             userRoutes()
