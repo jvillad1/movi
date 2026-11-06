@@ -10,6 +10,7 @@ import com.jvillada.movi.shared.model.CreditSummary
 import com.jvillada.movi.shared.model.DashboardSummary
 import com.jvillada.movi.shared.model.DebitoAutomaticoPorConfirmar
 import com.jvillada.movi.shared.model.DestinoConocido
+import com.jvillada.movi.shared.model.SegurosQuePagas
 import com.jvillada.movi.shared.model.DestinoSugerido
 import com.jvillada.movi.shared.model.Espacio
 import com.jvillada.movi.shared.model.EventDay
@@ -112,6 +113,9 @@ internal class LecturasSinRepetir(
     override suspend fun getDebitosAutomaticos(): List<DebitoAutomaticoPorConfirmar> = lecturas.leer("debitos") { delegado.getDebitosAutomaticos() }
     override suspend fun getEventsByDay(): List<EventDay> = lecturas.leer("historia") { delegado.getEventsByDay() }
     override suspend fun getUltimosDias(ultimos: Int): List<EventDay> = lecturas.leer("ultimos:$ultimos") { delegado.getUltimosDias(ultimos) }
+    // Vuelta 132: la fila de Tú y la pantalla «Tus seguros» (cada respuesta del dueño la vuelve vieja).
+    override suspend fun getSeguros(enLaPantalla: Boolean): SegurosQuePagas =
+        lecturas.leer("seguros:$enLaPantalla") { delegado.getSeguros(enLaPantalla) }
 }
 
 /** Cuánto vale lo que contestó una lectura antes de volver a pedirla: medio minuto, como el Inicio. */

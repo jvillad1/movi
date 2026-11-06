@@ -457,8 +457,13 @@ interface WalletRepository {
      */
     suspend fun getSeguros(enLaPantalla: Boolean = false): com.jvillada.movi.shared.model.SegurosQuePagas =
         com.jvillada.movi.shared.model.SegurosQuePagas()
-    /** `POST /api/seguros/si-es` o `/no-es`: «Sí, es un seguro» o «No es un seguro». Pide red. */
-    suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean) {}
+    /**
+     * `POST /api/seguros/si-es` o `/no-es`: «Sí, es un seguro» o «No es un seguro». Pide red. Devuelve el
+     * resultado nuevo (la pantalla no vuelve a leer); `null` en los dobles de prueba.
+     */
+    suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean): com.jvillada.movi.shared.model.SegurosQuePagas? = null
+    /** `POST /api/seguros/cada-cuanto`: «¿Cada cuánto lo pagas?» de un pago de una vez ([meses] 1 o 12). Pide red. */
+    suspend fun cadaCuantoSePagaElSeguro(clave: String, meses: Int): com.jvillada.movi.shared.model.SegurosQuePagas? = null
     /** `POST /api/seguros/me-interesa`: «Me interesa que Movi me ayude con mis seguros». Pide red. */
     suspend fun meInteresaLaAyudaConLosSeguros() {}
     /**

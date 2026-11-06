@@ -2307,6 +2307,7 @@ class LocalRepository(
     override suspend fun getSeguros(enLaPantalla: Boolean): com.jvillada.movi.shared.model.SegurosQuePagas =
         leerUnoConCache("seguros") { remote.getSeguros(enLaPantalla) }
     override suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean) = remote.responderSiEsUnSeguro(clave, esUnSeguro)
+    override suspend fun cadaCuantoSePagaElSeguro(clave: String, meses: Int) = remote.cadaCuantoSePagaElSeguro(clave, meses)
     override suspend fun meInteresaLaAyudaConLosSeguros() = remote.meInteresaLaAyudaConLosSeguros()
     override suspend fun descartarCierre(periodo: String) = remote.descartarCierre(periodo)
     override suspend fun actualizarCierre(periodo: String) = remote.actualizarCierre(periodo)

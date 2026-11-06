@@ -69,6 +69,7 @@ import com.jvillada.movi.ui.components.ds.Vacio
 import com.jvillada.movi.ui.components.ds.VarianteDeBoton
 import com.jvillada.movi.ui.components.ds.VarianteDeCifra
 import com.jvillada.movi.ui.components.formatCOP
+import com.jvillada.movi.ui.components.formatMoney
 import com.jvillada.movi.ui.components.toUserMessage
 import com.jvillada.movi.ui.recurrentes.fechaCortaDeFactura
 import com.jvillada.movi.ui.transactions.HojaDelMovimiento
@@ -110,6 +111,7 @@ const val MOVI_NO_VENDE_SEGUROS: String = "Movi no vende seguros ni te asesora p
 const val NO_ES_UN_SEGURO: String = "No es un seguro"
 const val VA_DENTRO_DE_LA_CUOTA: String = "Va dentro de la cuota de tu crédito"
 const val VER_EL_CREDITO: String = "Ver el crédito"
+const val NO_PUDIMOS_ABRIR_EL_MOVIMIENTO: String = "No pudimos abrir ese movimiento. Inténtalo de nuevo."
 
 const val TAG_PANTALLA_DE_SEGUROS: String = "seguros:pantalla"
 const val TAG_FILA_DE_SEGURO: String = "seguros:fila"
@@ -118,6 +120,28 @@ const val TAG_ME_INTERESA: String = "seguros:me-interesa"
 const val TAG_NO_ES_UN_SEGURO: String = "seguros:no-es"
 const val TAG_SI_ES: String = "seguros:si-es"
 const val TAG_NO_ES: String = "seguros:no"
+const val TAG_CADA_MES: String = "seguros:cada-mes"
+const val TAG_CADA_ANO: String = "seguros:cada-ano"
+
+const val PREGUNTA_CADA_CUANTO: String = "¿Cada cuánto lo pagas?"
+const val CADA_MES: String = "Cada mes"
+const val CADA_ANO: String = "Cada año"
+const val ES_EL_MISMO: String = "Es el mismo"
+const val ES_OTRO: String = "Es otro"
+
+/** «¿Es el mismo seguro de tu crédito Hipoteca casa?»: un cargo que se parece al de la cuota. */
+fun preguntaDelDuplicado(credito: String): String = "¿Es el mismo seguro de tu crédito $credito?"
+
+/** «y $2.400.000 en pagos de una vez»: lo que no se sabe cada cuánto se paga, fuera del total al mes. */
+fun lineaDeLosPagosDeUnaVez(s: SegurosQuePagas): String? =
+    s.enPagosDeUnaVez.takeIf { it > 0L }?.let { "y ${formatCOP(it)} en pagos de una vez" }
+
+/** «Además, US$12 al mes en otra moneda, fuera de este total.»: nunca se convierte en silencio. */
+fun lineaDeOtrasMonedas(s: SegurosQuePagas): String? =
+    s.otrasMonedas.filterValues { it > 0L }.takeIf { it.isNotEmpty() }?.let { m ->
+        "Además, " + m.entries.joinToString(" y ") { (moneda, monto) -> formatMoney(monto, moneda) } +
+            " al mes en otra moneda, fuera de este total."
+    }
 
 /** Lo que dice la fila «Tus seguros» de Tú: «$121.100 al mes», o qué hay adentro sin datos. */
 fun subtituloDeLaFilaDeSeguros(s: SegurosQuePagas?): String =
@@ -133,6 +157,8 @@ fun lineaDeLaFilaDelSeguro(s: SeguroDetectado): String {
     val partes = buildList {
         if (s.dentroDeLaCuota) add("Va dentro de la cuota") else if (s.cuentaNombre.isNotBlank()) add(s.cuentaNombre)
         when {
+            // Un solo cobro sin saber cada cuánto: lo que pasó, sin inventar que se repite ni que se acabó.
+            s.pagadoUnaVez -> add("Pagado una vez · ${formatMoney(s.montoDelCiclo ?: 0L, s.moneda)}" + (cuando?.let { " el $it" } ?: ""))
             !s.sigueCobrandose && cuando != null -> add("Dejó de cobrarse · último: $cuando")
             cuando != null -> add("Último cobro: $cuando")
         }
@@ -140,18 +166,19 @@ fun lineaDeLaFilaDelSeguro(s: SeguroDetectado): String {
     return partes.joinToString(" · ")
 }
 
-/** Debajo de la cifra de la fila: «al mes», «al año» o «cada 6 meses». */
-fun periodoDeLaFilaDelSeguro(s: SeguroDetectado): String = when (s.mesesEntreCobros) {
+/** Debajo de la cifra de la fila: «al mes», «al año», «cada 6 meses» o «una vez». */
+fun periodoDeLaFilaDelSeguro(s: SeguroDetectado): String = if (s.pagadoUnaVez) "una vez" else when (s.mesesEntreCobros) {
     1 -> "al mes"
     12 -> "al año"
     else -> "cada ${s.mesesEntreCobros} meses"
 }
 
 /** La cifra de la fila: lo del mes, o el cobro entero de un seguro que no es mensual. */
-fun montoDeLaFilaDelSeguro(s: SeguroDetectado): Long = if (s.mesesEntreCobros > 1) s.montoDelCiclo ?: s.alMes else s.alMes
+fun montoDeLaFilaDelSeguro(s: SeguroDetectado): Long =
+    if (s.pagadoUnaVez || s.mesesEntreCobros > 1) s.montoDelCiclo ?: s.alMes else s.alMes
 
 private fun iconoDelSeguro(tipo: TipoDeSeguro): ImageVector = when (tipo) {
-    TipoDeSeguro.VIDA_DEL_CREDITO, TipoDeSeguro.HOGAR_DEL_CREDITO -> Icons.Rounded.AccountBalance
+    TipoDeSeguro.DEL_CREDITO, TipoDeSeguro.HOGAR_DEL_CREDITO -> Icons.Rounded.AccountBalance
     TipoDeSeguro.DE_TARJETA -> Icons.Rounded.CreditCard
     TipoDeSeguro.AUTO -> Icons.Rounded.DirectionsCar
     TipoDeSeguro.SALUD -> Icons.Rounded.MedicalServices
@@ -185,25 +212,31 @@ fun TusSegurosScreen(onNavigate: (Screen) -> Unit) {
             .onFailure { if (seguros == null) fallo = true }
     }
 
+    // Cada respuesta del dueño contesta el resultado nuevo: se pinta tal cual, sin volver a leer. Sin él
+    // (un doble de prueba), se relee.
+    fun tomar(nuevo: SegurosQuePagas?) {
+        if (nuevo != null) seguros = nuevo else reintento++
+    }
+
     fun responder(s: SeguroDetectado, esUnSeguro: Boolean) {
         if (enVuelo != null) return
         enVuelo = s.clave
         error = null
         alcance.launch {
             intentar { Repositories.wallets.responderSiEsUnSeguro(s.clave, esUnSeguro) }
-                .onSuccess {
-                    // Se saca (o se mueve) en el acto; la relectura trae el total de nuevo.
-                    seguros = seguros?.let { actual ->
-                        if (esUnSeguro) actual.copy(porConfirmar = actual.porConfirmar.filterNot { it.clave == s.clave })
-                        else actual.copy(
-                            seguros = actual.seguros.filterNot { it.clave == s.clave },
-                            porConfirmar = actual.porConfirmar.filterNot { it.clave == s.clave },
-                            alMes = if (s.concluyente && s.sigueCobrandose) actual.alMes - s.alMes else actual.alMes,
-                        )
-                    }
-                    abierto = null
-                    reintento++
-                }
+                .onSuccess { nuevo -> abierto = null; tomar(nuevo) }
+                .onFailure { error = it.toUserMessage() }
+            enVuelo = null
+        }
+    }
+
+    fun cadaCuanto(s: SeguroDetectado, meses: Int) {
+        if (enVuelo != null) return
+        enVuelo = s.clave
+        error = null
+        alcance.launch {
+            intentar { Repositories.wallets.cadaCuantoSePagaElSeguro(s.clave, meses) }
+                .onSuccess(::tomar)
                 .onFailure { error = it.toUserMessage() }
             enVuelo = null
         }
@@ -225,7 +258,11 @@ fun TusSegurosScreen(onNavigate: (Screen) -> Unit) {
         abierto = null
         alcance.launch {
             val evento = intentar { Repositories.wallets.getEventsByDay() }.getOrNull()
-                ?.flatMap { it.items }?.firstOrNull { it.id == id } ?: return@launch
+                ?.flatMap { it.items }?.firstOrNull { it.id == id }
+            if (evento == null) {
+                error = NO_PUDIMOS_ABRIR_EL_MOVIMIENTO
+                return@launch
+            }
             cuentasDelMovimiento = intentar { Repositories.wallets.getAccounts() }.getOrDefault(emptyList())
             movimiento = evento
         }
@@ -255,6 +292,18 @@ fun TusSegurosScreen(onNavigate: (Screen) -> Unit) {
                                     delTipo.forEachIndexed { i, seguro ->
                                         if (i > 0) Separador()
                                         FilaDelSeguro(seguro, onClick = { abierto = seguro })
+                                        if (seguro.pagadoUnaVez) {
+                                            PreguntaDeLaFila(
+                                                pregunta = PREGUNTA_CADA_CUANTO,
+                                                si = CADA_MES to TAG_CADA_MES,
+                                                no = CADA_ANO to TAG_CADA_ANO,
+                                                ocupado = enVuelo != null,
+                                                onSi = { cadaCuanto(seguro, 1) },
+                                                onNo = { cadaCuanto(seguro, 12) },
+                                                // Las dos respuestas pesan lo mismo.
+                                                noEsFantasma = false,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -316,7 +365,9 @@ private fun CifraDeLosSeguros(s: SegurosQuePagas) {
             Text("Pagas", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
             Cifra(s.alMes, variante = VarianteDeCifra.Heroe)
             Text("al mes en seguros", style = Movi.textos.cuerpo, color = Movi.colores.texto)
+            lineaDeLosPagosDeUnaVez(s)?.let { Text(it, style = Movi.textos.cuerpo, color = Movi.colores.texto) }
             Text(lineaDelAnoDeLosSeguros(s), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            lineaDeOtrasMonedas(s)?.let { Text(it, style = Movi.textos.apoyo, color = Movi.colores.textoMedio) }
             Spacer(Modifier.height(Espacio.xs))
             Text(DE_DONDE_SALEN_LOS_SEGUROS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
@@ -328,10 +379,11 @@ private fun FilaDelSeguro(s: SeguroDetectado, onClick: () -> Unit) {
     Fila(
         titulo = s.nombre,
         subtitulo = lineaDeLaFilaDelSeguro(s),
-        lineasDelSubtitulo = 3,
+        lineasDelSubtitulo = 4,
         lineasDelTitulo = 3,
         inicio = { IconoEnCirculo(iconoDelSeguro(s.tipo), tono = TonoDeIcono.Neutro) },
-        final = { CifraConPeriodo(s) },
+        // Un pago de una vez ya dice su monto en el subtítulo: el ancho es para la frase.
+        final = if (s.pagadoUnaVez) null else { { CifraConPeriodo(s) } },
         chevron = true,
         onClick = onClick,
         // Contenido dinámico: el toque se anota con la cuenta, nunca con el nombre del seguro.
@@ -343,8 +395,41 @@ private fun FilaDelSeguro(s: SeguroDetectado, onClick: () -> Unit) {
 @Composable
 private fun CifraConPeriodo(s: SeguroDetectado) {
     Column(horizontalAlignment = Alignment.End) {
-        Cifra(montoDeLaFilaDelSeguro(s))
+        Cifra(montoDeLaFilaDelSeguro(s), moneda = s.moneda)
         Text(periodoDeLaFilaDelSeguro(s), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+    }
+}
+
+/**
+ * Una pregunta de dos respuestas debajo de una fila: «¿Cada cuánto lo pagas?» (Cada mes · Cada año),
+ * «¿Es el mismo seguro de tu crédito X?» (Es el mismo · Es otro) o, sin pregunta, «Sí» · «No». Nunca amarillo.
+ */
+@Composable
+private fun PreguntaDeLaFila(
+    pregunta: String?,
+    si: Pair<String, String>,
+    no: Pair<String, String>,
+    ocupado: Boolean,
+    onSi: () -> Unit,
+    onNo: () -> Unit,
+    noEsFantasma: Boolean = true,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s),
+        verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+    ) {
+        pregunta?.let { Text(it, style = Movi.textos.cuerpo, color = Movi.colores.texto) }
+        Row(horizontalArrangement = Arrangement.spacedBy(Espacio.xs)) {
+            Boton(
+                si.first, onClick = onSi, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S,
+                habilitado = !ocupado, modifier = Modifier.testTag(si.second),
+            )
+            Boton(
+                no.first, onClick = onNo,
+                variante = if (noEsFantasma) VarianteDeBoton.Fantasma else VarianteDeBoton.Secundario,
+                tamano = TamanoDeBoton.S, habilitado = !ocupado, modifier = Modifier.testTag(no.second),
+            )
+        }
     }
 }
 
@@ -354,26 +439,29 @@ private fun FilaPorConfirmar(s: SeguroDetectado, ocupado: Boolean, onAbrir: () -
         Fila(
             titulo = s.nombre,
             subtitulo = lineaDeLaFilaDelSeguro(s),
-            lineasDelSubtitulo = 3,
+            lineasDelSubtitulo = 4,
             lineasDelTitulo = 3,
             inicio = { IconoEnCirculo(iconoDelSeguro(s.tipo), tono = TonoDeIcono.Neutro) },
-            final = { CifraConPeriodo(s) },
+            // Un pago de una vez ya dice su monto en el subtítulo: el ancho es para la frase.
+        final = if (s.pagadoUnaVez) null else { { CifraConPeriodo(s) } },
             chevron = true,
             onClick = onAbrir,
             entidadDeUso = s.cuentaId,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.s),
-            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-        ) {
-            Boton(
-                "Sí", onClick = onSi, variante = VarianteDeBoton.Secundario, tamano = TamanoDeBoton.S,
-                habilitado = !ocupado, modifier = Modifier.testTag(TAG_SI_ES),
+        val credito = s.posibleDuplicadoDe
+        if (credito != null) {
+            // «Es el mismo» lo descarta (no suma dos veces); «Es otro» lo cuenta aparte.
+            PreguntaDeLaFila(
+                pregunta = preguntaDelDuplicado(credito),
+                si = ES_OTRO to TAG_SI_ES,
+                no = ES_EL_MISMO to TAG_NO_ES,
+                ocupado = ocupado,
+                onSi = onSi,
+                onNo = onNo,
+                noEsFantasma = false,
             )
-            Boton(
-                "No", onClick = onNo, variante = VarianteDeBoton.Fantasma, tamano = TamanoDeBoton.S,
-                habilitado = !ocupado, modifier = Modifier.testTag(TAG_NO_ES),
-            )
+        } else {
+            PreguntaDeLaFila(pregunta = null, si = "Sí" to TAG_SI_ES, no = "No" to TAG_NO_ES, ocupado = ocupado, onSi = onSi, onNo = onNo)
         }
     }
 }
@@ -434,7 +522,7 @@ private fun HojaDelSeguro(
                     Fila(
                         titulo = cobro.descripcion,
                         subtitulo = fechaCortaDeFactura(cobro.fecha) ?: cobro.fecha,
-                        final = { Cifra(cobro.monto) },
+                        final = { Cifra(cobro.monto, moneda = seguro.moneda) },
                         chevron = true,
                         onClick = { onVerMovimiento(cobro.movimientoId) },
                         entidadDeUso = cobro.movimientoId,

@@ -17,7 +17,10 @@ import kotlin.test.assertTrue
  *
  * Los textos son los que escriben los bancos: el seguro de vida deudor de la tarjeta de Bancolombia
  * («SEGURO VIDA DEUDOR TC»), un SOAT pagado por PSE, una EPS de Sura, una panadería «Bolívar».
- * Sin el detector, `losSegurosQuePagas` no existe: cada prueba falla al compilar.
+ *
+ * La revisión de la vuelta sumó: un cobro único sin señal de cada cuánto no se vuelve mensual (C1), el
+ * seguro del crédito cobrado también aparte no suma dos veces (I1), los falsos positivos de «Protección»,
+ * «prepagada», «asistencia» y la cuota de manejo, los filtros de los demás cálculos, y los dólares aparte.
  */
 class LosSegurosQuePagasTest {
 
@@ -27,8 +30,9 @@ class LosSegurosQuePagasTest {
 
     private val ahorros = Account("acc_ahorros", "Ahorros 8133", AccountType.SAVINGS, 0)
     private val master = Account("acc_master", "Master Black", AccountType.CREDIT_CARD, 0)
-    private val vehiculo = Account("acc_vehiculo", "Vehículo 4083", AccountType.LOAN, -90_000_000)
-    private val cuentas = listOf(ahorros, master, vehiculo)
+    private val vehiculo = Account("acc_vehiculo", "Vehículo 4083", AccountType.LOAN, 90_000_000)
+    private val hipoteca = Account("acc_hipoteca", "Hipoteca casa", AccountType.LOAN, 200_000_000)
+    private val cuentas = listOf(ahorros, master, vehiculo, hipoteca)
 
     private fun en(fecha: String): Long = LocalDate.parse(fecha).atStartOfDayIn(zona).toEpochMilliseconds() + 12 * 3_600_000L
 
@@ -39,15 +43,20 @@ class LosSegurosQuePagasTest {
         descripcion: String,
         cuenta: Account = ahorros,
         categoria: String = "Otros",
+        moneda: String = "COP",
     ) = FinancialEvent(
-        id = id, accountId = cuenta.id, type = TransactionType.EXPENSE, amount = monto, category = categoria,
-        description = descripcion, timestamp = en(fecha),
+        id = id, accountId = cuenta.id, type = TransactionType.EXPENSE, amount = monto, currency = moneda, category = categoria,
+        description = descripcion, timestamp = en(fecha), reconciliationStatus = ReconciliationStatus.RECONCILED,
     )
 
-    private fun credito(seguro: Long?, paidBy: String? = null) = CreditSummary(
-        account = vehiculo,
+    /** El mismo cobro en varios meses (el día 2 de cada uno). */
+    private fun mensual(prefijo: String, meses: List<String>, monto: Long, descripcion: String, cuenta: Account = ahorros) =
+        meses.mapIndexed { i, m -> gasto("ev_${prefijo}_$i", "$m-02", monto, descripcion, cuenta) }
+
+    private fun credito(cuenta: Account, seguro: Long?, banco: String = "Occidente", paidBy: String? = null) = CreditSummary(
+        account = cuenta,
         terms = CreditTerms(
-            accountId = vehiculo.id, bank = "Occidente", principal = 120_000_000, rateEa = 17.4, termMonths = 72,
+            accountId = cuenta.id, bank = banco, principal = 300_000_000, rateEa = 17.4, termMonths = 72,
             installment = 4_101_122, dayOfMonth = 3, startDate = "2025-01-03", insuranceMonthly = seguro, paidBy = paidBy,
         ),
         paidPct = 0.25,
@@ -60,19 +69,25 @@ class LosSegurosQuePagasTest {
         suscripciones: List<Subscription> = emptyList(),
         descartados: Set<String> = emptySet(),
         confirmados: Set<String> = emptySet(),
+        cadaCuanto: Map<String, Int> = emptyMap(),
         anulados: Set<String> = emptySet(),
-    ) = losSegurosQuePagas(eventos, cuentas, creditos, reglas, suscripciones, hoy, diaDe, descartados, confirmados, anulados)
+    ) = losSegurosQuePagas(
+        eventos, cuentas, creditos, reglas, suscripciones, hoy, diaDe,
+        RespuestasDelDueno(descartados, confirmados, cadaCuanto), anulados,
+    )
+
+    // ── El crédito ───────────────────────────────────────────────────────────────────────────
 
     @Test
-    fun `el seguro de la cuota de un credito va dentro de la cuota`() {
+    fun `el seguro de la cuota de un credito va dentro de la cuota, sin decir de que es`() {
         val cuota = FinancialEvent(
             id = "ev_cuota", accountId = vehiculo.id, type = TransactionType.INCOME, amount = 4_101_122,
             category = CUOTA_CATEGORY, description = "Cuota de Vehículo 4083", timestamp = en("2026-11-03"),
         )
-        val r = detectar(eventos = listOf(cuota), creditos = listOf(credito(89_100)))
+        val r = detectar(eventos = listOf(cuota), creditos = listOf(credito(vehiculo, 89_100)))
         val s = r.seguros.single()
-        assertEquals(TipoDeSeguro.VIDA_DEL_CREDITO, s.tipo)
-        assertEquals("Seguro de vida · Vehículo 4083", s.nombre)
+        assertEquals(TipoDeSeguro.DEL_CREDITO, s.tipo)
+        assertEquals("Seguro del crédito · Vehículo 4083", s.nombre)
         assertEquals(89_100, s.alMes)
         assertTrue(s.dentroDeLaCuota)
         assertEquals(vehiculo.id, s.creditoId)
@@ -83,13 +98,43 @@ class LosSegurosQuePagasTest {
 
     @Test
     fun `un credito sin seguro, o que paga otro, no trae seguro`() {
-        assertTrue(detectar(creditos = listOf(credito(null))).seguros.isEmpty())
-        assertTrue(detectar(creditos = listOf(credito(0))).seguros.isEmpty())
-        assertTrue(detectar(creditos = listOf(credito(89_100, paidBy = "Mi papá"))).seguros.isEmpty())
+        assertTrue(detectar(creditos = listOf(credito(vehiculo, null))).seguros.isEmpty())
+        assertTrue(detectar(creditos = listOf(credito(vehiculo, 0))).seguros.isEmpty())
+        assertTrue(detectar(creditos = listOf(credito(vehiculo, 89_100, paidBy = "Mi papá"))).seguros.isEmpty())
     }
 
     @Test
-    fun `el seguro de la tarjeta cobrado seis meses es uno, con su promedio`() {
+    fun `I1 · el seguro incendio y terremoto debitado de ahorros pregunta si es el del credito y no suma`() {
+        val cargos = mensual("inc", listOf("2026-09", "2026-10"), 248_000, "SEGURO INCENDIO TERREMOTO")
+        val r = detectar(eventos = cargos, creditos = listOf(credito(hipoteca, 250_000, banco = "Davivienda")))
+        assertEquals(listOf("credito:acc_hipoteca"), r.seguros.map { it.clave })
+        assertEquals(250_000, r.alMes, "solo el del crédito")
+        val duda = r.porConfirmar.single()
+        assertEquals("Hipoteca casa", duda.posibleDuplicadoDe)
+        // «Es otro»: suma. «Es el mismo»: sale.
+        assertEquals(250_000L + 248_000L, detectar(eventos = cargos, creditos = listOf(credito(hipoteca, 250_000, banco = "Davivienda")), confirmados = setOf(duda.clave)).alMes)
+        val mismo = detectar(eventos = cargos, creditos = listOf(credito(hipoteca, 250_000, banco = "Davivienda")), descartados = setOf(duda.clave))
+        assertTrue(mismo.porConfirmar.isEmpty())
+        assertEquals(250_000, mismo.alMes)
+    }
+
+    @Test
+    fun `I1 · el anotado a mano en Seguros del mismo banco tambien pregunta`() {
+        val aMano = mensual("mano", listOf("2026-09", "2026-10"), 255_000, "Seguro casa Davivienda").map { it.copy(category = "Seguros") }
+        val r = detectar(eventos = aMano, creditos = listOf(credito(hipoteca, 250_000, banco = "Banco Davivienda")))
+        assertEquals("Hipoteca casa", r.porConfirmar.single().posibleDuplicadoDe)
+        assertEquals(250_000, r.alMes)
+        // Lejos del monto (más del 10 %): es otro seguro y suma.
+        val otro = mensual("otro", listOf("2026-09", "2026-10"), 600_000, "Seguro casa Davivienda").map { it.copy(category = "Seguros") }
+        val r2 = detectar(eventos = otro, creditos = listOf(credito(hipoteca, 250_000, banco = "Banco Davivienda")))
+        assertTrue(r2.porConfirmar.isEmpty())
+        assertEquals(850_000, r2.alMes)
+    }
+
+    // ── C1 · cada cuánto ─────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `el seguro de la tarjeta cobrado seis meses es uno, mensual, con su promedio`() {
         val montos = listOf(31_000L, 31_000L, 32_000L, 32_000L, 33_000L, 33_000L)
         val meses = listOf("2026-06-02", "2026-07-02", "2026-08-02", "2026-09-02", "2026-10-02", "2026-11-02")
         val eventos = meses.zip(montos).mapIndexed { i, (f, m) -> gasto("ev_seg$i", f, m, "SEGURO VIDA DEUDOR TC", master) }
@@ -98,16 +143,16 @@ class LosSegurosQuePagasTest {
         assertEquals(TipoDeSeguro.DE_TARJETA, s.tipo)
         assertEquals("Seguro de la tarjeta Master Black", s.nombre)
         assertEquals(6, s.cobros.size)
+        assertEquals(1, s.mesesEntreCobros)
+        assertFalse(s.pagadoUnaVez)
         assertEquals(montos.sum() / 6, s.alMes)
-        assertEquals("2026-11-02", s.ultimoCobro)
         assertTrue(s.sigueCobrandose)
         assertEquals(s.alMes, r.alMes)
     }
 
     @Test
     fun `el SOAT es anual y se reparte en doce meses`() {
-        val soat = gasto("ev_soat", "2026-03-15", 1_200_000, "PAGO PSE SOAT SURA")
-        val r = detectar(eventos = listOf(soat))
+        val r = detectar(eventos = listOf(gasto("ev_soat", "2026-03-15", 1_200_000, "PAGO PSE SOAT SURA")))
         val s = r.seguros.single()
         assertEquals(TipoDeSeguro.AUTO, s.tipo)
         assertEquals("SOAT", s.nombre)
@@ -115,84 +160,178 @@ class LosSegurosQuePagasTest {
         assertEquals(1_200_000, s.montoDelCiclo)
         assertEquals(100_000, s.alMes)
         assertTrue(s.sigueCobrandose, "un anual de marzo sigue vigente en noviembre")
-        assertEquals(100_000, r.alMes)
         assertEquals(1_200_000, r.alAno)
         assertTrue(r.conAnuales)
     }
 
     @Test
-    fun `Sura de una EPS no es un seguro concluyente`() {
-        val eps = gasto("ev_eps", "2026-10-30", 380_000, "PAGO SURA EPS")
-        val r = detectar(eventos = listOf(eps))
-        assertTrue(r.seguros.isEmpty())
-        val duda = r.porConfirmar.single()
-        assertFalse(duda.concluyente)
+    fun `C1 · un cobro unico reciente sin señal no suma al mes, va aparte`() {
+        val r = detectar(eventos = listOf(gasto("ev_tr", "2026-10-25", 2_400_000, "PAGO PSE SEGUROS BOLIVAR")))
+        val s = r.seguros.single()
+        assertTrue(s.pagadoUnaVez)
+        assertEquals(0, s.alMes)
+        assertEquals(2_400_000, s.montoDelCiclo)
+        assertTrue(s.sigueCobrandose)
+        assertEquals("Seguros Bolivar", s.nombre, "sin «Pago Pse» adelante")
         assertEquals(0, r.alMes)
-        // Con «Sí, es un seguro» cuenta.
-        val confirmado = detectar(eventos = listOf(eps), confirmados = setOf(duda.clave))
+        assertEquals(0, r.alAno)
+        assertEquals(2_400_000, r.enPagosDeUnaVez)
+    }
+
+    @Test
+    fun `C1 · un cobro unico de hace seis meses nunca dice que dejo de cobrarse`() {
+        val s = detectar(eventos = listOf(gasto("ev_viejo", "2026-05-10", 900_000, "POLIZA HOGAR ALLIANZ"))).seguros.single()
+        assertTrue(s.pagadoUnaVez)
+        assertTrue(s.sigueCobrandose)
+    }
+
+    @Test
+    fun `C1 · con la respuesta del duenio pasa a anual o a mensual`() {
+        val cobro = gasto("ev_tr", "2026-10-25", 2_400_000, "PAGO PSE SEGUROS BOLIVAR")
+        val clave = detectar(eventos = listOf(cobro)).seguros.single().clave
+        val anual = detectar(eventos = listOf(cobro), cadaCuanto = mapOf(clave to 12))
+        assertEquals(200_000, anual.alMes)
+        assertEquals(2_400_000, anual.alAno)
+        assertEquals(0, anual.enPagosDeUnaVez)
+        val mensual = detectar(eventos = listOf(cobro), cadaCuanto = mapOf(clave to 1))
+        assertEquals(2_400_000, mensual.alMes)
+        // Mensual y el único cobro hace más de 45 días: dejó de cobrarse, con la regla de siempre.
+        val viejo = gasto("ev_v", "2026-05-10", 900_000, "POLIZA HOGAR ALLIANZ")
+        val claveVieja = detectar(eventos = listOf(viejo)).seguros.single().clave
+        assertFalse(detectar(eventos = listOf(viejo), cadaCuanto = mapOf(claveVieja to 1)).seguros.single().sigueCobrandose)
+    }
+
+    @Test
+    fun `una regla mensual de seguros basta para decir mensual con un solo cobro`() {
+        val regla = RecurringRule(id = "rr_vida", name = "Seguro de vida", category = "Seguros", amount = 80_000, dayOfMonth = 5, type = TransactionType.EXPENSE)
+        val s = detectar(eventos = listOf(gasto("ev_vida", "2026-11-01", 80_000, "Seguro de vida")), reglas = listOf(regla)).seguros.single()
+        assertFalse(s.pagadoUnaVez)
+        assertEquals(80_000, s.alMes)
+    }
+
+    @Test
+    fun `una regla de seguros semestral da el nombre y cada cuantos meses`() {
+        val regla = RecurringRule(
+            id = "rr_poliza", name = "Póliza del apartamento", category = "Seguros", amount = 600_000, dayOfMonth = 10,
+            type = TransactionType.EXPENSE, frecuencia = FrecuenciaDelPago.SEMESTRAL, primerVencimiento = "2026-02-10",
+        )
+        val s = detectar(eventos = listOf(gasto("ev_pol", "2026-08-10", 600_000, "Póliza del apartamento")), reglas = listOf(regla)).seguros.single()
+        assertEquals("Póliza del apartamento", s.nombre)
+        assertEquals(6, s.mesesEntreCobros)
+        assertEquals(100_000, s.alMes)
+    }
+
+    // ── Lo que no es seguro ──────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `Sura de una EPS o una ARL no es un seguro concluyente`() {
+        val eps = gasto("ev_eps", "2026-10-30", 380_000, "PAGO SURA EPS")
+        val r = detectar(eventos = listOf(eps, gasto("ev_arl", "2026-10-30", 9_000, "APORTE ARL SURA")))
+        assertTrue(r.seguros.isEmpty())
+        assertEquals(2, r.porConfirmar.size)
+        assertEquals(0, r.alMes)
+        val clave = r.porConfirmar.first { it.cobros.single().movimientoId == "ev_eps" }.clave
+        val confirmado = detectar(eventos = listOf(eps), confirmados = setOf(clave), cadaCuanto = mapOf(clave to 1))
         assertTrue(confirmado.seguros.single().confirmado)
         assertEquals(380_000, confirmado.alMes)
     }
 
     @Test
-    fun `Sura de una ARL tampoco`() {
-        val arl = gasto("ev_arl", "2026-10-30", 9_000, "APORTE ARL SURA")
-        val r = detectar(eventos = listOf(arl))
-        assertTrue(r.seguros.isEmpty())
-        assertEquals(1, r.porConfirmar.size)
+    fun `una panaderia Bolivar no es un seguro, Seguros Bolivar si`() {
+        val r = detectar(eventos = listOf(
+            gasto("ev_pan", "2026-11-01", 12_500, "PANADERIA BOLIVAR"),
+            gasto("ev_calle", "2026-11-01", 40_000, "PARQUEADERO CALLE BOLIVAR"),
+        ))
+        assertTrue(r.seguros.isEmpty() && r.porConfirmar.isEmpty())
+        assertEquals(TipoDeSeguro.VIDA, detectar(eventos = listOf(gasto("ev_bol", "2026-11-01", 60_000, "SEGUROS BOLIVAR VIDA"))).seguros.single().tipo)
     }
 
     @Test
-    fun `una panaderia Bolivar no es un seguro`() {
-        val pan = gasto("ev_pan", "2026-11-01", 12_500, "PANADERIA BOLIVAR")
-        val calle = gasto("ev_calle", "2026-11-01", 40_000, "PARQUEADERO CALLE BOLIVAR")
-        val r = detectar(eventos = listOf(pan, calle))
-        assertTrue(r.seguros.isEmpty())
-        assertTrue(r.porConfirmar.isEmpty())
-        assertEquals(0, r.alMes)
-        // Seguros Bolívar sí.
-        val seguro = detectar(eventos = listOf(gasto("ev_bol", "2026-11-01", 60_000, "SEGUROS BOLIVAR VIDA")))
-        assertEquals(TipoDeSeguro.VIDA, seguro.seguros.single().tipo)
-    }
-
-    @Test
-    fun `la seguridad social y la seguridad privada no son seguros`() {
-        val pila = gasto("ev_pila", "2026-11-01", 450_000, "PAGO SEG SOCIAL")
-        val vigilancia = gasto("ev_vig", "2026-11-01", 90_000, "SEGURIDAD PRIVADA EDIFICIO")
-        val r = detectar(eventos = listOf(pila, vigilancia))
+    fun `la seguridad social, la seguridad privada y la cuota de manejo no son seguros`() {
+        val r = detectar(eventos = listOf(
+            gasto("ev_pila", "2026-11-01", 450_000, "PAGO SEG SOCIAL"),
+            gasto("ev_vig", "2026-11-01", 90_000, "SEGURIDAD PRIVADA EDIFICIO"),
+            gasto("ev_cm", "2026-11-01", 45_000, "CUOTA DE MANEJO TARJETA", master),
+            gasto("ev_cm2", "2026-11-01", 45_000, "CUOTA MANEJO PROTECCION", master),
+        ))
         assertTrue(r.seguros.isEmpty() && r.porConfirmar.isEmpty())
     }
 
     @Test
+    fun `Proteccion el fondo de pensiones no es un seguro`() {
+        val r = detectar(eventos = listOf(
+            gasto("ev_p1", "2026-11-01", 500_000, "APORTE VOLUNTARIO PROTECCION"),
+            gasto("ev_p2", "2026-11-01", 300_000, "PROTECCION PENSIONES OBLIGATORIAS"),
+        ))
+        assertTrue(r.seguros.isEmpty() && r.porConfirmar.isEmpty())
+    }
+
+    @Test
+    fun `prepagada sola no es salud, medicina prepagada si`() {
+        assertTrue(detectar(eventos = listOf(gasto("ev_rec", "2026-11-01", 50_000, "RECARGA TARJETA PREPAGADA"))).let { it.seguros.isEmpty() && it.porConfirmar.isEmpty() })
+        val s = detectar(eventos = mensual("mp", listOf("2026-10", "2026-11"), 420_000, "MEDICINA PREPAGADA SURA")).seguros.single()
+        assertEquals(TipoDeSeguro.SALUD, s.tipo)
+        assertEquals("Medicina prepagada", s.nombre)
+    }
+
+    @Test
+    fun `asistencia con una palabra de tipo pregunta, y en un taller no es nada`() {
+        val carro = detectar(eventos = listOf(gasto("ev_as", "2026-11-01", 80_000, "ASISTENCIA CARRO")))
+        assertTrue(carro.seguros.isEmpty())
+        assertEquals(1, carro.porConfirmar.size)
+        val taller = detectar(eventos = listOf(gasto("ev_t", "2026-11-01", 80_000, "TALLER ASISTENCIA CARRO")))
+        assertTrue(taller.seguros.isEmpty() && taller.porConfirmar.isEmpty())
+        val tecnica = detectar(eventos = listOf(gasto("ev_t2", "2026-11-01", 80_000, "ASISTENCIA TECNICA HOGAR")))
+        assertTrue(tecnica.seguros.isEmpty() && tecnica.porConfirmar.isEmpty())
+    }
+
+    // ── Los filtros de siempre ───────────────────────────────────────────────────────────────
+
+    @Test
+    fun `por confirmar, pagos de tarjeta, traspasos y liquidaciones no entran`() {
+        val r = detectar(eventos = listOf(
+            gasto("ev_pc", "2026-11-01", 50_000, "SEGURO VIDA ALLIANZ").copy(reconciliationStatus = ReconciliationStatus.UNCONFIRMED),
+            gasto("ev_pt", "2026-11-01", 50_000, "PAGO SEGURO TARJETA", categoria = CARD_PAYMENT_CATEGORY),
+            gasto("ev_tr", "2026-11-01", 50_000, "SEGURO CARRO", categoria = TRANSFER_CATEGORY),
+            gasto("ev_li", "2026-11-01", 50_000, "Seguro del carro a Caro").copy(saldaEspacioId = "esp_casa", countsAsCashFlow = false),
+        ))
+        assertTrue(r.seguros.isEmpty() && r.porConfirmar.isEmpty())
+    }
+
+    @Test
+    fun `un seguro compartido cuenta solo tu parte`() {
+        val compartido = mensual("comp", listOf("2026-10", "2026-11"), 100_000, "SEGURO HOGAR ALLIANZ").map { it.copy(parteAjena = 50_000) }
+        assertEquals(50_000, detectar(eventos = compartido).alMes)
+    }
+
+    @Test
     fun `los anulados no cuentan`() {
-        val cobro = gasto("ev_a", "2026-11-01", 50_000, "SEGURO EXEQUIAS")
-        val anulado = gasto("ev_b", "2026-10-01", 70_000, "SEGURO EXEQUIAS")
-        val r = detectar(eventos = listOf(cobro, anulado), anulados = setOf("ev_b"))
+        val eventos = mensual("ex", listOf("2026-09", "2026-10", "2026-11"), 50_000, "SEGURO EXEQUIAS") +
+            gasto("ev_b", "2026-10-15", 70_000, "SEGURO EXEQUIAS")
+        val r = detectar(eventos = eventos, anulados = setOf("ev_b"))
         val s = r.seguros.single()
         assertEquals(TipoDeSeguro.EXEQUIAS, s.tipo)
-        assertEquals(listOf("ev_a"), s.cobros.map { it.movimientoId })
+        assertFalse("ev_b" in s.cobros.map { it.movimientoId })
         assertEquals(50_000, r.alMes)
     }
 
     @Test
     fun `lo descartado sale de la lista y del total`() {
-        val vida = gasto("ev_v", "2026-11-01", 50_000, "ALLIANZ VIDA")
-        val desempleo = gasto("ev_d", "2026-11-01", 20_000, "SEGURO DESEMPLEO CARDIF")
-        val antes = detectar(eventos = listOf(vida, desempleo))
+        val eventos = mensual("v", listOf("2026-10", "2026-11"), 50_000, "ALLIANZ VIDA") +
+            mensual("d", listOf("2026-10", "2026-11"), 20_000, "SEGURO DESEMPLEO CARDIF")
+        val antes = detectar(eventos = eventos)
         assertEquals(70_000, antes.alMes)
         val clave = antes.seguros.first { it.tipo == TipoDeSeguro.VIDA }.clave
-        val despues = detectar(eventos = listOf(vida, desempleo), descartados = setOf(clave))
+        val despues = detectar(eventos = eventos, descartados = setOf(clave))
         assertEquals(listOf(TipoDeSeguro.DESEMPLEO), despues.seguros.map { it.tipo })
         assertEquals(20_000, despues.alMes)
     }
 
     @Test
     fun `lo que dejo de cobrarse se marca y no suma`() {
-        val viejos = listOf("2026-05-10", "2026-06-10", "2026-07-10").mapIndexed { i, f -> gasto("ev_m$i", f, 40_000, "COLSANITAS MEDICINA PREPAGADA") }
-        val r = detectar(eventos = viejos)
+        val r = detectar(eventos = mensual("m", listOf("2026-05", "2026-06", "2026-07"), 40_000, "COLSANITAS MEDICINA PREPAGADA"))
         val s = r.seguros.single()
         assertEquals(TipoDeSeguro.SALUD, s.tipo)
-        assertEquals("Medicina prepagada", s.nombre)
         assertFalse(s.sigueCobrandose)
         assertEquals(0, r.alMes)
         assertEquals(0, r.alAno)
@@ -200,39 +339,37 @@ class LosSegurosQuePagasTest {
 
     @Test
     fun `un movimiento en la categoria Seguros cuenta aunque el texto no lo diga`() {
-        val aMano = gasto("ev_tr", "2026-10-20", 250_000, "Todo riesgo del carro", categoria = "Seguros")
-        val s = detectar(eventos = listOf(aMano)).seguros.single()
+        val s = detectar(eventos = listOf(gasto("ev_tr", "2026-10-20", 250_000, "Todo riesgo del carro", categoria = "Seguros"))).seguros.single()
         assertEquals(TipoDeSeguro.AUTO, s.tipo)
         assertTrue(s.concluyente)
     }
 
     @Test
     fun `fuera de los ultimos doce meses no cuenta`() {
-        val viejo = gasto("ev_viejo", "2025-10-01", 50_000, "SEGURO VIDA ALLIANZ")
-        assertTrue(detectar(eventos = listOf(viejo)).seguros.isEmpty())
+        assertTrue(detectar(eventos = listOf(gasto("ev_viejo", "2025-10-01", 50_000, "SEGURO VIDA ALLIANZ"))).seguros.isEmpty())
     }
 
     @Test
-    fun `una regla de seguros da el nombre y cada cuantos meses`() {
-        val regla = RecurringRule(
-            id = "rr_poliza", name = "Póliza del apartamento", category = "Seguros", amount = 600_000, dayOfMonth = 10,
-            type = TransactionType.EXPENSE, frecuencia = FrecuenciaDelPago.SEMESTRAL, primerVencimiento = "2026-02-10",
-        )
-        val pago = gasto("ev_pol", "2026-08-10", 600_000, "Póliza del apartamento")
-        val s = detectar(eventos = listOf(pago), reglas = listOf(regla)).seguros.single()
-        assertEquals("Póliza del apartamento", s.nombre)
-        assertEquals(6, s.mesesEntreCobros)
-        assertEquals(100_000, s.alMes)
+    fun `los dolares van aparte, en su moneda`() {
+        val viaje = mensual("usd", listOf("2026-10", "2026-11"), 12, "ALLIANZ TRAVEL INSURANCE", master).map { it.copy(currency = "USD") }
+        val r = detectar(eventos = viaje + mensual("cop", listOf("2026-10", "2026-11"), 30_000, "SEGURO VIDA DEUDOR TC", master))
+        assertEquals(30_000, r.alMes, "los dólares no se suman a los pesos")
+        assertEquals(mapOf("USD" to 12L), r.otrasMonedas)
+        assertEquals("USD", r.seguros.single { it.cobros.first().movimientoId.startsWith("ev_usd") }.moneda)
     }
 
+    // ── Las huellas y el tramo ───────────────────────────────────────────────────────────────
+
     @Test
-    fun `protecciones y asistencias solas preguntan`() {
-        val r = detectar(eventos = listOf(gasto("ev_as", "2026-11-01", 15_000, "ASISTENCIA HOGAR TOTAL")))
-        // «Asistencia» con el tipo (hogar) es concluyente; sola, no.
-        assertEquals(TipoDeSeguro.HOGAR, r.seguros.single().tipo)
-        val sola = detectar(eventos = listOf(gasto("ev_as2", "2026-11-01", 15_000, "ASISTENCIA PREMIUM")))
-        assertTrue(sola.seguros.isEmpty())
-        assertEquals(1, sola.porConfirmar.size)
+    fun `las respuestas salen de las huellas, y gana la ultima de cada cuanto`() {
+        val r = respuestasDeLasHuellas(listOf(
+            huellaDelSeguro("acc_a:x"), huellaDelSeguroConfirmado("acc_b:y"), huellaDeCadaCuanto("acc_c:z", 12),
+            HUELLA_DE_ME_INTERESA, "extracto:acc_nu:2026-10-12", huellaDeCadaCuanto("acc_d:w", 7),
+        ))
+        assertEquals(setOf("acc_a:x"), r.descartados)
+        assertEquals(setOf("acc_b:y"), r.confirmados)
+        assertEquals(mapOf("acc_c:z" to 12), r.cadaCuanto, "un 7 no es una respuesta")
+        assertTrue(r.meInteresa)
     }
 
     @Test
@@ -250,7 +387,7 @@ class LosSegurosQuePagasTest {
     fun `la clave entra en la huella`() {
         val largo = gasto("ev_l", "2026-11-01", 10_000, "SEGURO " + "X".repeat(400))
         val s = detectar(eventos = listOf(largo)).seguros.single()
-        assertTrue(huellaDelSeguroConfirmado(s.clave).length <= 300)
+        assertTrue(huellaDeCadaCuanto(s.clave, 12).length <= 300)
         assertNull(detectar(eventos = listOf(largo), descartados = setOf(s.clave)).seguros.firstOrNull())
         assertNotNull(s.ultimoCobro)
     }

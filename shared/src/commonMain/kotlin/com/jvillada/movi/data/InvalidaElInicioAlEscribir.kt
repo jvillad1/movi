@@ -77,6 +77,12 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun createGoal(goal: Goal): Goal = trasEscribir { delegado.createGoal(goal) }
     override suspend fun updateGoal(id: String, goal: Goal): Goal = trasEscribir { delegado.updateGoal(id, goal) }
     override suspend fun deleteGoal(id: String): Unit = trasEscribir { delegado.deleteGoal(id) }
+    // Vuelta 132: lo que el dueño dice de un seguro cambia la cifra de la fila de Tú.
+    override suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean): SegurosQuePagas? =
+        trasEscribir { delegado.responderSiEsUnSeguro(clave, esUnSeguro) }
+    override suspend fun cadaCuantoSePagaElSeguro(clave: String, meses: Int): SegurosQuePagas? =
+        trasEscribir { delegado.cadaCuantoSePagaElSeguro(clave, meses) }
+    override suspend fun meInteresaLaAyudaConLosSeguros(): Unit = trasEscribir { delegado.meInteresaLaAyudaConLosSeguros() }
     // `parseSms` NO invalida: es un GET que interpreta el mensaje, no escribe nada. Envuelto, abrir
     // un mensaje del banco desde Por revisar y volver dejaba la bandeja y Movimientos en esqueleto.
     override suspend fun confirmSms(id: String): Unit = trasEscribir { delegado.confirmSms(id) }

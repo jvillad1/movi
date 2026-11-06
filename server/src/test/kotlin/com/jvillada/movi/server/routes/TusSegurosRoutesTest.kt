@@ -41,6 +41,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.deleteAll
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -123,12 +124,16 @@ class TusSegurosRoutesTest {
         return json.decodeFromString(SegurosQuePagas.serializer(), res.bodyAsText())
     }
 
-    private suspend fun ApplicationTestBuilder.responder(ruta: String, clave: String, uid: String = dueno) =
+    private suspend fun ApplicationTestBuilder.responder(ruta: String, clave: String, uid: String = dueno, meses: Int? = null) =
         client.post("/api/seguros/$ruta") {
             header(HttpHeaders.Authorization, "Bearer ${token(uid)}")
             contentType(ContentType.Application.Json)
-            setBody("""{"clave":"$clave"}""")
+            setBody(if (meses == null) """{"clave":"$clave"}""" else """{"clave":"$clave","meses":$meses}""")
         }
+
+    private fun huellasDeSeguros(): Set<String> = transaction {
+        AnomaliasDescartadas.selectAll().map { it[AnomaliasDescartadas.huella] }.toSet()
+    }
 
     private fun eventosDeUso(nombre: String): List<Map<String, String>> = transaction {
         UsoDeLaApp.selectAll().where { UsoDeLaApp.nombre eq nombre }.map { fila ->
@@ -142,6 +147,7 @@ class TusSegurosRoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/seguros").status)
         assertEquals(HttpStatusCode.Unauthorized, client.post("/api/seguros/no-es").status)
         assertEquals(HttpStatusCode.Unauthorized, client.post("/api/seguros/si-es").status)
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/api/seguros/cada-cuanto").status)
         assertEquals(HttpStatusCode.Unauthorized, client.post("/api/seguros/me-interesa").status)
     }
 
@@ -162,7 +168,10 @@ class TusSegurosRoutesTest {
         assertTrue(delDueno.seguros.none { it.cuentaId == "acc_otro" } && delDueno.porConfirmar.none { it.cuentaId == "acc_otro" })
         val delOtro = leer(otro)
         assertEquals(listOf("acc_otro"), delOtro.seguros.map { it.cuentaId })
-        assertEquals(777_000L, delOtro.alMes)
+        // Un solo cobro sin señal de cada cuánto: no se inventa que es mensual (C1).
+        assertTrue(delOtro.seguros.single().pagadoUnaVez)
+        assertEquals(0L, delOtro.alMes)
+        assertEquals(777_000L, delOtro.enPagosDeUnaVez)
         // El otro no puede descartar un seguro del dueño: para él, esa clave no existe.
         assertEquals(HttpStatusCode.NotFound, responder("no-es", "credito:acc_vehiculo", uid = otro).status)
         assertEquals(2, leer().seguros.size)
@@ -171,7 +180,7 @@ class TusSegurosRoutesTest {
     @Test
     fun `no es un seguro lo saca, y es idempotente`() = testApplication {
         application { testModule() }
-        repeat(2) { assertEquals(HttpStatusCode.NoContent, responder("no-es", "acc_master:seguro_vida_deudor_tc").status) }
+        repeat(2) { assertEquals(HttpStatusCode.OK, responder("no-es", "acc_master:seguro_vida_deudor_tc").status) }
         val r = leer()
         assertEquals(listOf("credito:acc_vehiculo"), r.seguros.map { it.clave })
         assertEquals(89_100L, r.alMes)
@@ -182,14 +191,16 @@ class TusSegurosRoutesTest {
     fun `si es un seguro lo cuenta, es idempotente, y la ultima respuesta gana`() = testApplication {
         application { testModule() }
         val eps = leer().porConfirmar.single().clave
-        repeat(2) { assertEquals(HttpStatusCode.NoContent, responder("si-es", eps).status) }
+        repeat(2) { assertEquals(HttpStatusCode.OK, responder("si-es", eps).status) }
         val confirmado = leer()
         assertTrue(confirmado.porConfirmar.isEmpty())
         assertTrue(confirmado.seguros.single { it.clave == eps }.confirmado)
-        assertEquals(89_100L + 32_000L + 380_000L, confirmado.alMes)
+        // Confirmado pero pagado una vez: va aparte, no «al mes».
+        assertEquals(89_100L + 32_000L, confirmado.alMes)
+        assertEquals(380_000L, confirmado.enPagosDeUnaVez)
         assertEquals(1L, transaction { AnomaliasDescartadas.selectAll().count() })
         // Después «No es»: sale de todo y queda una sola huella.
-        assertEquals(HttpStatusCode.NoContent, responder("no-es", eps).status)
+        assertEquals(HttpStatusCode.OK, responder("no-es", eps).status)
         val descartado = leer()
         assertTrue(descartado.seguros.none { it.clave == eps } && descartado.porConfirmar.isEmpty())
         assertEquals(1L, transaction { AnomaliasDescartadas.selectAll().count() })
@@ -224,6 +235,27 @@ class TusSegurosRoutesTest {
         }
         assertTrue(problemaDelEvento(EventoDeUso.SEGUROS_ME_INTERESA.name, datos) == null)
         assertTrue(leer().meInteresa)
+        // Es un estado del dueño, no la telemetría: aunque el registro de uso se borre, se recuerda.
+        transaction { UsoDeLaApp.deleteAll() }
+        assertTrue(leer().meInteresa)
+        assertTrue("seguros-me-interesa" in huellasDeSeguros())
+    }
+
+    @Test
+    fun `cada cuanto vuelve mensual o anual un pago de una vez, gana la ultima y la respuesta trae el resultado`() = testApplication {
+        application { testModule() }
+        val eps = leer().porConfirmar.single().clave
+        responder("si-es", eps)
+        val mensual = json.decodeFromString(SegurosQuePagas.serializer(), responder("cada-cuanto", eps, meses = 1).bodyAsText())
+        assertEquals(89_100L + 32_000L + 380_000L, mensual.alMes, "la respuesta ya trae el total nuevo")
+        assertEquals(0L, mensual.enPagosDeUnaVez)
+        repeat(2) { assertEquals(HttpStatusCode.OK, responder("cada-cuanto", eps, meses = 12).status) }
+        val anual = leer()
+        assertEquals(89_100L + 32_000L + 31_667L, anual.alMes)
+        assertEquals(setOf("seguro-si:$eps", "seguro-cada:$eps:12"), huellasDeSeguros())
+        assertEquals(HttpStatusCode.BadRequest, responder("cada-cuanto", eps, meses = 7).status)
+        assertEquals(HttpStatusCode.BadRequest, responder("cada-cuanto", eps).status)
+        assertEquals(HttpStatusCode.NotFound, responder("cada-cuanto", "acc_ahorros:nada", meses = 1).status)
     }
 
     @Test
@@ -239,13 +271,14 @@ class TusSegurosRoutesTest {
     }
 
     @Test
-    fun `con mandar datos de uso apagado no se escribe nada`() = testApplication {
+    fun `con mandar datos de uso apagado no se escribe el evento, pero la eleccion si`() = testApplication {
         application { testModule() }
         transaction { Users.update({ Users.id eq dueno }) { it[mandarUso] = false } }
         client.post("/api/seguros/me-interesa") { header(HttpHeaders.Authorization, "Bearer ${token(dueno)}") }
         leer(pantalla = true)
         assertTrue(transaction { UsoDeLaApp.selectAll().count() } == 0L)
-        assertFalse(leer().meInteresa)
+        // La elección sí se guarda: no es telemetría.
+        assertTrue(leer().meInteresa)
     }
 
     private fun token(uid: String) = JWT.create()

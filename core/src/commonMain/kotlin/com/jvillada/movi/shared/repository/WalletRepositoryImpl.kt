@@ -684,12 +684,17 @@ class WalletRepositoryImpl(
         return respuesta.exigirExito().body()
     }
 
-    override suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean) {
+    override suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean): com.jvillada.movi.shared.model.SegurosQuePagas =
         client.post("$baseUrl/api/seguros/" + if (esUnSeguro) "si-es" else "no-es") {
             contentType(ContentType.Application.Json)
             setBody(com.jvillada.movi.shared.model.RespuestaDelSeguro(clave))
-        }.exigirExito()
-    }
+        }.exigirExito().body()
+
+    override suspend fun cadaCuantoSePagaElSeguro(clave: String, meses: Int): com.jvillada.movi.shared.model.SegurosQuePagas =
+        client.post("$baseUrl/api/seguros/cada-cuanto") {
+            contentType(ContentType.Application.Json)
+            setBody(com.jvillada.movi.shared.model.RespuestaDelSeguro(clave, meses))
+        }.exigirExito().body()
 
     override suspend fun meInteresaLaAyudaConLosSeguros() {
         client.post("$baseUrl/api/seguros/me-interesa").exigirExito()

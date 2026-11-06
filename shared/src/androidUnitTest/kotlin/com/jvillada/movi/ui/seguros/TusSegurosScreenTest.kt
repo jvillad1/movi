@@ -62,7 +62,7 @@ class TusSegurosScreenTest {
     }
 
     private val vidaDelCredito = SeguroDetectado(
-        clave = "credito:acc_vehiculo", tipo = TipoDeSeguro.VIDA_DEL_CREDITO, nombre = "Seguro de vida · Vehículo 4083",
+        clave = "credito:acc_vehiculo", tipo = TipoDeSeguro.DEL_CREDITO, nombre = "Seguro del crédito · Vehículo 4083",
         cuentaId = "acc_vehiculo", cuentaNombre = "Vehículo 4083", alMes = 89_100, ultimoCobro = "2026-11-03",
         dentroDeLaCuota = true, creditoId = "acc_vehiculo",
     )
@@ -82,6 +82,31 @@ class TusSegurosScreenTest {
         cobros = listOf(CobroDelSeguro("ev_eps", "2026-10-30", 380_000, "PAGO SURA EPS")),
     )
 
+    private val bolivar = SeguroDetectado(
+        clave = "acc_ahorros:pago_pse_seguros_bolivar", tipo = TipoDeSeguro.OTRO, nombre = "Seguros Bolivar", cuentaId = "acc_ahorros",
+        cuentaNombre = "Ahorros 8133", alMes = 0, mesesEntreCobros = 0, montoDelCiclo = 2_400_000, pagadoUnaVez = true,
+        ultimoCobro = "2026-10-25", cobros = listOf(CobroDelSeguro("ev_bol", "2026-10-25", 2_400_000, "PAGO PSE SEGUROS BOLIVAR")),
+    )
+    private val incendio = SeguroDetectado(
+        clave = "acc_ahorros:seguro_incendio_terremoto", tipo = TipoDeSeguro.HOGAR, nombre = "Seguro de hogar", cuentaId = "acc_ahorros",
+        cuentaNombre = "Ahorros 8133", alMes = 248_000, ultimoCobro = "2026-11-02", concluyente = false, posibleDuplicadoDe = "Hipoteca casa",
+        cobros = listOf(CobroDelSeguro("ev_inc", "2026-11-02", 248_000, "SEGURO INCENDIO TERREMOTO")),
+    )
+    private val viaje = SeguroDetectado(
+        clave = "acc_master:allianz_travel", tipo = TipoDeSeguro.DE_TARJETA, nombre = "Seguro de la tarjeta Master Black",
+        cuentaId = "acc_master", cuentaNombre = "Master Black", moneda = "USD", alMes = 12, ultimoCobro = "2026-11-02",
+    )
+
+    /** Lo que trajo la revisión: un pago de una vez, un posible duplicado del crédito y dólares. */
+    private val conLoDeLaRevision = SegurosQuePagas(
+        seguros = listOf(vidaDelCredito, bolivar, viaje),
+        porConfirmar = listOf(incendio),
+        alMes = 89_100,
+        alAno = 89_100L * 12,
+        enPagosDeUnaVez = 2_400_000,
+        otrasMonedas = mapOf("USD" to 12L),
+    )
+
     private val conSeguros = SegurosQuePagas(
         seguros = listOf(vidaDelCredito, deLaTarjeta, soat),
         porConfirmar = listOf(eps),
@@ -92,14 +117,27 @@ class TusSegurosScreenTest {
 
     private inner class Repo(var respuesta: SegurosQuePagas) : RepositorioDePrueba() {
         val respuestas = mutableListOf<Pair<String, Boolean>>()
+        val cadaCuanto = mutableListOf<Pair<String, Int>>()
+        var lecturas = 0
         var interesados = 0
-        override suspend fun getSeguros(enLaPantalla: Boolean): SegurosQuePagas = respuesta
-        override suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean) {
+        override suspend fun getSeguros(enLaPantalla: Boolean): SegurosQuePagas { lecturas++; return respuesta }
+        override suspend fun responderSiEsUnSeguro(clave: String, esUnSeguro: Boolean): SegurosQuePagas {
             respuestas += clave to esUnSeguro
             respuesta = respuesta.copy(
                 seguros = respuesta.seguros.filterNot { it.clave == clave && !esUnSeguro },
                 porConfirmar = respuesta.porConfirmar.filterNot { it.clave == clave },
             )
+            return respuesta
+        }
+        override suspend fun cadaCuantoSePagaElSeguro(clave: String, meses: Int): SegurosQuePagas {
+            cadaCuanto += clave to meses
+            respuesta = respuesta.copy(
+                seguros = respuesta.seguros.map {
+                    if (it.clave == clave) it.copy(pagadoUnaVez = false, mesesEntreCobros = meses, alMes = (it.montoDelCiclo ?: 0L) / meses) else it
+                },
+                enPagosDeUnaVez = 0,
+            )
+            return respuesta
         }
         override suspend fun meInteresaLaAyudaConLosSeguros() { interesados++ }
     }
@@ -153,7 +191,7 @@ class TusSegurosScreenTest {
     fun `la lista va por tipo, con los que no se sabe aparte y sin amarillo`() {
         Repositories.sustitutoDePrueba = Repo(conSeguros)
         montar { TusSegurosScreen(onNavigate = {}) }
-        composeRule.waitUntil(5_000) { hay("Seguro de vida · Vehículo 4083") }
+        composeRule.waitUntil(5_000) { hay("Seguro del crédito · Vehículo 4083") }
         listOf("Pagas", "al mes en seguros", DE_DONDE_SALEN_LOS_SEGUROS, "Dentro de tus créditos", "De tus tarjetas", "Vehículo",
             "Seguro de la tarjeta Master Black", "SOAT", "al año", "Último cobro: 2 nov", TITULO_SON_SEGUROS, "Pago Sura Eps",
             PREGUNTA_DE_AYUDA, TEXTO_DE_AYUDA, MOVI_NO_VENDE_SEGUROS,
@@ -212,6 +250,45 @@ class TusSegurosScreenTest {
     }
 
     @Test
+    fun `C1 · un pago de una vez no suma al mes, lo dice aparte y pregunta cada cuanto`() {
+        val repo = Repo(conLoDeLaRevision)
+        Repositories.sustitutoDePrueba = repo
+        montar { TusSegurosScreen(onNavigate = {}) }
+        composeRule.waitUntil(5_000) { hay("Seguros Bolivar") }
+        assertTrue(hay("Pagado una vez · \$2.400.000 el 25 oct"))
+        assertTrue(hay("y \$2.400.000 en pagos de una vez"))
+        assertTrue(hay("una vez"))
+        assertFalse(hay("Dejó de cobrarse"))
+        assertTrue(hay(PREGUNTA_CADA_CUANTO))
+        val lecturasAntes = repo.lecturas
+        composeRule.onNodeWithTag(TAG_CADA_ANO, useUnmergedTree = true).performScrollTo().performClick()
+        composeRule.waitUntil(5_000) { !hay(PREGUNTA_CADA_CUANTO) }
+        assertEquals(listOf(bolivar.clave to 12), repo.cadaCuanto)
+        assertFalse(hay("en pagos de una vez"))
+        assertEquals(lecturasAntes, repo.lecturas, "la respuesta ya trae el resultado: no se vuelve a leer")
+    }
+
+    @Test
+    fun `I1 · el posible duplicado del credito pregunta si es el mismo`() {
+        val repo = Repo(conLoDeLaRevision)
+        Repositories.sustitutoDePrueba = repo
+        montar { TusSegurosScreen(onNavigate = {}) }
+        composeRule.waitUntil(5_000) { hay(preguntaDelDuplicado("Hipoteca casa")) }
+        assertTrue(hay(ES_EL_MISMO) && hay(ES_OTRO))
+        composeRule.onNodeWithText(ES_EL_MISMO, useUnmergedTree = true).performScrollTo().performClick()
+        composeRule.waitUntil(5_000) { repo.respuestas.isNotEmpty() }
+        assertEquals(listOf(incendio.clave to false), repo.respuestas)
+    }
+
+    @Test
+    fun `los dolares van en su moneda y fuera del total`() {
+        Repositories.sustitutoDePrueba = Repo(conLoDeLaRevision)
+        montar { TusSegurosScreen(onNavigate = {}) }
+        composeRule.waitUntil(5_000) { hay("US\$12") }
+        assertTrue(hay("Además, US\$12 al mes en otra moneda, fuera de este total."))
+    }
+
+    @Test
     fun `quien ya dijo que le interesa ve las gracias`() {
         Repositories.sustitutoDePrueba = Repo(conSeguros.copy(meInteresa = true))
         montar { TusSegurosScreen(onNavigate = {}) }
@@ -220,13 +297,19 @@ class TusSegurosScreenTest {
 
     @Test
     fun `a 360 dp con la letra al 130 por ciento nada se corta`() {
-        Repositories.sustitutoDePrueba = Repo(conSeguros)
+        Repositories.sustitutoDePrueba = Repo(conSeguros.copy(
+            seguros = conSeguros.seguros + bolivar,
+            porConfirmar = conSeguros.porConfirmar + incendio,
+            enPagosDeUnaVez = 2_400_000,
+        ))
         montar(ESCALA_DEL_TELEFONO_AL_130) { TusSegurosScreen(onNavigate = {}) }
-        composeRule.waitUntil(5_000) { hay("Seguro de vida · Vehículo 4083") }
+        composeRule.waitUntil(5_000) { hay("Seguro del crédito · Vehículo 4083") }
         listOf(
-            "Seguro de vida · Vehículo 4083", "Seguro de la tarjeta Master Black", "Pago Sura Eps",
+            "Seguro del crédito · Vehículo 4083", "Seguro de la tarjeta Master Black", "Pago Sura Eps",
             DE_DONDE_SALEN_LOS_SEGUROS, PREGUNTA_DE_AYUDA, TEXTO_DE_AYUDA, MOVI_NO_VENDE_SEGUROS, TITULO_SON_SEGUROS,
-            lineaDeLaFilaDelSeguro(deLaTarjeta), ME_INTERESA,
+            lineaDeLaFilaDelSeguro(deLaTarjeta), ME_INTERESA, lineaDeLaFilaDelSeguro(bolivar), PREGUNTA_CADA_CUANTO,
+            CADA_MES, CADA_ANO, preguntaDelDuplicado("Hipoteca casa"), ES_EL_MISMO, ES_OTRO, "Sí", "No",
+            "y \$2.400.000 en pagos de una vez", "\$89.100", "\$32.000", "\$1.200.000", "\$248.000",
         ).forEach { texto ->
             val layout = layoutDe(texto)
             (0 until layout.lineCount).forEach { assertFalse(layout.isLineEllipsized(it), "«$texto» sin «…»") }
