@@ -150,7 +150,40 @@ data class AnotacionPasada(
      * demás (y `null`, el de quien no lo sabe) a la de los gastos. Ver [MemoriaDeCategorias.recuerdoDe].
      */
     val tipo: TransactionType? = null,
+    /**
+     * El texto crudo del banco del movimiento ([FinancialEvent.rawPayload]). Cuando el comercio ya
+     * tiene el nombre que el dueño le puso («Caro»), el número de la llave o la cuenta solo sigue
+     * ahí: la distribución del número ([MemoriaDeCategorias.categoriasDelNumero]) lo lee de acá.
+     */
+    val delBanco: String? = null,
 )
+
+/**
+ * **Una categoría con la que el dueño anotó lo que va a un mismo número** (llave o cuenta), y
+ * cuántas veces. Viaja en [ParsedSms.categoriasDelNumero]: cuando un número ya tiene dos o más
+ * categorías, Movi no adivina una, las ofrece todas.
+ */
+@Serializable
+data class CategoriaDelNumero(val categoria: String, val veces: Int)
+
+/**
+ * La huella de un identificador del banco, o `null` si no sirve para esto: un número de cuenta es
+ * `cuenta:N`, una llave es `llave:` + su clave comparable —la misma que da [huellaDeUnMovimiento] al
+ * leer «llave 0099887766» del comercio—, y una llave que en realidad es un nombre ([laLlaveEsUnNombre])
+ * no es un número.
+ */
+fun huellaDelIdentificador(id: IdentificadorDelDestino): String? = when (id.tipo) {
+    TipoDeIdentificador.NUMERO -> "cuenta:" + id.valor
+    TipoDeIdentificador.LLAVE ->
+        if (laLlaveEsUnNombre(id.valor)) null else "llave:" + claveComparableDeNombre(id.valor)
+}
+
+/**
+ * El comercio de un movimiento sin la nota que el dueño le agregó después: si [descripcion] es
+ * «[merchant] · nota», el nombre es [merchant]; si no, [descripcion].
+ */
+fun nombreSinLaNota(merchant: String?, descripcion: String): String =
+    if (!merchant.isNullOrEmpty() && descripcion.startsWith("$merchant · ")) merchant else descripcion
 
 /**
  * Lo que Movi recuerda de un destinatario: con qué categoría lo anotó el dueño, cómo lo llamó, y
@@ -211,7 +244,29 @@ class MemoriaDeCategorias private constructor(
      * Solo las marcas con **una sola** categoría en lo anotado (ver [recuerdosPorMarca]).
      */
     private val porMarca: Map<String, LoQueMoviRecuerda> = emptyMap(),
+    /** Categorías de cada número (`llave:`/`cuenta:`) en lo que SALE, con 1+ categorías. */
+    private val numerosDeGastos: Map<String, List<CategoriaDelNumero>> = emptyMap(),
+    /** Lo mismo para lo que ENTRA. */
+    private val numerosDeIngresos: Map<String, List<CategoriaDelNumero>> = emptyMap(),
 ) {
+    /**
+     * **La distribución del número**: con qué categorías anotó el dueño lo que fue a esta llave o
+     * cuenta, de la más usada a la menos (a igual número, la más reciente primero). La huella es la
+     * de [texto] si es `llave:`/`cuenta:`; si no, la de [identificador] ([huellaDelIdentificador]).
+     * Solo del lado de [tipo] (un ingreso aparte, como [recuerdoDe]) y **solo con 2 o más
+     * categorías**: con una sola no hay nada que elegir y manda el recuerdo de siempre.
+     */
+    fun categoriasDelNumero(
+        texto: String,
+        tipo: TransactionType?,
+        identificador: IdentificadorDelDestino? = null,
+    ): List<CategoriaDelNumero> {
+        val deTexto = huellaDeUnMovimiento(texto)?.takeIf { it.startsWith("llave:") || it.startsWith("cuenta:") }
+        val huella = deTexto ?: identificador?.let(::huellaDelIdentificador) ?: return emptyList()
+        val delLado = if (tipo == TransactionType.INCOME) numerosDeIngresos else numerosDeGastos
+        return delLado[huella]?.takeIf { it.size >= 2 } ?: emptyList()
+    }
+
     val cuantasHuellas: Int get() = porHuella.size + porHuellaDeIngresos.size
 
     /**
@@ -280,7 +335,34 @@ class MemoriaDeCategorias private constructor(
                 categoriasDelDueno = categorias,
                 porHuellaDeIngresos = recuerdosPor(ingresos) { huellaDeUnMovimiento(it.comoLlego) },
                 porMarca = porMarca,
+                numerosDeGastos = distribucionPorNumero(gastos),
+                numerosDeIngresos = distribucionPorNumero(ingresos),
             )
+        }
+
+        /**
+         * huella de número → categorías. Cada anotación aporta un **conjunto** de huellas (la de su
+         * `comoLlego` y la del número en el texto del banco): un movimiento nombrado por los dos
+         * cuenta una vez. El texto del banco no pasa por [textoQueNoSeAprende]: el SMS crudo siempre
+         * dice «tu cuenta».
+         */
+        private fun distribucionPorNumero(anotaciones: List<AnotacionPasada>): Map<String, List<CategoriaDelNumero>> {
+            val porHuella = mutableMapOf<String, MutableList<AnotacionPasada>>()
+            for (a in anotaciones) {
+                val huellas = setOfNotNull(
+                    huellaDeUnMovimiento(a.comoLlego)?.takeIf { it.startsWith("llave:") || it.startsWith("cuenta:") },
+                    a.delBanco?.let(::identificadorDelDestinoEn)?.let(::huellaDelIdentificador),
+                )
+                huellas.forEach { porHuella.getOrPut(it) { mutableListOf() } += a }
+            }
+            return porHuella.mapValues { (_, lista) ->
+                lista.groupBy { it.categoria }.entries
+                    .sortedWith(
+                        compareByDescending<Map.Entry<String, List<AnotacionPasada>>> { it.value.size }
+                            .thenByDescending { e -> e.value.maxOf { it.cuando } },
+                    )
+                    .map { CategoriaDelNumero(it.key, it.value.size) }
+            }
         }
 
         /** Agrupa [anotaciones] por [clave] (sin las de clave `null`) y elige el recuerdo de cada grupo. */

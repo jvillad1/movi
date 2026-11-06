@@ -83,7 +83,7 @@ fun conElMotivoDelEnvio(
     if (categoriaDelBanco in CATEGORIAS_DE_DOS_PATAS) return parsed
     val destino = destinoQueNombra(textoDelMensaje, destinos) ?: return parsed
     val motivo = motivoDelEnvio(kotlin.math.round(parsed.amount).toLong(), parsed.currency, destino, eventos) ?: return parsed
-    return parsed.copy(category = motivo.categoria, aprendidoDe = textoDelMotivoAprendido(motivo, destino))
+    return parsed.copy(category = motivo.categoria, aprendidoDe = textoDelMotivoAprendido(motivo, destino), porElMismoMonto = true)
 }
 
 /** Lo que se le mandó a alguien por un motivo en el período: la fila de su ficha. */

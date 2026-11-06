@@ -190,7 +190,8 @@ fun dudasDelAviso(
  * Movi no sabe en qué cuenta o grupo poner: en los dos casos es una decisión, no un trámite. Los gastos
  * entendidos son el trámite que el lote acelera; los ingresos son pocos.
  */
-fun entraEnElLote(leido: ParsedSms): Boolean = leido.type != TransactionType.INCOME
+fun entraEnElLote(leido: ParsedSms): Boolean =
+    leido.type != TransactionType.INCOME && (leido.categoriasDelNumero.size < 2 || leido.porElMismoMonto)
 
 /**
  * **¿Este aviso es plata que llega?** (vuelta 85, para «Por confirmar» con signo) Un ingreso, salvo lo
