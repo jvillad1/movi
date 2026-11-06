@@ -222,10 +222,11 @@ private val NUMEROS_MONTOS_Y_FECHAS = Regex(
         // Sin marca: grupos de miles exactos, hasta 7 dígitos enteros, y el decimal con el OTRO separador
         // («1.234.567,89» sí; «1.234.567.8» no es un monto: son 8 dígitos).
         """|(?<montoSinMarca>(?<![\d.,])(?:\d(?<a>[.,])\d{3}\k<a>\d{3}(?:(?!\k<a>)[.,]\d{1,2})?|\d{1,3}(?<b>[.,])\d{3}(?:(?!\k<b>)[.,]\d{1,2})?)""" + FIN_DEL_NUMERO + ")" +
-        // Lo demás: dígitos con hasta tres caracteres entre cada uno si son espacios, puntos, guiones o guiones bajos
-        // («4513 - 2200 - 1234 - 5678», el doble espacio, «4513_2200»), o una coma o una barra sola («1,020,304,050»,
-        // «12/34/5678»). Así «Cuotas 1, 2, 3, 4, 5» (coma y espacio) no se junta en un número (M-b).
-        """|\d(?:(?:[ ._\-]{1,3}|[,/])?\d)*""",
+        // Lo demás: dígitos con hasta tres caracteres entre cada uno si son espacios (también el espacio duro U+00A0 de
+        // los PDF y los espacios finos), puntos, guiones, guiones bajos, rayas («–», «—») o asteriscos («4513 - 2200 -
+        // 1234 - 5678», «4513 – 2200», «4513*2200»); « , » (coma entre espacios); o una coma o una barra sola
+        // («1,020,304,050», «12/34/5678»). Así «Cuotas 1, 2, 3, 4, 5» (coma pegada y espacio) no se junta (M-b, H4).
+        """|\d(?:(?:[ ._\-\u00A0\u2002-\u200A\u202F\u2013\u2014*]{1,3}| , |[,/])?\d)*""",
 )
 
 /** **Un texto de afuera, listo para salir**: sin control, una línea, corto y sin números completos. */
