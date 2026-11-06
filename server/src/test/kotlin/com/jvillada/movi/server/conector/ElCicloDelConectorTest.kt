@@ -13,6 +13,8 @@ import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -110,6 +112,30 @@ class ElCicloDelConectorTest {
             c.json.parseToJsonElement(b).jsonObject["client_id"]!!.jsonPrimitive.content,
         )
         assertEquals(2L, transaction { ClientesDelConector.selectAll().count() })
+    }
+
+    @Test
+    fun `dos registros DCR iguales a la vez dan el mismo cliente, nunca un 500`() = testApplication {
+        with(c) { montar() }
+        val id = idDelClienteDcr(listOf(RETORNO_DE_CLAUDE))
+        // La carrera, sin hilos: el segundo llega cuando el primero ya escribió la fila.
+        transaction { guardarClienteDcr(id, listOf(RETORNO_DE_CLAUDE), 1L) }
+        transaction { guardarClienteDcr(id, listOf(RETORNO_DE_CLAUDE), 2L) }
+        assertEquals(1L, transaction { ClientesDelConector.selectAll().count() })
+        // Y por la ruta, veinte a la vez.
+        val respuestas = coroutineScope {
+            (1..20).map { i ->
+                async {
+                    client.post("/oauth/register") {
+                        header("X-Forwarded-For", "10.6.0.$i")
+                        contentType(ContentType.Application.Json)
+                        setBody("""{"redirect_uris":["http://localhost/callback"]}""")
+                    }
+                }
+            }.map { it.await() }
+        }
+        assertTrue(respuestas.all { it.status == HttpStatusCode.Created }, respuestas.map { it.status }.toString())
+        assertEquals(1, respuestas.map { c.json.parseToJsonElement(it.bodyAsText()).jsonObject["client_id"]!!.jsonPrimitive.content }.toSet().size)
     }
 
     @Test

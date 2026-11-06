@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.insertIgnore
 import org.jetbrains.exposed.sql.selectAll
 import java.net.InetAddress
 import java.net.URI
@@ -274,6 +275,20 @@ internal fun idDelClienteDcr(retornosNormalizados: List<String>): String =
         .digest(retornosNormalizados.joinToString("\n").toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
         .take(32)
+
+/**
+ * **Guarda un cliente DCR si no estaba** (M-c de la tercera revisión): un `INSERT … ON CONFLICT DO NOTHING`
+ * (`insertIgnore`), así dos registros iguales al mismo tiempo dan el mismo cliente y ninguno un 500 por la clave
+ * primaria. Corre dentro de la transacción de quien llama.
+ */
+internal fun org.jetbrains.exposed.sql.Transaction.guardarClienteDcr(id: String, retornos: List<String>, ahora: Long) {
+    ClientesDelConector.insertIgnore {
+        it[ClientesDelConector.id] = id
+        it[ClientesDelConector.nombre] = ""
+        it[redirectUris] = Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>()), retornos)
+        it[creadoEn] = ahora
+    }
+}
 
 /** Un retorno declarado, sin el puerto si es un loopback (el puerto se ignora igual al compararlo). */
 internal fun retornoNormalizado(uri: String): String =

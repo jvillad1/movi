@@ -6,6 +6,7 @@ import com.jvillada.movi.server.auth.RateLimiter
 import com.jvillada.movi.server.conector.ConfigDelConector
 import com.jvillada.movi.server.conector.SolicitudFirmada
 import com.jvillada.movi.server.conector.idDelClienteDcr
+import com.jvillada.movi.server.conector.guardarClienteDcr
 import com.jvillada.movi.server.conector.retornoNormalizado
 import io.ktor.server.response.respond
 import com.jvillada.movi.server.conector.revocarPorToken
@@ -375,16 +376,7 @@ private suspend fun ApplicationCall.registrar() {
     // registrar lo mismo otra vez no escribe nada. A lo sumo siete filas en total, así que no hace falta ningún tope.
     val retornos = uris.map(::retornoNormalizado).distinct().sorted()
     val id = idDelClienteDcr(retornos)
-    dbQuery {
-        if (ClientesDelConector.selectAll().where { ClientesDelConector.id eq id }.empty()) {
-            ClientesDelConector.insert {
-                it[ClientesDelConector.id] = id
-                it[ClientesDelConector.nombre] = ""
-                it[redirectUris] = Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>()), retornos)
-                it[creadoEn] = ahora
-            }
-        }
-    }
+    dbQuery { guardarClienteDcr(id, retornos, ahora) }
     responderJson(
         buildJsonObject {
             put("client_id", id)
