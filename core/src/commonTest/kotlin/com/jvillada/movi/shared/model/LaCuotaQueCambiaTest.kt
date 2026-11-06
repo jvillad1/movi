@@ -187,6 +187,8 @@ class LaCuotaQueCambiaTest {
         assertTrue(llevaCuotas(compra, AccountType.CREDIT_CARD))
         assertTrue(!llevaCuotas(compra.copy(category = ADJUSTMENT_CATEGORY), AccountType.CREDIT_CARD))
         assertTrue(!llevaCuotas(compra.copy(category = CATEGORIA_DE_COMISIONES_DEL_BANCO, description = "CUOTA DE MANEJO"), AccountType.CREDIT_CARD))
+        // Revisión 2: la categoría sola no decide; un predial pagado con la tarjeta en «Impuestos» es una compra.
+        assertTrue(llevaCuotas(compra.copy(category = CATEGORIA_DE_IMPUESTOS, description = "Predial Medellín"), AccountType.CREDIT_CARD))
         assertTrue(!llevaCuotas(compra.copy(category = "Otros", description = "INTERESES CORRIENTES"), AccountType.CREDIT_CARD))
     }
 

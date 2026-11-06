@@ -342,7 +342,8 @@ fun Route.eventRoutes() {
             event.cuotas?.let { cuotas ->
                 if (!cuotasValidas(cuotas)) return@post call.respond(HttpStatusCode.BadRequest, CUOTAS_FUERA_DE_RANGO)
             }
-            if (event.type != TransactionType.EXPENSE || tipoDeLaCuenta != AccountType.CREDIT_CARD) event = event.copy(cuotas = null)
+            // Revisión 2 de la vuelta 133: la misma regla que el `PUT …/cuotas` y el detalle (`llevaCuotas`).
+            if (!llevaCuotas(event, tipoDeLaCuenta)) event = event.copy(cuotas = null)
 
             // **Un id que ya existe no es un error: es el mismo movimiento que vuelve.**
             //

@@ -419,4 +419,20 @@ class LaCompraConTarjetaTest {
         assertNull(cuotasDe("ev-tarjeta"), "nada de lo rechazado escribió")
         assertNull(cuotasDe("ev-ahorros"))
     }
+
+    @Test
+    fun `vuelta 133 revision 2 · el POST y el PUT de las cuotas aceptan lo mismo`() = testApplication {
+        application { testModule() }
+        // Un predial pagado con la tarjeta, en «Impuestos»: el POST guarda sus cuotas y el PUT las cambia.
+        val predial = gasto("ev-predial", nu, cuotas = "12").replace("\"category\":\"Mercado\",\"description\":\"Mercado\"", "\"category\":\"Impuestos\",\"description\":\"Predial Medellín\"")
+        assertEquals(HttpStatusCode.Created, anotar(predial).status)
+        assertEquals(12, cuotasDe("ev-predial"))
+        assertEquals(HttpStatusCode.OK, cambiarCuotas("ev-predial", 24).status)
+        assertEquals(24, cuotasDe("ev-predial"))
+        // Un cargo del banco (la cuota de manejo): el POST las ignora y el PUT las rechaza.
+        val manejo = gasto("ev-manejo", nu, monto = 45_000L, cuotas = "3").replace("\"category\":\"Mercado\",\"description\":\"Mercado\"", "\"category\":\"Otros\",\"description\":\"CUOTA DE MANEJO\"")
+        assertEquals(HttpStatusCode.Created, anotar(manejo).status)
+        assertNull(cuotasDe("ev-manejo"))
+        assertEquals(HttpStatusCode.UnprocessableEntity, cambiarCuotas("ev-manejo", 3).status)
+    }
 }

@@ -54,15 +54,17 @@ const val CUOTAS_SOLO_EN_UNA_COMPRA_CON_TARJETA: String =
 
 /**
  * Vuelta 133 · **¿este movimiento puede llevar cuotas?** Un gasto suelto (no la pata de un traspaso ni de
- * un pago) de una tarjeta de crédito. La misma regla que `POST /api/events` (que las ignora fuera de
- * eso), `PUT /api/events/{id}/cuotas` (que las rechaza) y las pantallas (que solo ahí preguntan). Pura.
+ * un pago) de una tarjeta de crédito que no es un ajuste ni un cargo del banco. **Una sola regla**:
+ * `POST /api/events` y la confirmación del pago entero (que las ignoran fuera de esto),
+ * `PUT /api/events/{id}/cuotas` (que las rechaza) y el detalle (que solo ahí pregunta). Pura.
  */
 fun llevaCuotas(evento: FinancialEvent, tipoDeLaCuenta: AccountType?): Boolean =
     evento.type == TransactionType.EXPENSE && tipoDeLaCuenta == AccountType.CREDIT_CARD && evento.transferId == null &&
         // Revisión de la vuelta 133: un ajuste de saldo, una apertura o un cargo del banco (intereses, cuota
-        // de manejo, 4x1000) no es una compra: «a 36 cuotas» haría que el extracto lo repartiera.
+        // de manejo, 4x1000) no es una compra: «a 36 cuotas» haría que el extracto lo repartiera. Revisión 2:
+        // el cargo se reconoce por lo que dice el movimiento (`cargoDelBanco`), no por la categoría: un predial
+        // pagado con la tarjeta y guardado en «Impuestos» es una compra y lleva sus cuotas.
         !esCategoriaQueNoSeElige(evento.category) &&
-        evento.category != CATEGORIA_DE_COMISIONES_DEL_BANCO && evento.category != CATEGORIA_DE_IMPUESTOS &&
         cargoDelBanco(evento.description, evento.type) == null
 
 /** «A 12 cuotas», «A 1 cuota», o «¿A cuántas cuotas?» sin saberlas (vuelta 133: el detalle y el aviso). */
