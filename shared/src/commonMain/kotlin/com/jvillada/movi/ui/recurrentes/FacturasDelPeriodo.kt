@@ -359,8 +359,8 @@ const val ABONO_PLANEADO: String = "Abono planeado"
  * **El renglón de estado de una factura** (vuelta 136), en este orden —lo primero que aplica—:
  *
  * - con una escritura en vuelo, «Guardando…»;
- * - sellada con el extracto de su tarjeta todavía abierto: [loQueFaltaDelExtracto] («Abonaste $100.000 · faltan
- *   $1.292.700 del extracto…»), en aviso: no se ve pagada;
+ * - sellada con el extracto de su tarjeta todavía abierto: «Faltan $1.292.700 del extracto», en aviso (no se ve
+ *   pagada), y si cabe entera la larga, [loQueFaltaDelExtracto] («Abonaste $100.000 · faltan $1.292.700 del extracto…»);
  * - **pagada** ([PagoDelPeriodo.hecho]): «Pagado · 25 oct» («Recibido» si es un ingreso, «Mínimo cubierto»
  *   si el mínimo del extracto quedó cubierto sin un pago propio), en el verde de `entra` con el visto;
  * - una tarjeta pagada por debajo de su mínimo: [lineaDelMinimo], en aviso (cortada a un renglón en la fila;
@@ -388,7 +388,15 @@ fun estadoDeLaFactura(
     if (enVuelo) return EstadoDeLaFactura(GUARDANDO_LA_FACTURA, TonoDeSubtitulo.Normal)
     // Revisión de la 136 (C1): un abono menor que el extracto sella la fila, pero el extracto sigue abierto: la
     // fila no puede verse pagada. Dice lo que falta, en aviso (la regla de la vuelta 62).
-    if (pago.hecho && extracto != null) return EstadoDeLaFactura(loQueFaltaDelExtracto(extracto), TonoDeSubtitulo.Aviso)
+    // Re-revisión (1): la frase larga a 360 dp cortaba justo la cifra que falta; lo corto es «Faltan $X del extracto»
+    // y la larga va solo si cabe entera.
+    if (pago.hecho && extracto != null) {
+        return EstadoDeLaFactura(
+            "Faltan ${montoDelExtracto(extracto.facturado, extracto.moneda)} del extracto",
+            TonoDeSubtitulo.Aviso,
+            siCabe = loQueFaltaDelExtracto(extracto),
+        )
+    }
     if (pago.hecho) {
         val estado = when {
             pago.esIngreso -> "Recibido"

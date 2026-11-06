@@ -96,7 +96,9 @@ class UnaSolaFilaDeFacturaReglasTest {
         val estado = estadoDeLaFactura(abonada, null, extracto = extracto)
         assertEquals(TonoDeSubtitulo.Aviso, estado.tono)
         assertFalse(estado.conCheck)
-        assertTrue(estado.texto.startsWith("Abonaste \$100.000 · faltan \$1.292.700"), estado.texto)
+        // Re-revisión (1): lo corto dice la cifra que falta; la frase de la vuelta 62, si cabe.
+        assertEquals("Faltan \$1.292.700 del extracto", estado.texto)
+        assertTrue(estado.siCabe!!.startsWith("Abonaste \$100.000 · faltan \$1.292.700"), estado.siCabe)
         assertEquals(CifraDeLaFactura("\$100.000"), cifraDeLaFactura(abonada, extracto))
     }
 
