@@ -677,6 +677,20 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
         }
     }
 
+    /**
+     * Vuelta 133 · «¿A cuántas cuotas?» de una compra con tarjeta (no bloquea «Confirmar»). Vuelta 134: la
+     * misma para la tarjeta de un aviso suelto y la de un pago avisado varias veces ([cabeza] = su cabeza).
+     */
+    fun cuotasDelAvisoDe(cabeza: SmsMessage): CuotasDelAviso? =
+        entendidos[cabeza.id]?.takeIf { it.preguntaLasCuotas }?.let { anotacion ->
+            CuotasDelAviso(
+                elegidas = anotacion.cuotas,
+                monto = anotacion.monto,
+                moneda = anotacion.leido.currency,
+                onElegir = { cuotasElegidasAca = cuotasElegidasAca + (cabeza.id to it) },
+            )
+        }
+
     /** Vuelta 51: la tarjeta de un pago pendiente (suelto o avisado varias veces), reciente o antiguo. */
     fun LazyListScope.tarjetaDelPago(ll: LlavesDeLaLista, mensajes: List<SmsMessage>, sms: SmsMessage) {
         val grupoId = sms.grupoId
@@ -718,6 +732,8 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                     loEntendido = lineas[sms.id],
                     yaAnotado = yaAnotadoDe(sms),
                     titulo = titulos[sms.id],
+                    // Vuelta 134: una compra con tarjeta avisada varias veces también pregunta las cuotas.
+                    cuotasDelAviso = cuotasDelAvisoDe(sms),
                 )
                 }
                 }
@@ -749,14 +765,7 @@ fun PorRevisarScreen(onNavigate: (Screen) -> Unit) {
                 titulo = titulos[sms.id],
                 eligeLaCategoria = eligeLaCategoriaDe(sms),
                 // Vuelta 133: una compra con tarjeta pregunta a cuántas cuotas (no bloquea «Confirmar»).
-                cuotasDelAviso = entendidos[sms.id]?.takeIf { it.preguntaLasCuotas }?.let { anotacion ->
-                    CuotasDelAviso(
-                        elegidas = anotacion.cuotas,
-                        monto = anotacion.monto,
-                        moneda = anotacion.leido.currency,
-                        onElegir = { cuotasElegidasAca = cuotasElegidasAca + (sms.id to it) },
-                    )
-                },
+                cuotasDelAviso = cuotasDelAvisoDe(sms),
                 // Vuelta 51: lo que no es la categoría (cuenta, monto, comercio) sigue en Revisar aviso.
                 onMasCambios = { revisarEnReconciliar(sms.id, false) },
                 // El otro aviso puede estar ya confirmado: se busca en la lista
