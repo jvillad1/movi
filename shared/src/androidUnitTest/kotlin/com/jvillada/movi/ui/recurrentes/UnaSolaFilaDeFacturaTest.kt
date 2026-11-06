@@ -172,7 +172,7 @@ class UnaSolaFilaDeFacturaTest {
         composeRule.onAllNodesWithTag(TAG_CIFRA, useUnmergedTree = true).fetchSemanticsNodes().forEach {
             assertTrue(seVeEntero(it), "«${texto(it)}» se corta a ×1,456")
         }
-        for (corto in listOf("Vence el 22 nov", "Venció hace 3 días", "Pagado · 25 oct", "¿Es el de \$4.000.000?", "22 nov", "Celular")) {
+        for (corto in listOf("Vence el 22 nov", "Venció hace 3 días", "Pagado · 25 oct", "¿Es el de \$4.000.000?", "Celular")) {
             composeRule.onAllNodesWithText(corto, useUnmergedTree = true).fetchSemanticsNodes().forEach {
                 assertTrue(seVeEntero(it), "«$corto» se corta a ×1,456")
             }

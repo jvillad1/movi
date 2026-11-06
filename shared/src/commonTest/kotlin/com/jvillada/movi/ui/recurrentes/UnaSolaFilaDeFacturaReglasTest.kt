@@ -86,11 +86,13 @@ class UnaSolaFilaDeFacturaReglasTest {
         assertEquals(CifraDeLaFactura("\$100.000"), cifraDeLaFactura(abonada, extracto))
     }
 
+    /** Revisión de la 136 (I2): un nombre que no cabe se corta por el principio, y lo que distingue queda. */
     @Test
-    fun `la fecha de la derecha es el dia que salio la plata o el vencimiento`() {
-        assertEquals("22 nov", fechaDeLaFactura(porVencer))
-        assertEquals("25 oct", fechaDeLaFactura(pagada.copy(vence = "2026-10-05")))
-        assertEquals("5 oct", fechaDeLaFactura(pagada.copy(vence = "2026-10-05", pagadoEl = null)))
+    fun `un nombre que no cabe se corta por el principio`() {
+        val cabeEn = { n: Int -> { t: String -> t.length <= n } }
+        assertEquals("Celular", com.jvillada.movi.ui.components.ds.recortarPorElPrincipio("Celular", cabeEn(20)))
+        assertEquals("…Master Black 3684", com.jvillada.movi.ui.components.ds.recortarPorElPrincipio("Pago tarjeta Master Black 3684", cabeEn(18)))
+        assertEquals("…Papá (Davibank)", com.jvillada.movi.ui.components.ds.recortarPorElPrincipio("Cuota Hipoteca Papá (Davibank)", cabeEn(16)))
     }
 
     @Test

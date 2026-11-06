@@ -208,6 +208,12 @@ fun Fila(
      * mismo (las facturas de Pagos).
      */
     reservarRenglones: Boolean = false,
+    /**
+     * Revisión de la vuelta 136 (I2) · si el título no cabe en sus renglones, se corta **por el principio**
+     * («…Master Black 3684»): lo que distingue una factura de su hermana va al final del nombre (los dígitos,
+     * el banco entre paréntesis). El lector de pantalla oye el título entero. Ver [recortarPorElPrincipio].
+     */
+    cortarElTituloPorElPrincipio: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -248,7 +254,14 @@ fun Fila(
             Spacer(Modifier.width(ESPACIO_ANTES_DEL_TEXTO_DE_FILA))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            if (cortarElTituloPorElPrincipio) {
+                TituloQueSeCortaPorElPrincipio(
+                    titulo = titulo,
+                    color = colorDelTituloDeFila(tonoDelTitulo, Movi.colores),
+                    renglones = lineasDelTitulo,
+                    reservar = reservarRenglones,
+                )
+            } else Text(
                 text = titulo,
                 style = Movi.textos.cuerpo,
                 color = colorDelTituloDeFila(tonoDelTitulo, Movi.colores),
@@ -457,3 +470,61 @@ fun FilaDeNavegacion(
 
 /** El tono del ícono de una [FilaDeNavegacion]: el neutro, o el de aviso si la fila avisa algo. Pura. */
 fun tonoDeLaFilaDeNavegacion(aviso: Boolean): TonoDeIcono = if (aviso) TonoDeIcono.Aviso else TonoDeIcono.Neutro
+
+/** Lo que se ve del título de una [Fila] que se corta por el principio (para las pruebas: el lector oye el entero). */
+val TituloVisibleDeFilaKey: SemanticsPropertyKey<String> = SemanticsPropertyKey("TituloVisibleDeFila")
+
+/** El carácter con que empieza un título cortado por el principio. */
+const val PUNTOS_DEL_PRINCIPIO: String = "…"
+
+/**
+ * **Un texto cortado por el principio** (revisión de la vuelta 136): [texto] entero si [cabe]; si no, «…» y la
+ * cola más larga que quepa («…Master Black 3684»), sin espacios sueltos después de los puntos. [cabe] mide con la
+ * letra de verdad; aquí solo se busca (binaria) dónde cortar. Pura.
+ */
+fun recortarPorElPrincipio(texto: String, cabe: (String) -> Boolean): String {
+    if (cabe(texto)) return texto
+    fun desde(i: Int) = PUNTOS_DEL_PRINCIPIO + texto.substring(i).trimStart()
+    var bajo = 1
+    var alto = texto.length
+    while (bajo < alto) {
+        val medio = (bajo + alto) / 2
+        if (cabe(desde(medio))) alto = medio else bajo = medio + 1
+    }
+    return desde(bajo)
+}
+
+/** El título de una [Fila] que se corta por el principio: mide con la letra de verdad y el ancho que le queda. */
+@Composable
+private fun TituloQueSeCortaPorElPrincipio(titulo: String, color: Color, renglones: Int, reservar: Boolean) {
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val medidor = androidx.compose.ui.text.rememberTextMeasurer()
+        val estilo = Movi.textos.cuerpo
+        val ancho = constraints.maxWidth
+        val visible = androidx.compose.runtime.remember(titulo, ancho, estilo, renglones, medidor) {
+            recortarPorElPrincipio(titulo) { t ->
+                !medidor.measure(
+                    t, estilo, maxLines = renglones,
+                    constraints = androidx.compose.ui.unit.Constraints(maxWidth = ancho),
+                ).hasVisualOverflow
+            }
+        }
+        Text(
+            text = visible,
+            style = estilo,
+            color = color,
+            maxLines = renglones,
+            minLines = if (reservar) renglones else 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = if (visible == titulo) {
+                Modifier.semantics { this[TituloVisibleDeFilaKey] = visible }
+            } else {
+                // El lector (y una prueba) oye el título entero, no el pedazo.
+                Modifier.clearAndSetSemantics {
+                    text = AnnotatedString(titulo)
+                    this[TituloVisibleDeFilaKey] = visible
+                }
+            },
+        )
+    }
+}

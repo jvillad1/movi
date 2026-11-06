@@ -411,15 +411,6 @@ fun estadoDeLaFactura(
 }
 
 /**
- * **El dato corto debajo de la cifra** (vuelta 136): la fecha, «17 nov». En lo pagado, el día en que salió la
- * plata si se sabe; si no, el vencimiento. Vacío si la fecha no se entiende. Pura.
- */
-fun fechaDeLaFactura(pago: PagoDelPeriodo): String =
-    pago.pagadoEl?.takeIf { pago.hecho && pago.pagado }?.let(::fechaCortaDeFactura)
-        ?: fechaCortaDeFactura(pago.vence)
-        ?: ""
-
-/**
  * **La cifra de una factura y lo que la acompaña** (vuelta 136): «unos» antes del monto de una cuota que
  * cambia sin pagar ([estimada], la regla única `laCifraDelPagoEsEstimada` de la vuelta 134, que la pinta
  * `ConUnos`), y después «saldo» si el monto de una tarjeta es su saldo o «extracto» si es lo facturado al
@@ -452,7 +443,7 @@ fun renglonesDeLaFactura(escalaDeLaLetra: Float): Int = if (escalaDeLaLetra > ES
 /** El tag de una factura sin pagar (la pagada lleva [TAG_FILA_PAGADA]); las dos, además, [TAG_FILA_DE_FACTURA]. */
 const val TAG_FILA_PENDIENTE: String = "pagos:fila-pendiente"
 
-/** El tag de la cifra de una factura con lo que la acompaña («unos», «saldo», «extracto») y su fecha. */
+/** El tag de la cifra de una factura con lo que la acompaña («unos», «saldo», «extracto»). */
 const val TAG_CIFRA_DE_LA_FACTURA: String = "pagos:cifra-de-la-factura"
 
 /** Lo que dice el toque sobre una factura al lector de pantalla. */
@@ -464,10 +455,10 @@ const val ETIQUETA_ABRIR_LA_FACTURA: String = "Ver el pago"
  * sistema:
  *
  * - a la izquierda el ícono de su categoría ([nombreParaElIconoDeLaFactura]);
- * - en el centro **dos renglones fijos**: el nombre (uno, con «…»; dos con la letra grande) y el renglón de
- *   estado ([estadoDeLaFactura]: un texto y un tono);
- * - a la derecha la cifra ([cifraDeLaFactura], con «unos» si es estimada) y debajo, alineada, la fecha
- *   ([fechaDeLaFactura]);
+ * - en el centro **dos renglones fijos**: el nombre (uno; dos con la letra grande; si no cabe, cortado por el
+ *   principio, «…Master Black 3684») y el renglón de estado ([estadoDeLaFactura]: un texto y un tono, con la
+ *   fecha: «Vence el 17 nov», «Pagado · 25 oct»);
+ * - a la derecha, solo la cifra ([cifraDeLaFactura], con «unos», «saldo» o «extracto»);
  * - **toda la fila se toca** y abre la hoja de esa factura ([onAbrir]), donde vive todo lo demás.
  *
  * Todas miden lo mismo con la letra normal; con la grande reservan los mismos renglones y crecen igual
@@ -488,10 +479,17 @@ internal fun FilaDeFactura(
                 subtitulo = estado.texto,
                 // Vuelta 40: el ícono de la categoría, o el del nombre si la categoría no dice nada.
                 inicio = { IconoDeCategoria(nombreParaElIconoDeLaFactura(pago.categoria, pago.nombre)) },
-                final = { CifraYFechaDeLaFactura(cifraDeLaFactura(pago, extracto), fechaDeLaFactura(pago)) },
+                // Revisión de la 136 (I2, M1): a la derecha solo la cifra; la fecha la dice el renglón de estado.
+                final = {
+                    Box(modifier = Modifier.testTag(TAG_CIFRA_DE_LA_FACTURA)) {
+                        CifraConRotulosDeLaFactura(cifraDeLaFactura(pago, extracto), VarianteDeCifra.Fila)
+                    }
+                },
                 onClick = onAbrir,
                 onClickLabel = ETIQUETA_ABRIR_LA_FACTURA,
                 lineasDelTitulo = renglones,
+                // Revisión de la 136 (I2): si no cabe, se corta por el principio («…Master Black 3684»).
+                cortarElTituloPorElPrincipio = true,
                 lineasDelSubtitulo = renglones,
                 reservarRenglones = true,
                 tonoDelSubtitulo = estado.tono,
@@ -501,15 +499,6 @@ internal fun FilaDeFactura(
                 chevron = false,
             )
         }
-    }
-}
-
-/** La cifra de una factura con su «unos» / «saldo» / «extracto» y, debajo y alineada, la fecha. */
-@Composable
-private fun CifraYFechaDeLaFactura(cifra: CifraDeLaFactura, fecha: String) {
-    Column(horizontalAlignment = Alignment.End, modifier = Modifier.testTag(TAG_CIFRA_DE_LA_FACTURA)) {
-        CifraConRotulosDeLaFactura(cifra, VarianteDeCifra.Fila)
-        Text(fecha, style = Movi.textos.apoyo, color = Movi.colores.textoMedio, maxLines = 1)
     }
 }
 
