@@ -299,8 +299,11 @@ fun CifraEstimada(
     /** Ver [ConUnos]: «unos» encima de la cifra, para el final de una [Fila]. */
     apilado: Boolean = false,
 ) {
+    // El [modifier] de quien llama (su tag, su padding) va en una caja alrededor y **nunca en el nodo de la
+    // [Cifra]**: en el mismo nodo, el tag de quien llama tapaba [TAG_CIFRA], y las guardas del sistema (que
+    // cuentan las cifras y miden que se vean enteras) dejaban de verla (CI de la vuelta 134).
     if (!estimada) {
-        Cifra(monto, variante, modifier, moneda = moneda)
+        androidx.compose.foundation.layout.Box(modifier) { Cifra(monto, variante, moneda = moneda) }
         return
     }
     ConUnos(estimada = true, modifier = modifier, apilado = apilado) { Cifra(monto, variante, moneda = moneda) }
