@@ -372,6 +372,9 @@ class PlanScreenTest {
         }
         assertTrue(hay(com.jvillada.movi.ui.recurrentes.ETIQUETA_ANOTAR), "antes de los gastos, «Anotar pago»")
         val antes = tarjeta().getUnclippedBoundsInRoot()
+        val rotuloAntes = composeRule.onNode(hasText(com.jvillada.movi.ui.recurrentes.ROTULO_DE_LO_MAS_URGENTE, substring = true), useUnmergedTree = true)
+            .getUnclippedBoundsInRoot()
+        assertTrue(boton().getUnclippedBoundsInRoot().top >= rotuloAntes.bottom, "con «Anotar pago», también en su renglón")
 
         puertaDeLosGastos?.complete(Unit)
         composeRule.waitUntil(timeoutMillis = 5_000) { hay("¿Es el de \$980.000?") }
@@ -379,6 +382,11 @@ class PlanScreenTest {
         boton().assertExists()
         val salto = abs((despues.bottom - despues.top).value - (antes.bottom - antes.top).value)
         assertTrue(salto <= 8f, "«Falta por pagar» cambió ${salto} dp de alto al llegar los gastos; el máximo son 8")
+        // Y la razón: el botón va en su propio renglón, debajo de «Lo más urgente: …», con cualquier rótulo (en
+        // un renglón compartido, el rótulo largo lo hacía bajar).
+        val rotulo = composeRule.onNode(hasText(com.jvillada.movi.ui.recurrentes.ROTULO_DE_LO_MAS_URGENTE, substring = true), useUnmergedTree = true)
+            .getUnclippedBoundsInRoot()
+        assertTrue(boton().getUnclippedBoundsInRoot().top >= rotulo.bottom, "el botón va debajo de «Lo más urgente»")
     }
 
     /**
