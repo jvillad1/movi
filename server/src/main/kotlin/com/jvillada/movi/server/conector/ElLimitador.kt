@@ -23,6 +23,20 @@ internal class LimitadorAcotado(private val maxLlaves: Int) {
         return true
     }
 
+    /** ¿[clave] ya tiene [maximo] pedidos en los últimos [ventanaMs]? Sin anotar nada (ver [anotar]). */
+    @Synchronized
+    fun lleno(clave: String, maximo: Int, ventanaMs: Long, ahora: Long = System.currentTimeMillis()): Boolean {
+        val balde = baldes[clave.take(200)] ?: return false
+        while (balde.isNotEmpty() && balde.first() < ahora - ventanaMs) balde.removeFirst()
+        return balde.size >= maximo
+    }
+
+    /** Anota un pedido en [clave] sin mirar el tope: para un balde que solo cuenta algunos pedidos (los 401). */
+    @Synchronized
+    fun anotar(clave: String, ahora: Long = System.currentTimeMillis()) {
+        baldes.getOrPut(clave.take(200)) { ArrayDeque() }.addLast(ahora)
+    }
+
     @Synchronized
     fun llaves(): Int = baldes.size
 

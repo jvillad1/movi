@@ -126,4 +126,24 @@ class ElLimiteDelTokenTest {
         repeat(30) { registrar("203.0.113.9") }
         assertEquals(HttpStatusCode.TooManyRequests, registrar("203.0.113.9").status)
     }
+
+    @Test
+    fun `mcp corta por IP a quien junta 401, sin tocar el trafico bueno`() = testApplication {
+        with(c) { montar() }
+        val (acceso, _) = with(c) { conectar() }
+        suspend fun mcpDesde(ip: String, token: String?) = client.post("/mcp") {
+            header("X-Forwarded-For", ip)
+            token?.let { header(io.ktor.http.HttpHeaders.Authorization, "Bearer $it") }
+            contentType(ContentType.Application.Json)
+            setBody("""{"jsonrpc":"2.0","id":1,"method":"ping"}""")
+        }
+        // Lo bueno no cuenta: 50 pings válidos desde la misma IP.
+        repeat(50) { assertEquals(HttpStatusCode.OK, mcpDesde("203.0.113.50", acceso).status) }
+        repeat(com.jvillada.movi.server.routes.MAX_401_POR_MINUTO_POR_IP) {
+            assertEquals(HttpStatusCode.Unauthorized, mcpDesde("203.0.113.50", "mvc_a_" + "z".repeat(43)).status)
+        }
+        // Pasado el tope de 401, esa IP recibe 429 sin ir a la base; otra IP sigue normal.
+        assertEquals(HttpStatusCode.TooManyRequests, mcpDesde("203.0.113.50", "mvc_a_" + "z".repeat(43)).status)
+        assertEquals(HttpStatusCode.OK, mcpDesde("203.0.113.51", acceso).status)
+    }
 }

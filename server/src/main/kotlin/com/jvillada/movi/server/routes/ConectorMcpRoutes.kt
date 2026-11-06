@@ -6,6 +6,8 @@ import com.jvillada.movi.server.conector.ServidorMcp
 import com.jvillada.movi.server.conector.accesoDelToken
 import com.jvillada.movi.server.conector.anotarUso
 import com.jvillada.movi.server.conector.limitadorDelConector
+import com.jvillada.movi.server.conector.claveDeIp
+import com.jvillada.movi.server.conector.esIpDeAnthropic
 import com.jvillada.movi.server.conector.ejecutarHerramientaDelConector
 import com.jvillada.movi.server.db.LlamadasDelConector
 import com.jvillada.movi.server.db.dbQuery
@@ -70,10 +72,30 @@ private fun tokenDelEncabezado(valor: String?): String? {
     return v.substring(7).trim().takeIf { it.isNotEmpty() && it.length <= 200 }
 }
 
+/**
+ * M-a de la tercera revisión: cuántos 401 por minuto puede recibir una IP (o `/64`) antes de que `/mcp` deje de mirar la
+ * base por ella. Cuenta **solo los 401**: el tráfico bueno de Claude, que sale de unas pocas IP, no lo toca. Las IP de
+ * Anthropic tienen un tope más alto (un 401 es lo que dispara cada refresco de cada usuario de Claude).
+ */
+internal const val MAX_401_POR_MINUTO_POR_IP = 60
+internal const val MAX_401_POR_MINUTO_DE_ANTHROPIC = 1_200
+
 private suspend fun ApplicationCall.atenderMcp(ahora: Long) {
+    val ip = ipDelPedido(this)
+    val balde401 = "mcp401:ip:${claveDeIp(ip)}"
+    val tope401 = if (esIpDeAnthropic(ip)) MAX_401_POR_MINUTO_DE_ANTHROPIC else MAX_401_POR_MINUTO_POR_IP
+    if (limitadorDelConector.lleno(balde401, tope401, 60_000L, ahora)) {
+        response.header(HttpHeaders.RetryAfter, "60")
+        return respondText(
+            ServidorMcp.error(JsonNull, -32000, "Demasiados pedidos sin un token válido desde esta dirección. Espera un minuto y vuelve a conectar.").toString(),
+            ContentType.Application.Json,
+            HttpStatusCode.TooManyRequests,
+        )
+    }
     val token = tokenDelEncabezado(request.headers[HttpHeaders.Authorization])
-        ?: return pedirToken(conToken = false)
-    val acceso: AccesoDelConector = dbQuery { accesoDelToken(token, ahora) } ?: return pedirToken(conToken = true)
+        ?: return limitadorDelConector.anotar(balde401, ahora).let { pedirToken(conToken = false) }
+    val acceso: AccesoDelConector = dbQuery { accesoDelToken(token, ahora) }
+        ?: return limitadorDelConector.anotar(balde401, ahora).let { pedirToken(conToken = true) }
 
     if (!limitadorDelConector.permitir("mcp:${acceso.concesionId}", ConfigDelConector.LLAMADAS_POR_MINUTO, 60_000L)) {
         response.header(HttpHeaders.RetryAfter, "60")
