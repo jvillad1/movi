@@ -353,6 +353,29 @@ fun pagadoALaTarjetaEnElPeriodo(
     return if (delPeriodo.isEmpty()) null else delPeriodo.sumOf { it.amount }
 }
 
+/**
+ * Vuelta 133 · **la última cuota que se pagó de verdad** de la regla sintética de un crédito: la cuota
+ * más reciente que [pagosDeDeudaPorPeriodo] da por saldada y, de ella, la plata que salió de la cuenta
+ * ([plataQueSalio]: la cuota entera, seguros incluidos). Para [com.jvillada.movi.shared.model.cuotaDeEsteMes]
+ * de un crédito de cuota que cambia. `null` si no hay, o si [regla] no es de un crédito.
+ *
+ * Mira la misma franja que el resto de los pagos de deuda ([pagosDeDeudaAlrededorDe]): quien la llama
+ * pasa los mismos [pagos], así Pagos, la caja y la ficha estiman con la misma cuota.
+ */
+fun ultimaCuotaPagadaDe(
+    regla: RecurringRule,
+    pagos: List<FinancialEvent>,
+    graceDays: Int = DEFAULT_GRACE_DAYS,
+    zone: ZoneId = AppClock.zone,
+    settings: PeriodSettings = PeriodSettings(),
+): com.jvillada.movi.shared.model.CuotaPagada? {
+    if (!regla.id.startsWith(com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX)) return null
+    val porPeriodo = pagosDeDeudaPorPeriodo(listOf(regla), pagos, graceDays, zone, settings)[regla.id] ?: return null
+    val (periodo, pago) = porPeriodo.maxByOrNull { it.key } ?: return null
+    val plata = plataQueSalio(pago, pagos)
+    return com.jvillada.movi.shared.model.CuotaPagada(monto = plata.amount, periodo = periodo)
+}
+
 /** Lo mismo que [pagosDeDeudaPorPeriodo] pero en la forma que espera `dueDateFor`: solo periodos. */
 fun periodosSaldados(
     rules: List<RecurringRule>,

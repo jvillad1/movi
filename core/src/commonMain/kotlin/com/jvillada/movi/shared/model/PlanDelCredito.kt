@@ -1,6 +1,7 @@
 package com.jvillada.movi.shared.model
 
 import kotlin.math.absoluteValue
+import kotlin.math.pow
 import kotlin.math.round
 import kotlinx.serialization.Serializable
 
@@ -109,6 +110,21 @@ data class PlanDelCredito(
      * dice «Según el extracto» en vez de «Movi estima». Default `false` para un cliente viejo.
      */
     val interesDelExtracto: Boolean = false,
+    /**
+     * Vuelta 133 · **cómo se mueve la cuota** ([CreditTerms.tipoDeCuota]); `null` = fija, lo de siempre.
+     * Con él, la pantalla dice lo que el plan supone ([loQueSuponeElPlan]) y [cuota] es una estimación.
+     */
+    val tipoDeCuota: TipoDeCuota? = null,
+    /**
+     * Vuelta 133 · en un abono constante a capital, **la última cuota** del plan (la cuota baja cada mes:
+     * capital fijo más un interés cada vez menor). `null` en los demás, o si no se termina.
+     */
+    val cuotaAlFinal: Long? = null,
+    /**
+     * Vuelta 133 · en un crédito en UVR, **la cuota en pesos dentro de un año** con la inflación supuesta
+     * ([INFLACION_SUPUESTA_PARA_LA_UVR]). `null` en los demás.
+     */
+    val cuotaEnUnAno: Long? = null,
 ) {
     /**
      * Qué fracción de la cuota es **interés**, de 0 a 1, o `null` cuando no se puede saber (sin
@@ -341,7 +357,20 @@ fun planDeUnaDeuda(
      * hay con qué proyectar los meses siguientes, y un interés suelto no alcanza para afirmar nada.
      */
     interesRealDelMes: Long? = null,
+    /**
+     * Vuelta 133 · cómo se mueve la cuota ([CreditTerms.tipoDeCuota]). `null` o [TipoDeCuota.FIJA]: lo de
+     * siempre, exactamente. [TipoDeCuota.TASA_VARIABLE] proyecta igual que una fija, con la tasa de hoy
+     * (no se pronostica el índice). [TipoDeCuota.UVR] proyecta en pesos de hoy (la tasa es la de la UVR) y
+     * convierte los intereses a pesos corrientes con [inflacionAnual]. [TipoDeCuota.ABONO_CONSTANTE], con
+     * [capitalFijo], abona lo mismo a capital cada mes y la cuota baja.
+     */
+    tipoDeCuota: TipoDeCuota? = null,
+    /** Vuelta 133 · lo que se abona a capital cada mes en un abono constante (principal ÷ plazo). */
+    capitalFijo: Long? = null,
+    /** Vuelta 133 · la inflación anual (en %) que se supone para un crédito en UVR. */
+    inflacionAnual: Double = INFLACION_SUPUESTA_PARA_LA_UVR,
 ): PlanDelCredito {
+    val tipo = tipoDeCuota?.takeIf { it != TipoDeCuota.FIJA }
     val seguro = (seguroMensual ?: 0L).coerceAtLeast(0L)
     val otros = (otrosCargosMensuales ?: 0L).coerceAtLeast(0L)
     fun mudo(comoVa: ComoVaLaDeuda, interes: Long = 0L) = PlanDelCredito(
@@ -358,6 +387,7 @@ fun planDeUnaDeuda(
         interesPorPagar = null,
         saleDeTuBolsillo = saleDeTuBolsillo,
         sinIntereses = sinIntereses,
+        tipoDeCuota = tipo,
     )
 
     // **Primero el saldo**: sin deuda no hay interés que estimar ni plazo que proyectar, y el
@@ -375,6 +405,29 @@ fun planDeUnaDeuda(
     val saldo = saldoDeLaDeuda
     val delExtracto = interesRealDelMes?.takeIf { it >= 0L }
     val interes = delExtracto ?: interesDelPeriodo(saldo, tasaMensual)
+    // Vuelta 133 · **abono constante a capital**: lo que se abona cada mes es fijo y la cuota es eso más
+    // el interés del saldo (y los cargos), así que baja. No necesita la cuota escrita: sale del plan.
+    val fijo = capitalFijo?.takeIf { it > 0L }
+    if (tipo == TipoDeCuota.ABONO_CONSTANTE && fijo != null) {
+        val calendario = calendarioDeAbonoConstante(saldo, tasaMensual, fijo, seguro + otros, delExtracto)
+        val primera = calendario.first()
+        return PlanDelCredito(
+            saldo = saldo,
+            cuota = primera.total,
+            interes = primera.interes,
+            seguro = seguro,
+            otrosCargos = otros,
+            capital = primera.capital,
+            comoVa = ComoVaLaDeuda.AMORTIZA,
+            mesesHastaLaUltimaCuota = calendario.size,
+            interesPorPagar = calendario.sumOf { it.interes },
+            saleDeTuBolsillo = saleDeTuBolsillo,
+            sinIntereses = sinIntereses,
+            interesDelExtracto = delExtracto != null,
+            tipoDeCuota = tipo,
+            cuotaAlFinal = calendario.last().total,
+        )
+    }
     // Con tasa pero sin cuota el interés del mes SÍ se sabe, y decirlo no cuesta nada. Lo que no
     // hay es con qué proyectar. Ver [ComoVaLaDeuda.SIN_CUOTA].
     if (cuota <= 0L) return mudo(ComoVaLaDeuda.SIN_CUOTA, interes = interes)
@@ -389,8 +442,11 @@ fun planDeUnaDeuda(
         capital > 0L -> ComoVaLaDeuda.AMORTIZA
         else -> ComoVaLaDeuda.LA_DEUDA_CRECE
     }
+    // Vuelta 133: en UVR, la proyección es en pesos de hoy (la cuota en UVR es constante) y los intereses
+    // se pasan a pesos corrientes con la inflación supuesta. Sin UVR, la inflación es 0: lo de siempre.
+    val inflacionMensual = if (tipo == TipoDeCuota.UVR) inflacionMensualDe(inflacionAnual) else 0.0
     val proyeccion =
-        if (comoVa == ComoVaLaDeuda.AMORTIZA) proyectarLaDeuda(saldo, tasaMensual, cuota, seguro + otros, delExtracto) else null
+        if (comoVa == ComoVaLaDeuda.AMORTIZA) proyectarLaDeuda(saldo, tasaMensual, cuota, seguro + otros, delExtracto, inflacionMensual) else null
     return PlanDelCredito(
         saldo = saldo,
         cuota = cuota,
@@ -404,7 +460,50 @@ fun planDeUnaDeuda(
         saleDeTuBolsillo = saleDeTuBolsillo,
         sinIntereses = sinIntereses,
         interesDelExtracto = delExtracto != null,
+        tipoDeCuota = tipo,
+        cuotaEnUnAno = if (tipo == TipoDeCuota.UVR) cuotaEnUvrDentroDe(12, cuota, seguro + otros, inflacionMensual) else null,
     )
+}
+
+/** Vuelta 133 · la inflación mensual equivalente a [anual] (en %). */
+internal fun inflacionMensualDe(anual: Double): Double =
+    if (!anual.isFinite() || anual <= 0.0) 0.0 else (1.0 + anual / 100.0).pow(1.0 / 12.0) - 1.0
+
+/**
+ * Vuelta 133 · **la cuota en pesos de un crédito en UVR dentro de [meses]**: la parte que se mueve con la
+ * UVR (la cuota sin los cargos en pesos) crece con la inflación; los seguros y otros cargos, no (se
+ * liquidan en pesos y quedan como `insuranceMonthly`, fuera de esta vuelta).
+ */
+fun cuotaEnUvrDentroDe(meses: Int, cuota: Long, loQueNoAmortiza: Long, inflacionMensual: Double): Long {
+    val enUvr = (cuota - loQueNoAmortiza).coerceAtLeast(0L)
+    return kotlin.math.round(enUvr * (1.0 + inflacionMensual).pow(meses.toDouble())).toLong() + loQueNoAmortiza
+}
+
+/** Vuelta 133 · una cuota del calendario de un abono constante: capital, interés y la cuota entera (con cargos). */
+data class CuotaProyectada(val capital: Long, val interes: Long, val total: Long)
+
+/**
+ * Vuelta 133 · **el calendario de un abono constante a capital**: cada mes se abona [capitalFijo] (el
+ * último mes, lo que quede), el interés es el del saldo de ese mes y la cuota es capital + interés +
+ * [loQueNoAmortiza]. La suma de los capitales es exactamente [saldo]. Nunca vacío con un saldo positivo.
+ * Tope de [MAX_MESES_PROYECTADOS] meses.
+ */
+fun calendarioDeAbonoConstante(
+    saldo: Long,
+    tasaMensual: Double,
+    capitalFijo: Long,
+    loQueNoAmortiza: Long,
+    interesDelPrimerMes: Long? = null,
+): List<CuotaProyectada> {
+    val cuotas = mutableListOf<CuotaProyectada>()
+    var restante = saldo
+    while (restante > 0L && cuotas.size < MAX_MESES_PROYECTADOS) {
+        val interes = if (cuotas.isEmpty() && interesDelPrimerMes != null) interesDelPrimerMes else interesDelPeriodo(restante, tasaMensual)
+        val capital = minOf(capitalFijo, restante)
+        cuotas += CuotaProyectada(capital = capital, interes = interes, total = capital + interes + loQueNoAmortiza)
+        restante -= capital
+    }
+    return cuotas
 }
 
 /**
@@ -438,14 +537,25 @@ fun planDelCredito(
     return planDeUnaDeuda(
         saldoDeLaDeuda = credit.account.balance,
         rateEa = terms.rateEa,
-        cuota = terms.installment,
+        // Vuelta 133: la cuota de este mes (fija: la de siempre; la que cambia: la última pagada).
+        cuota = cuotaDeEsteMes(terms, credit.ultimaCuotaPagada),
         seguroMensual = terms.insuranceMonthly,
         otrosCargosMensuales = terms.otrosCargosMensuales,
         saleDeTuBolsillo = saleDeTuBolsillo(terms),
         sinIntereses = terms.sinIntereses,
         interesRealDelMes = terms.interesRealVigente(hoy),
+        tipoDeCuota = terms.tipoDeCuota,
+        capitalFijo = capitalFijoDe(terms),
     )
 }
+
+/**
+ * Vuelta 133 · **lo que un abono constante abona a capital cada mes**: lo prestado entre el plazo
+ * pactado. `null` si no es un abono constante o le falta el capital o el plazo (el plan cae a la cuota).
+ */
+fun capitalFijoDe(terms: CreditTerms): Long? =
+    if (terms.tipoDeCuota != TipoDeCuota.ABONO_CONSTANTE || terms.principal <= 0L || terms.termMonths <= 0) null
+    else terms.principal / terms.termMonths
 
 /**
  * El interés de un mes, con la **misma aritmética que [desglosarCuota]**: el único `Double` es la
@@ -473,6 +583,11 @@ private fun proyectarLaDeuda(
     loQueNoAmortiza: Long,
     /** El interés del primer mes, si lo dijo el extracto; los siguientes, con la tasa. */
     interesDelPrimerMes: Long? = null,
+    /**
+     * Vuelta 133 · en UVR, la inflación mensual: la proyección sigue en pesos de hoy y cada interés se
+     * pasa a pesos de su mes. 0 = sin UVR, exactamente lo de antes.
+     */
+    inflacionMensual: Double = 0.0,
 ): Proyeccion? {
     var restante = saldo
     var meses = 0
@@ -484,7 +599,8 @@ private fun proyectarLaDeuda(
         // baja el interés solo baja con él. Si algún día deja de ser cierto, se contesta «no se
         // termina» en vez de girar mil doscientas veces.
         if (capital <= 0L) return null
-        intereses += interes
+        intereses += if (inflacionMensual == 0.0) interes
+        else kotlin.math.round(interes * (1.0 + inflacionMensual).pow(meses.toDouble())).toLong()
         restante -= capital
         meses++
     }

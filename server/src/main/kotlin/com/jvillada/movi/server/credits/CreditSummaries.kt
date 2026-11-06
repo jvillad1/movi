@@ -45,4 +45,10 @@ fun ResultRow.toCreditTerms() = CreditTerms(
     interesReal = this[Credits.interesReal],
     interesRealCuota = this[Credits.interesRealCuota]?.takeIf { it.isNotBlank() },
     cuotasDesde = this[Credits.cuotasDesde]?.takeIf { it.isNotBlank() },
+    // Vuelta 133: un valor que no se entiende se lee como «fija», lo de siempre.
+    tipoDeCuota = this[Credits.tipoDeCuota]?.let { v -> runCatching { com.jvillada.movi.shared.model.TipoDeCuota.valueOf(v) }.getOrNull() }
+        ?.takeIf { it != com.jvillada.movi.shared.model.TipoDeCuota.FIJA },
+    indiceDeLaTasa = this[Credits.indiceDeLaTasa]?.let { v -> runCatching { com.jvillada.movi.shared.model.IndiceDeLaTasa.valueOf(v) }.getOrNull() },
+    puntosSobreElIndice = this[Credits.puntosSobreElIndice],
+    alCambiarLaTasa = this[Credits.alCambiarLaTasa]?.let { v -> runCatching { com.jvillada.movi.shared.model.AlCambiarLaTasa.valueOf(v) }.getOrNull() },
 )

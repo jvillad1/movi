@@ -21,6 +21,12 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.fx.FxRateService
 import com.jvillada.movi.server.reminders.ocurrenciaPorPreguntar
+import com.jvillada.movi.server.reminders.pagosDeDeudaAlrededorDe
+import com.jvillada.movi.server.reminders.ultimaCuotaPagadaDe
+import com.jvillada.movi.server.reminders.virtualRuleFor
+import com.jvillada.movi.server.credits.toCreditTerms
+import com.jvillada.movi.shared.model.cuotaCambia
+import com.jvillada.movi.shared.model.cuotaDeEsteMes
 import com.jvillada.movi.server.reminders.periodOf
 import com.jvillada.movi.server.time.AppClock
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
@@ -177,6 +183,12 @@ internal data class CreditoParaContexto(
      * Si el texto coincide con el comienzo del nombre de una cuenta suya, acá va ese nombre.
      */
     val loPagaCuentaPropia: String? = null,
+    /**
+     * Vuelta 133 · cómo se mueve la cuota (`CreditTerms.tipoDeCuota`); `null` = fija. Con él, [cuota] es la
+     * de [com.jvillada.movi.shared.model.cuotaDeEsteMes] —la última pagada de verdad— y el renglón dice
+     * «unos $X»: el asistente no puede afirmar una cuota que cambia como si fuera fija.
+     */
+    val tipoDeCuota: com.jvillada.movi.shared.model.TipoDeCuota? = null,
 ) {
     /** ¿La cuota sale de su cuenta? La misma regla que la pantalla de Créditos ([saleDeTuBolsillo]). */
     val saleDeSuBolsillo: Boolean get() = !porNomina && loPaga.isNullOrBlank()
@@ -196,6 +208,9 @@ internal data class CreditoParaContexto(
                 otrosCargosMensuales = otrosCargosMensuales,
                 saleDeTuBolsillo = saleDeSuBolsillo,
                 sinIntereses = sinIntereses,
+                // Vuelta 133: la UVR y la tasa variable proyectan como la pantalla (sin capital fijo acá:
+                // el contexto no lleva el principal; un abono constante se proyecta con su cuota).
+                tipoDeCuota = tipoDeCuota?.takeIf { it != com.jvillada.movi.shared.model.TipoDeCuota.ABONO_CONSTANTE },
             )
         }
 }
@@ -453,13 +468,22 @@ internal suspend fun contextoDelPeriodoDe(uid: String): ContextoDelPeriodo {
             )
         }
 
-        val creditos = Credits.selectAll().where { Credits.userId eq uid }.map { fila ->
+        // Vuelta 133: la última cuota pagada de los créditos de cuota que cambia (la misma de Pagos).
+        val filasDeCreditos = Credits.selectAll().where { Credits.userId eq uid }.toList()
+        val pagosDeDeuda = if (filasDeCreditos.none { it.toCreditTerms().cuotaCambia() }) emptyList()
+        else pagosDeDeudaAlrededorDe(uid, hoy)
+        val creditos = filasDeCreditos.map { fila ->
+            val condiciones = fila.toCreditTerms()
+            val nombre = nombreDeCuenta[fila[Credits.accountId]] ?: fila[Credits.accountId]
+            val ultima = if (!condiciones.cuotaCambia()) null
+            else ultimaCuotaPagadaDe(virtualRuleFor(condiciones, nombre), pagosDeDeuda, settings = ajustes)
             CreditoParaContexto(
                 accountId = fila[Credits.accountId],
                 cuenta = nombreDeCuenta[fila[Credits.accountId]] ?: fila[Credits.accountId],
                 banco = fila[Credits.bank],
                 tasaEa = fila[Credits.rateEa],
-                cuota = fila[Credits.installment],
+                cuota = cuotaDeEsteMes(condiciones, ultima),
+                tipoDeCuota = condiciones.tipoDeCuota?.takeIf { condiciones.cuotaCambia() },
                 plazoMeses = fila[Credits.termMonths],
                 dia = fila[Credits.dayOfMonth],
                 seguroMensual = fila[Credits.insuranceMonthly],
@@ -696,7 +720,10 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
 internal fun renglonDelCredito(c: CreditoParaContexto): String = buildString {
     append("- ${c.cuenta} (${c.banco}): ")
     c.saldo?.let { append("debe \$$it; ") }
-    append("cuota \$${c.cuota} el día ${c.dia}, ")
+    // Vuelta 133: una cuota que cambia es una estimación (la última que pagó), y se dice así.
+    val porQueCambia = c.tipoDeCuota?.let { com.jvillada.movi.shared.model.porQueCambiaLaCuota(it) }
+    if (porQueCambia != null) append("cuota de unos \$${c.cuota} el día ${c.dia} (no es fija: ${porQueCambia.replaceFirstChar { it.lowercase() }}; es la última que pagó), ")
+    else append("cuota \$${c.cuota} el día ${c.dia}, ")
     if (c.sinIntereses) append("NO cobra intereses") else append("tasa ${c.tasaEa} % EA")
     append(", plazo ${c.plazoMeses} meses")
     // **«Seguros», no «seguro de vida».** `insurance_monthly` guarda TODOS los seguros de la cuota:

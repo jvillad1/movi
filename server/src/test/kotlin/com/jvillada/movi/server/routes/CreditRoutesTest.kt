@@ -887,6 +887,80 @@ class CreditRoutesTest {
         assertTrue("payrollDeduction" in cuerpo, "sin la clave, la libranza no se puede desmarcar: $cuerpo")
     }
 
+    // ── Vuelta 133 · la cuota que cambia ───────────────────────────────────────────────────────────
+
+    private suspend fun ApplicationTestBuilder.terminosGuardados(): JsonObject {
+        val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}") }
+        return Json.parseToJsonElement(res.bodyAsText()).jsonArray[0].jsonObject["terms"]!!.jsonObject
+    }
+
+    @Test
+    fun `vuelta 133 · la hoja guarda la tasa variable, y un APK viejo que edita no la borra`() = testApplication {
+        wireApp()
+        val variable = terminosDelCliente.copy(
+            tipoDeCuota = com.jvillada.movi.shared.model.TipoDeCuota.TASA_VARIABLE,
+            indiceDeLaTasa = com.jvillada.movi.shared.model.IndiceDeLaTasa.IBR,
+            puntosSobreElIndice = 8.5,
+            alCambiarLaTasa = com.jvillada.movi.shared.model.AlCambiarLaTasa.CAMBIA_EL_PLAZO,
+        )
+        val cuerpo = Json.parseToJsonElement(cuerpoDelCliente(terminosDelCliente)).jsonObject
+        assertTrue("tipoDeCuota" in cuerpo && "puntosSobreElIndice" in cuerpo, "la hoja nueva manda las claves aunque valgan null: $cuerpo")
+        val guardado = client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpoDelCliente(variable))
+        }
+        assertEquals(HttpStatusCode.OK, guardado.status, guardado.bodyAsText())
+        // Un APK viejo edita el día de pago: su cuerpo no trae ninguna de las cuatro claves.
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson.replace("\"dayOfMonth\":5", "\"dayOfMonth\":7"))
+        }
+        val terms = terminosGuardados()
+        assertEquals(7, terms["dayOfMonth"]!!.jsonPrimitive.int)
+        assertEquals("TASA_VARIABLE", terms["tipoDeCuota"]!!.jsonPrimitive.content)
+        assertEquals("IBR", terms["indiceDeLaTasa"]!!.jsonPrimitive.content)
+        assertEquals(8.5, terms["puntosSobreElIndice"]!!.jsonPrimitive.double)
+        assertEquals("CAMBIA_EL_PLAZO", terms["alCambiarLaTasa"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `vuelta 133 · volver a cuota fija limpia todo, y otro tipo no arrastra los puntos`() = testApplication {
+        wireApp()
+        suspend fun guardar(t: CreditTerms) = client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(cuerpoDelCliente(t))
+        }
+        guardar(terminosDelCliente.copy(tipoDeCuota = com.jvillada.movi.shared.model.TipoDeCuota.TASA_VARIABLE, puntosSobreElIndice = 6.0))
+        guardar(terminosDelCliente.copy(tipoDeCuota = com.jvillada.movi.shared.model.TipoDeCuota.UVR, puntosSobreElIndice = 6.0))
+        val enUvr = terminosGuardados()
+        assertEquals("UVR", enUvr["tipoDeCuota"]!!.jsonPrimitive.content)
+        assertTrue(enUvr["puntosSobreElIndice"] == null || enUvr["puntosSobreElIndice"] is JsonNull, "los puntos son de la tasa variable: $enUvr")
+        guardar(terminosDelCliente)
+        val fija = terminosGuardados()
+        assertTrue(fija["tipoDeCuota"] == null || fija["tipoDeCuota"] is JsonNull, "«Sí, es siempre la misma» la deja fija: $fija")
+        // Unos puntos sin sentido se rechazan, en el PUT como en el alta.
+        assertEquals(
+            HttpStatusCode.BadRequest,
+            guardar(terminosDelCliente.copy(tipoDeCuota = com.jvillada.movi.shared.model.TipoDeCuota.TASA_VARIABLE, puntosSobreElIndice = 45.0)).status,
+        )
+    }
+
+    @Test
+    fun `vuelta 133 · un credito viejo sin los campos se lee como siempre`() = testApplication {
+        wireApp()
+        client.put("/api/credits/$loanAccountId") {
+            header(HttpHeaders.Authorization, "Bearer ${tokenFor(userAId)}")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody(validTermsJson)
+        }
+        val terms = terminosGuardados()
+        assertTrue(terms["tipoDeCuota"] == null || terms["tipoDeCuota"] is JsonNull)
+        assertEquals(validTermsJson.substringAfter("\"installment\":").substringBefore(",").toLong(), terms["installment"]!!.jsonPrimitive.long)
+    }
+
     @Test
     fun `un cliente nuevo SI puede borrar el seguro desde la hoja`() = testApplication {
         // La otra mitad, y es la que hace útil a la de arriba: si «ausente» y «null» se trataran

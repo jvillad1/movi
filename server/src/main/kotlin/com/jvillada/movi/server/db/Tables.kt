@@ -1131,6 +1131,16 @@ object Credits : Table("credit_terms") {
      * de arriba: `ADD COLUMN … NULL` no puede fallar sobre los créditos que ya están.
      */
     val cuotasDesde = varchar("cuotas_desde", 10).nullable()
+
+    /**
+     * Vuelta 133 · cómo se mueve la cuota (`CreditTerms.tipoDeCuota`: el nombre del enum; `null` = fija) y,
+     * con tasa variable, el índice, los puntos y qué cambia al reajustarse. Nullable por lo mismo que las
+     * de arriba: `ADD COLUMN … NULL` no puede fallar sobre los créditos que ya están, y ahí todo queda fijo.
+     */
+    val tipoDeCuota = varchar("tipo_de_cuota", 20).nullable()
+    val indiceDeLaTasa = varchar("indice_de_la_tasa", 10).nullable()
+    val puntosSobreElIndice = double("puntos_sobre_el_indice").nullable()
+    val alCambiarLaTasa = varchar("al_cambiar_la_tasa", 20).nullable()
     val accountId          = varchar("account_id", 50)   // 1:1 con cuenta LOAN
     val userId             = varchar("user_id", 50)
     val bank               = varchar("bank", 80)

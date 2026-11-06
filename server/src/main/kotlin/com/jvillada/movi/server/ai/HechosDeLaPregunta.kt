@@ -259,7 +259,7 @@ private fun hechosDeLaCuenta(cuenta: Account, datos: DatosParaLosHechos): String
     cuenta.condicionadaA?.let { appendLine("- NO es plata disponible: solo se puede usar para $it") }
     val cuotasQuePaga = datos.periodo.creditos.filter { it.loPagaCuentaPropia == cuenta.name }
     if (cuotasQuePaga.isNotEmpty()) {
-        appendLine("- De esta cuenta sale la cuota de: " + cuotasQuePaga.joinToString("; ") { "«${it.cuenta}» (${pesos(it.cuota)} al mes)" })
+        appendLine("- De esta cuenta sale la cuota de: " + cuotasQuePaga.joinToString("; ") { "«${it.cuenta}» (${if (it.tipoDeCuota != null) "unos " else ""}${pesos(it.cuota)} al mes)" })
     }
     val gastos = datos.periodo.gastos.filter { it.cuenta == cuenta.name }
     if (gastos.isNotEmpty()) {

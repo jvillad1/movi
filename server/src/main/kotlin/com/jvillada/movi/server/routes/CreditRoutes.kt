@@ -85,6 +85,11 @@ import com.jvillada.movi.shared.model.desglosarCuotaRegistrada
 import com.jvillada.movi.shared.model.signedDelta
 import com.jvillada.movi.shared.model.validarInteresReal
 import com.jvillada.movi.shared.model.validarTasaDelCredito
+import com.jvillada.movi.shared.model.validarLaCuotaQueCambia
+import com.jvillada.movi.shared.model.cuotaCambia
+import com.jvillada.movi.server.reminders.ultimaCuotaPagadaDe
+import com.jvillada.movi.server.reminders.pagosDeDeudaAlrededorDe
+import com.jvillada.movi.shared.model.conLaCuotaQueCambiaLimpia
 import com.jvillada.movi.shared.model.validarDebitoAutomatico
 import io.ktor.http.ContentType
 import io.ktor.server.request.contentType
@@ -216,6 +221,7 @@ fun Route.creditRoutes() {
                 .let { it.copy(dayOfMonth = it.dayOfMonth.coerceIn(1, 31)) }
             // La misma regla que apaga el botón de la hoja. Ver `validarTasaDelCredito`.
             validarTasaDelCredito(terms)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
+            validarLaCuotaQueCambia(terms)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
             dbQuery { motivoDelDebitoAutomatico(uid, terms, cuentaAlAbrir.currency) }
                 ?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
             val opening = openingEventFor(cuentaAlAbrir, now = System.currentTimeMillis())
@@ -372,8 +378,16 @@ fun Route.creditRoutes() {
                 // Vuelta 77: desde cuándo corren las cuotas lo escribe el alta («ya pagué la cuota de este
                 // período»), no la hoja de condiciones, que no lo manda: sin la clave se conserva.
                 .let { if ("cuotasDesde" in crudo) it else it.copy(cuotasDesde = previo?.cuotasDesde) }
+                // Vuelta 133: la cuota que cambia la escribe la hoja nueva, que manda las cuatro claves
+                // siempre; un APK que no las conoce no manda ninguna y se conserva lo guardado (cada una
+                // por su clave, como `pagoMinimo`).
+                .let { if ("tipoDeCuota" in crudo) it else it.copy(tipoDeCuota = previo?.tipoDeCuota) }
+                .let { if ("indiceDeLaTasa" in crudo) it else it.copy(indiceDeLaTasa = previo?.indiceDeLaTasa) }
+                .let { if ("puntosSobreElIndice" in crudo) it else it.copy(puntosSobreElIndice = previo?.puntosSobreElIndice) }
+                .let { if ("alCambiarLaTasa" in crudo) it else it.copy(alCambiarLaTasa = previo?.alCambiarLaTasa) }
             // Crear y editar validan igual: la misma función que el alta y que la hoja.
             validarTasaDelCredito(body)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
+            validarLaCuotaQueCambia(body)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
             dbQuery { motivoDelDebitoAutomatico(uid, body, account.currency) }
                 ?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
             // upsert atómico por PK (accountId): elimina la carrera check-then-insert.
@@ -735,6 +749,12 @@ private fun fillTerms(
     it[Credits.interesRealCuota] = terms.interesRealCuota?.takeIf { v -> Regex("""\d{4}-\d{2}""").matches(v) }
     // Vuelta 77: solo una fecha ISO legible; lo demás se guarda como «desde el desembolso».
     it[Credits.cuotasDesde] = terms.cuotasDesde?.trim()?.takeIf { v -> runCatching { LocalDate.parse(v) }.isSuccess }
+    // Vuelta 133: la cuota que cambia, limpia (fija = null; los datos de la tasa variable, solo con ella).
+    val cambia = terms.conLaCuotaQueCambiaLimpia()
+    it[Credits.tipoDeCuota] = cambia.tipoDeCuota?.name
+    it[Credits.indiceDeLaTasa] = cambia.indiceDeLaTasa?.name
+    it[Credits.puntosSobreElIndice] = cambia.puntosSobreElIndice
+    it[Credits.alCambiarLaTasa] = cambia.alCambiarLaTasa?.name
 }
 
 private fun summaryFor(
@@ -817,12 +837,18 @@ internal suspend fun creditosDe(uid: String): List<CreditSummary> {
     val hoy = AppClock.today()
     // El período del dueño: decide qué cuota salda cada pago, igual que en `/api/payments/occurrences`.
     val periodo = ajustesDePeriodoDe(uid)
+    // Vuelta 133: los pagos de deuda de la MISMA franja que Pagos (`pagosDeDeudaAlrededorDe`), para la
+    // última cuota pagada de un crédito de cuota que cambia; solo si hay alguno.
+    val pagosDeDeuda = if (termsByAccount.values.none { it.cuotaCambia() }) emptyList()
+    else dbQuery { pagosDeDeudaAlrededorDe(uid, hoy) }
     return loans.map { acc ->
         val terms = termsByAccount[acc.id]
         val eventos = eventsByAccount[acc.id] ?: emptyList()
         summaryFor(acc, terms, eventos, rate).copy(
             cuotasPagadas = terms?.let { cuotasPagadasAlrededorDe(eventos, it, acc.name, hoy, periodo) },
             saldoFijadoEn = saldoFijadoEn(eventos),
+            ultimaCuotaPagada = terms?.takeIf { it.cuotaCambia() }
+                ?.let { ultimaCuotaPagadaDe(virtualRuleFor(it, acc.name), pagosDeDeuda, settings = periodo) },
         )
     }
 }
