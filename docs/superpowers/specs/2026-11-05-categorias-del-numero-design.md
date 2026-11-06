@@ -165,14 +165,14 @@ La app no calcula nada: pinta lo que llega en `categoriasDelNumero`.
   principal es vincular un movimiento que ya existía.
 - **Plataformas**: Revisar aviso es `commonMain`: llega igual a la web, al Android y al iPhone.
 
-## Pregunta abierta (la decide el dueño antes del plan)
+## «Confirmar los N» (decidido 5-nov, con la propuesta)
 
-- **«Confirmar los N»**: un aviso cuyo número tiene un nombre (un tercero guardado) se puede
-  confirmar en la tarjeta y hoy entra al lote, que lo confirma callado con la categoría más
-  frecuente: justo el error que William no quiere. Propuesta: que un aviso cuyo número tiene 2 o
-  más categorías salga del lote y se confirme uno por uno, salvo que la categoría venga del mismo
-  monto de la vez pasada (`conElMotivoDelEnvio`). Costo: algunos que antes pasaban solos se
-  confirman a mano. **Sin respuesta todavía**: no planear hasta que la tenga.
+- Un aviso cuyo número tiene un nombre (un tercero guardado) se puede confirmar en la tarjeta y
+  entraba al lote, que lo confirmaba callado con la categoría más frecuente: justo el error que
+  William no quiere. **Un aviso con 2 o más categorías del número sale del lote** y se confirma uno
+  por uno, **salvo** que la categoría venga del mismo monto de la vez pasada
+  (`conElMotivoDelEnvio`, que lo marca en `ParsedSms.porElMismoMonto`). Costo aceptado: algunos que
+  antes pasaban solos se confirman a mano. El dueño pidió llevarlo a la app sin cambiar la propuesta.
 
 ## Lo que queda para el builder
 
