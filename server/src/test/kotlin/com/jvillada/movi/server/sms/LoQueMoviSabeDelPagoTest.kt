@@ -70,6 +70,38 @@ class LoQueMoviSabeDelPagoTest {
         assertNull(loQueMoviSabeDelPago(pago("Banco de Occidente", CUOTA_CATEGORY, monto = 1.0), cuentas + dos.last().cuenta, dos, emptyList(), emptyList()).deudaSugeridaId)
     }
 
+    /** Vuelta 134 (M-8): la cuota de un crédito que cambia es una estimación; se reconoce de cerca, no al peso. */
+    @Test
+    fun `una cuota que cambia desempata de cerca y una fija sigue exacta`() {
+        val otro = cuenta("vehiculo2", "Otro carro", AccountType.LOAN)
+        val dos = listOf(
+            DeudaDelDueno(vehiculo, banco = "Banco de Occidente", cuota = 4_178_163, cuotaEstimada = true),
+            DeudaDelDueno(otro, banco = "Banco de Occidente", cuota = 900_000),
+        )
+        assertEquals("vehiculo", loQueMoviSabeDelPago(pago("Banco de Occidente", CUOTA_CATEGORY, monto = 4_050_000.0), cuentas + otro, dos, emptyList(), emptyList()).deudaSugeridaId)
+        assertEquals("vehiculo2", loQueMoviSabeDelPago(pago("Banco de Occidente", CUOTA_CATEGORY, monto = 900_000.0), cuentas + otro, dos, emptyList(), emptyList()).deudaSugeridaId)
+        assertNull(loQueMoviSabeDelPago(pago("Banco de Occidente", CUOTA_CATEGORY, monto = 910_000.0), cuentas + otro, dos, emptyList(), emptyList()).deudaSugeridaId)
+    }
+
+    /**
+     * Revisión de la vuelta 134 (I-1) · un crédito fijo se reconoce exactamente como antes, aunque al lado haya
+     * uno que cambia con una cuota a menos del 10 %: |1.080.500 − 980.000| = 100.500 ≤ 108.050.
+     */
+    @Test
+    fun `un credito fijo exacto gana aunque otro que cambia este cerca`() {
+        val carro = cuenta("v4083", "Vehículo 4083", AccountType.LOAN)
+        val libre = cuenta("l9695", "Libre inversión 9695", AccountType.LOAN)
+        val dos = listOf(
+            DeudaDelDueno(carro, banco = "Bancolombia", cuota = 980_000),
+            DeudaDelDueno(libre, banco = "Bancolombia", cuota = 1_080_500, cuotaEstimada = true),
+        )
+        fun deuda(monto: Double) = loQueMoviSabeDelPago(pago("Bancolombia", CUOTA_CATEGORY, monto = monto), cuentas + carro + libre, dos, emptyList(), emptyList()).deudaSugeridaId
+        assertEquals("v4083", deuda(980_000.0), "la fija, exacta, como antes")
+        assertEquals("l9695", deuda(1_100_000.0), "nadie calza exacto: la que cambia, de cerca")
+        assertEquals("l9695", deuda(1_080_500.0))
+        assertNull(deuda(1_300_000.0), "lejos de las dos: ninguna")
+    }
+
     @Test
     fun `una cuota que paga otro no se propone`() {
         val ajena = listOf(DeudaDelDueno(vehiculo, banco = "Banco de Occidente", cuota = 4_178_163, noLaPagaEl = true))

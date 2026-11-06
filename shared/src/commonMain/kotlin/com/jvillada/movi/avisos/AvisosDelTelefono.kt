@@ -149,7 +149,12 @@ fun vencimientosParaAvisar(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo
  * corrigió en el correo y en la push del server.
  */
 fun montoDelVencimiento(pago: PagoDelPeriodo): String? =
-    if (pago.montoEsSaldo) null else montoParaElAviso(pago.monto.toDouble(), pago.moneda)
+    if (pago.montoEsSaldo) null
+    // Vuelta 134: la cuota de un crédito que cambia es una estimación («Mañana vence Cuota X unos $1.262.300»).
+    else com.jvillada.movi.shared.model.conUnosSiEsEstimada(
+        montoParaElAviso(pago.monto.toDouble(), pago.moneda),
+        com.jvillada.movi.shared.model.laCifraDelPagoEsEstimada(pago),
+    )
 
 private fun cuandoVence(pago: PagoDelPeriodo): String = if (pago.diasParaVencer <= 0) "Hoy" else "Mañana"
 

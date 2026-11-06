@@ -4,6 +4,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
@@ -140,5 +141,42 @@ class HojaDeCondicionesCuotaQueCambiaTest {
         assertTrue(nodos(TAG_PUNTOS_SOBRE_EL_IBR).isEmpty(), "los puntos son solo de la tasa variable")
         tocar(TAG_LA_CUOTA_ES_FIJA)
         assertNull(guardar().tipoDeCuota)
+    }
+
+    // ── Vuelta 134 (M-7) · los puntos con coma y el índice que se elige ──────────────────────────
+
+    private fun textoDeLosPuntos(): String {
+        val campo = composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(TAG_PUNTOS_SOBRE_EL_IBR)), useUnmergedTree = true)
+            .fetchSemanticsNode()
+        return campo.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.EditableText)?.text.orEmpty()
+    }
+
+    @Test
+    fun `al editar, los puntos se ven con coma y otro indice se conserva`() {
+        montar(condiciones.copy(tipoDeCuota = TipoDeCuota.TASA_VARIABLE, indiceDeLaTasa = IndiceDeLaTasa.OTRO, puntosSobreElIndice = 8.5))
+        assertEquals("8,5", textoDeLosPuntos(), "en español: coma decimal")
+        assertEquals(1, nodos(tagDelIndice(IndiceDeLaTasa.OTRO)).size, "la hoja ofrece «Otro índice»")
+        composeRule.onNodeWithText(PUNTOS_SOBRE_OTRO_INDICE, useUnmergedTree = true).assertExists()
+        val terms = guardar()
+        assertEquals(IndiceDeLaTasa.OTRO, terms.indiceDeLaTasa, "un crédito guardado con otro índice no se reescribe a IBR")
+        assertEquals(8.5, terms.puntosSobreElIndice)
+    }
+
+    @Test
+    fun `los puntos se leen con punto tambien, y se puede cambiar de indice`() {
+        montar(condiciones.copy(tipoDeCuota = TipoDeCuota.TASA_VARIABLE))
+        tocar(tagDelIndice(IndiceDeLaTasa.OTRO))
+        composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag(TAG_PUNTOS_SOBRE_EL_IBR)), useUnmergedTree = true).performTextInput("9.25")
+        assertEquals("9,25", textoDeLosPuntos(), "escrito con punto, se ve con coma")
+        val terms = guardar()
+        assertEquals(9.25, terms.puntosSobreElIndice)
+        assertEquals(IndiceDeLaTasa.OTRO, terms.indiceDeLaTasa)
+    }
+
+    @Test
+    fun `la ficha dice el indice que es`() {
+        val otro = condiciones.copy(tipoDeCuota = TipoDeCuota.TASA_VARIABLE, indiceDeLaTasa = IndiceDeLaTasa.OTRO, puntosSobreElIndice = 8.0)
+        assertEquals("La tasa es variable (índice + puntos) · Otro índice + 8", lineasDeLaCuotaQueCambia(otro, null, plan = null).first())
+        assertEquals("8,5", puntosConComa(8.5))
     }
 }

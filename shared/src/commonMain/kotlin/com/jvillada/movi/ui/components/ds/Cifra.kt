@@ -6,7 +6,10 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,6 +23,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import com.jvillada.movi.theme.ColoresDeMovi
+import com.jvillada.movi.theme.Espacio
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.theme.TextosDeMovi
 import com.jvillada.movi.ui.components.LocalSaldosOcultos
@@ -273,5 +277,78 @@ fun Cifra(
         )
     } else {
         BasicText(text = texto, modifier = conTag, style = estilo, maxLines = 1)
+    }
+}
+
+/** Tag de «unos» delante de una [CifraEstimada]. */
+const val TAG_UNOS_DE_LA_CIFRA: String = "ds-cifra:unos"
+
+/**
+ * Vuelta 134 · **una cifra que es una estimación se dice estimada**: con [estimada], «unos» en `apoyo`
+ * delante de la [Cifra] —la cuota de un crédito que cambia, con la regla única
+ * `laCifraDelPagoEsEstimada`—. Sin [estimada], la [Cifra] tal cual, sin nada alrededor: un pago de siempre
+ * no cambia ni un dp. Ver [ConUnos], que es donde se arma.
+ */
+@Composable
+fun CifraEstimada(
+    monto: Long,
+    estimada: Boolean,
+    variante: VarianteDeCifra = VarianteDeCifra.Fila,
+    modifier: Modifier = Modifier,
+    moneda: String = "COP",
+    /** Ver [ConUnos]: «unos» encima de la cifra, para el final de una [Fila]. */
+    apilado: Boolean = false,
+) {
+    // El [modifier] de quien llama (su tag, su padding) va en una caja alrededor y **nunca en el nodo de la
+    // [Cifra]**: en el mismo nodo, el tag de quien llama tapaba [TAG_CIFRA], y las guardas del sistema (que
+    // cuentan las cifras y miden que se vean enteras) dejaban de verla (CI de la vuelta 134).
+    if (!estimada) {
+        androidx.compose.foundation.layout.Box(modifier) { Cifra(monto, variante, moneda = moneda) }
+        return
+    }
+    ConUnos(estimada = true, modifier = modifier, apilado = apilado) { Cifra(monto, variante, moneda = moneda) }
+}
+
+/**
+ * Revisión de la vuelta 134 (m-5) · **el único lugar de la app donde se arma «unos» + cifra.** [cifra] es la
+ * pieza del monto que use cada lugar ([Cifra], el monto de la fila de Pagos, la cifra de «Lo que más pesa»).
+ * Con [estimada], «unos» en `apoyo` y `textoMedio` delante, en un renglón que se parte (`FlowRow`): a 360 dp
+ * con la letra a ×1,456, al lado de un botón, la cifra baja entera al renglón de abajo en vez de achicarse de
+ * más o salirse de su caja. Sin [estimada], [cifra] tal cual ([modifier] solo envuelve el renglón con «unos»).
+ * Con [apilado], «unos» va encima de la cifra, alineado al final: en el final de una [Fila] (la campana) el
+ * renglón le quitaba al título el ancho que necesita. Los textos planos usan `conUnosSiEsEstimada` (`:core`),
+ * con la misma palabra.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun ConUnos(estimada: Boolean, modifier: Modifier = Modifier, apilado: Boolean = false, cifra: @Composable () -> Unit) {
+    if (!estimada) {
+        cifra()
+        return
+    }
+    if (apilado) {
+        androidx.compose.foundation.layout.Column(modifier = modifier, horizontalAlignment = Alignment.End) {
+            Text(
+                com.jvillada.movi.shared.model.UNOS,
+                style = Movi.textos.apoyo,
+                color = Movi.colores.textoMedio,
+                modifier = Modifier.testTag(TAG_UNOS_DE_LA_CIFRA),
+            )
+            cifra()
+        }
+        return
+    }
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(Espacio.xxs),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            com.jvillada.movi.shared.model.UNOS,
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.testTag(TAG_UNOS_DE_LA_CIFRA),
+        )
+        cifra()
     }
 }

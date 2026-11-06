@@ -12,6 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.jvillada.movi.shared.model.AlCambiarLaTasa
+import com.jvillada.movi.shared.model.IndiceDeLaTasa
+import com.jvillada.movi.shared.model.rotuloDelIndice
 import com.jvillada.movi.shared.model.TipoDeCuota
 import com.jvillada.movi.shared.model.porQueCambiaLaCuota
 import com.jvillada.movi.shared.model.rotuloDeAlCambiarLaTasa
@@ -42,6 +44,16 @@ const val POR_QUE_CAMBIA: String = "¿Por qué cambia?"
 
 /** El rótulo de los puntos y la pregunta de qué cambia. */
 const val PUNTOS_SOBRE_EL_IBR: String = "¿Cuántos puntos sobre el IBR? (opcional)"
+
+/** Vuelta 134 (M-7): con «Otro índice», los puntos son sobre ese índice. */
+const val PUNTOS_SOBRE_OTRO_INDICE: String = "¿Cuántos puntos sobre el índice? (opcional)"
+
+/** Vuelta 134 (M-7): sobre qué índice es la tasa variable. */
+const val PREGUNTA_DEL_INDICE: String = "¿Sobre qué índice?"
+
+/** El rótulo del campo de los puntos, según el índice. */
+fun rotuloDeLosPuntos(indice: IndiceDeLaTasa): String =
+    if (indice == IndiceDeLaTasa.OTRO) PUNTOS_SOBRE_OTRO_INDICE else PUNTOS_SOBRE_EL_IBR
 const val QUE_CAMBIA_AL_REAJUSTAR: String = "Cuando cambia la tasa, ¿cambia la cuota o el plazo?"
 
 /** La ayuda debajo de las razones, según la elegida. */
@@ -60,6 +72,7 @@ const val TAG_LA_CUOTA_ES_FIJA: String = "credito:cuota-fija"
 const val TAG_LA_CUOTA_CAMBIA: String = "credito:cuota-cambia"
 fun tagDelPorQue(tipo: TipoDeCuota): String = "credito:por-que-cambia:${tipo.name}"
 fun tagDeAlCambiar(que: AlCambiarLaTasa): String = "credito:al-cambiar:${que.name}"
+fun tagDelIndice(indice: IndiceDeLaTasa): String = "credito:indice:${indice.name}"
 const val TAG_PUNTOS_SOBRE_EL_IBR: String = "credito:puntos-sobre-el-ibr"
 
 /** Las razones, en el orden de la hoja. */
@@ -79,6 +92,9 @@ internal fun PreguntaDeLaCuotaQueCambia(
     alCambiar: AlCambiarLaTasa?,
     onAlCambiar: (AlCambiarLaTasa) -> Unit,
     habilitada: Boolean,
+    /** Vuelta 134 (M-7): el índice de la tasa variable, con «IBR · Otro índice». */
+    indice: IndiceDeLaTasa = IndiceDeLaTasa.IBR,
+    onIndice: (IndiceDeLaTasa) -> Unit = {},
     campoDeLosPuntos: @Composable () -> Unit,
 ) {
     val cambia = tipo != TipoDeCuota.FIJA
@@ -123,6 +139,22 @@ internal fun PreguntaDeLaCuotaQueCambia(
             Text(ayudaDeLaCuotaQueCambia(tipo), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         }
         if (tipo == TipoDeCuota.TASA_VARIABLE) {
+            Spacer(Modifier.height(Espacio.s))
+            RotuloDeCampo(PREGUNTA_DEL_INDICE)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+                verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+            ) {
+                IndiceDeLaTasa.entries.forEach { este ->
+                    PildoraDeFiltro(
+                        rotuloDelIndice(este),
+                        seleccionada = indice == este,
+                        onClick = { if (habilitada && indice != este) onIndice(este) },
+                        modifier = Modifier.testTag(tagDelIndice(este)),
+                    )
+                }
+            }
             Spacer(Modifier.height(Espacio.s))
             campoDeLosPuntos()
             Spacer(Modifier.height(Espacio.s))

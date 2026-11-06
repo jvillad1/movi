@@ -246,6 +246,12 @@ internal fun TarjetaDelMismoPago(
      * Bancolombia ·8133 a Nu», ver `LoQueMoviEntendio.titulo`). Sin esto, el comercio de siempre.
      */
     titulo: String? = null,
+    /**
+     * Vuelta 134 · «¿A cuántas cuotas? · Elegir» de una compra con tarjeta avisada varias veces: el mismo
+     * renglón de la tarjeta de un aviso suelto ([RenglonDeLasCuotas]). Viaja en el movimiento de
+     * `…/grupo/{id}/confirmar`, que ya guarda las cuotas. No bloquea «Confirmar».
+     */
+    cuotasDelAviso: CuotasDelAviso? = null,
 ) {
     var abiertos by remember { mutableStateOf(false) }
     val yaAnotadoCon = avisos.firstNotNullOfOrNull { it.yaAnotadoCon }?.let { id -> avisos.firstOrNull { it.id == id } }
@@ -297,6 +303,10 @@ internal fun TarjetaDelMismoPago(
             tamano = TamanoDeBoton.S,
         )
         if (confirmable && !conLoEntendido) LineaDeLoEntendido(entendido!!)
+        // Vuelta 134: como la tarjeta de un aviso suelto, un renglón fijo (no salta) que no bloquea nada.
+        if (confirmable && yaAnotado == null && cuotasDelAviso != null) {
+            RenglonDeLasCuotas(cuotasDelAviso, habilitado = !trabajando)
+        }
     }
 }
 

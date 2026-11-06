@@ -74,7 +74,18 @@ fun esCuotaQueSeComparaConLaPactada(terms: CreditTerms): Boolean = !terms.cuotaC
  * cuota (lo que salió de la cuenta, seguros incluidos), y la cuota que saldó (`"2026-10"`).
  */
 @Serializable
-data class CuotaPagada(val monto: Long, val periodo: String)
+data class CuotaPagada(
+    val monto: Long,
+    val periodo: String,
+    /**
+     * Revisión de la vuelta 134 (m-4) · lo que salió en ese período cuando cubrió más de una cuota (un giro que
+     * pagó dos atrasadas): [monto] es la cuota (lo pagado entre las cuotas), esto lo que de verdad salió.
+     * `null` con una sola cuota (lo de siempre).
+     */
+    val pagadoEnElPeriodo: Long? = null,
+    /** Cuántas cuotas cubrió el período, cuando fueron más de una; `null` con una. */
+    val cuotasEnElPeriodo: Int? = null,
+)
 
 /**
  * Lo que viaja con la cuota de un crédito de cuota que cambia, en la regla sintética de Pagos
@@ -118,7 +129,7 @@ fun mesDeLaCuotaPagada(periodo: String): String? {
  * crédito; el server, Movi AI. Pura.
  */
 fun textoDeLaCuotaQueCambia(monto: Long, anterior: CuotaPagada?): String {
-    val base = "unos ${pesos(monto)}"
+    val base = conUnosSiEsEstimada(pesos(monto), estimada = true)
     val delMes = anterior?.takeIf { it.monto > 0L }?.let { a -> mesDeLaCuotaPagada(a.periodo)?.let { it to a.monto } }
     return when {
         delMes == null -> base
@@ -129,12 +140,31 @@ fun textoDeLaCuotaQueCambia(monto: Long, anterior: CuotaPagada?): String {
 }
 
 /**
+ * Vuelta 134 (M-2) · **lo que va delante de una cifra estimada**: «unos $1.262.300». Una sola palabra para
+ * la fila de Pagos, «Próximo pago», el widget «Falta por pagar», «Movi propone hoy», la campana, el aviso
+ * del teléfono y la página compartida.
+ */
+const val UNOS: String = "unos"
+
+/**
+ * Vuelta 134 (M-2) · **¿la cifra de [pago] es una estimación?** Solo la cuota de un crédito que cambia
+ * ([PagoDelPeriodo.cuotaQueCambia]: su monto es [cuotaDeEsteMes], la última pagada) mientras está
+ * pendiente: pagada, lo que se muestra es lo que salió de verdad. Es **la** regla: ningún lado decide
+ * por su cuenta si dice «unos». Pura.
+ */
+fun laCifraDelPagoEsEstimada(pago: PagoDelPeriodo): Boolean =
+    pago.cuotaQueCambia != null && !pago.hecho && !pago.montoEsSaldo
+
+/** «unos $1.262.300» si [estimada]; si no, [cifra] tal cual. Para los textos planos (avisos, página). */
+fun conUnosSiEsEstimada(cifra: String, estimada: Boolean): String = if (estimada) "$UNOS $cifra" else cifra
+
+/**
  * **«tu cuota es $X» o «tu cuota es de unos $X»**: el monto de la cuota de [terms] como lo dicen los textos
  * de Créditos y Movi AI. Fija, la cifra tal cual; cambiante, con «unos». Pura.
  */
 fun cuotaEnPalabras(terms: CreditTerms, ultimaPagada: CuotaPagada?): String {
     val monto = cuotaDeEsteMes(terms, ultimaPagada)
-    return if (terms.cuotaCambia()) "unos ${pesos(monto)}" else pesos(monto)
+    return conUnosSiEsEstimada(pesos(monto), terms.cuotaCambia())
 }
 
 /** «La tasa es variable (IBR + puntos)», «Está en UVR», «Baja cada mes (abono constante a capital)». */
@@ -143,6 +173,25 @@ fun porQueCambiaLaCuota(tipo: TipoDeCuota): String? = when (tipo) {
     TipoDeCuota.TASA_VARIABLE -> "La tasa es variable (IBR + puntos)"
     TipoDeCuota.UVR -> "Está en UVR"
     TipoDeCuota.ABONO_CONSTANTE -> "Baja cada mes (abono constante a capital)"
+}
+
+/**
+ * Vuelta 134 (M-7) · el nombre del índice de una tasa variable: «IBR» u «Otro índice». La hoja lo ofrece
+ * (con «Otro índice» un crédito guardado así ya no se reescribe a IBR al editar) y la ficha lo dice.
+ */
+fun rotuloDelIndice(indice: IndiceDeLaTasa?): String = when (indice) {
+    IndiceDeLaTasa.OTRO -> "Otro índice"
+    IndiceDeLaTasa.IBR, null -> "IBR"
+}
+
+/**
+ * Vuelta 134 (M-7) · [porQueCambiaLaCuota] de un crédito en particular: con tasa variable sobre otro índice,
+ * «La tasa es variable (índice + puntos)», no «IBR + puntos».
+ */
+fun porQueCambiaLaCuotaDe(terms: CreditTerms): String? {
+    val tipo = terms.tipoDeCuota ?: return null
+    return if (tipo == TipoDeCuota.TASA_VARIABLE && terms.indiceDeLaTasa == IndiceDeLaTasa.OTRO) "La tasa es variable (índice + puntos)"
+    else porQueCambiaLaCuota(tipo)
 }
 
 /** El rótulo corto de cada respuesta a «Cuando cambia la tasa, ¿cambia la cuota o el plazo?». */

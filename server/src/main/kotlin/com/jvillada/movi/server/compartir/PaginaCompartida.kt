@@ -354,7 +354,10 @@ $ESTILOS
         if (d.esTarjeta) "Tarjeta de crédito" else null,
         d.cuota?.let {
             val monto = if (d.monedaDeLaCuota == "USD") "US$" + miles(it) else dinero(it)
-            if (d.esTarjeta) "Pago mínimo $monto" else "Cuota $monto al mes"
+            // Vuelta 134: la de un crédito que cambia es una estimación, como en Pagos.
+            if (d.esTarjeta) "Pago mínimo $monto"
+            else if (d.cuotaEstimada) "Cuota de ${com.jvillada.movi.shared.model.conUnosSiEsEstimada(monto, estimada = true)} al mes"
+            else "Cuota $monto al mes"
         },
         when {
             d.sinIntereses -> "Sin intereses"

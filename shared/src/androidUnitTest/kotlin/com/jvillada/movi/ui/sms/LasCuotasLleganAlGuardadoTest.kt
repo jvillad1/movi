@@ -74,12 +74,20 @@ class LasCuotasLleganAlGuardadoTest {
         override suspend fun getUserProfile(): UserProfile =
             UserProfile(id = "u1", email = "juan@movi.test", name = "Juan", avatarColor = "#4F7CFF")
         override suspend fun getPropuestasDeLaBandeja(): PropuestasDeLaBandeja = PropuestasDeLaBandeja(
-            propuestas = if (avisos.single().state == SMS_STATE_PENDING) listOf(PropuestaDelAviso("alk", leido = leido)) else emptyList(),
+            propuestas = if (avisos.first { it.id == "alk" }.state == SMS_STATE_PENDING) listOf(PropuestaDelAviso("alk", leido = leido, grupoId = avisos.first { it.id == "alk" }.grupoId)) else emptyList(),
             categoriasDelDueno = listOf("Hogar", "Comida"),
         )
         override suspend fun postEvent(event: FinancialEvent): FinancialEvent = event.also { publicados += it }
         override suspend fun confirmSmsCon(id: String, eventoId: String) {
             avisos.replaceAll { if (it.id == id) it.copy(state = SMS_STATE_CONFIRMED) else it }
+        }
+        override suspend fun confirmarElMismoPago(
+            grupoId: String,
+            pedido: com.jvillada.movi.shared.model.ConfirmarElMismoPago,
+        ): com.jvillada.movi.shared.model.MismoPagoConfirmado {
+            pedido.evento?.let { publicados += it }
+            avisos.replaceAll { if (it.id in pedido.miembros) it.copy(state = SMS_STATE_CONFIRMED) else it }
+            return com.jvillada.movi.shared.model.MismoPagoConfirmado(eventoId = pedido.evento?.id, creado = true, cerrados = pedido.miembros)
         }
         override suspend fun confirmSms(id: String) {
             avisos.replaceAll { if (it.id == id) it.copy(state = SMS_STATE_CONFIRMED) else it }
@@ -133,5 +141,26 @@ class LasCuotasLleganAlGuardadoTest {
         composeRule.onNodeWithText("Confirmar").performSemanticsAction(SemanticsActions.OnClick)
         esperar { publicados.isNotEmpty() }
         assertEquals(24, publicados.single().cuotas)
+    }
+
+    /**
+     * Vuelta 134 · **la tarjeta de un mismo pago avisado varias veces** (el SMS y la notificación del banco de
+     * la misma compra) tampoco tenía «¿A cuántas cuotas? · Elegir». Ahora la tiene, y lo elegido viaja en el
+     * movimiento de `…/grupo/{id}/confirmar`.
+     */
+    @Test
+    fun `en Por revisar, un pago avisado dos veces tambien pregunta las cuotas y las manda en el grupo`() {
+        val sms = avisos.single().copy(grupoId = "alk", miembrosDelGrupo = listOf("alk", "alk-app"))
+        avisos.clear()
+        avisos += sms
+        avisos += sms.copy(id = "alk-app", bank = "Notificación · Bancolombia", time = "$hoy 11:03")
+        Repositories.sustitutoDePrueba = Repo()
+        composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { PorRevisarScreen(onNavigate = {}) } } }
+        esperar { cuantos(TAG_TARJETA_DEL_MISMO_PAGO) == 1 && cuantos(TAG_ELEGIR_CUOTAS_EN_LA_TARJETA) == 1 }
+        tocar(TAG_ELEGIR_CUOTAS_EN_LA_TARJETA)
+        tocar(tagDeLaPastillaDeCuotas(36, TAG_FILA_DE_CUOTAS_EN_LA_TARJETA))
+        tocar(TAG_CONFIRMAR_EN_LA_FILA)
+        esperar { publicados.isNotEmpty() }
+        assertEquals(36, publicados.single().cuotas, "las cuotas viajan en el movimiento del grupo")
     }
 }
