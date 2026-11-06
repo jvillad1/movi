@@ -1,14 +1,18 @@
 package com.jvillada.movi.server.conector
 
 import com.jvillada.movi.server.compartir.TokenDeEnlace
+import com.jvillada.movi.server.db.ClientesDelConector
 import com.jvillada.movi.server.db.CodigosDelConector
+import com.jvillada.movi.server.db.LlamadasDelConector
 import com.jvillada.movi.server.db.ConcesionesDelConector
 import com.jvillada.movi.server.db.SolicitudesDelConector
 import com.jvillada.movi.server.db.TokensDelConector
 import com.jvillada.movi.server.db.Users
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.greater
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.notInSubQuery
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.and
@@ -32,8 +36,13 @@ import java.util.UUID
  * - **El `user_id` sale del token y de nada más.** Ninguna herramienta recibe un usuario por parámetro.
  * - **Corto y rotado.** Acceso, una hora; refresco, 30 días, cambiado por otro en cada uso. Usar un refresco ya
  *   cambiado es la señal de que alguien lo copió: se corta la concesión entera (OAuth 2.1 §4.3.1). La excepción
- *   es una carrera inocente —dos refrescos del mismo cliente con segundos de diferencia—: dentro de
- *   [GRACIA_DEL_REFRESCO_MS] se contesta `invalid_grant` sin cortar nada.
+ *   es una carrera inocente o un reintento —dos refrescos del mismo cliente casi a la vez, o una respuesta que se
+ *   perdió y Claude vuelve a pedir—: dentro de [GRACIA_DEL_REFRESCO_MS] (2 minutos) se contesta `invalid_grant`
+ *   sin cortar nada; Claude vuelve a pedir permiso y no se pierde la conexión entera por un tropiezo de red.
+ *   Pasados los 2 minutos, reusar un refresco viejo corta la conexión: si alguien dice «se desconectó solo»,
+ *   esta es la causa probable (un refresco reintentado muy tarde).
+ * - **Vida máxima.** Una concesión que nadie usó en [VIDA_SIN_USO_MS] (90 días) ya no sirve, aunque tuviera un
+ *   refresco vivo, y el barrido diario la borra ([limpiarElConector]).
  * - **Ata la sesión de Movi.** La concesión guarda `users.token_version`; «Cerrar sesión en todos los aparatos» o
  *   restablecer la contraseña la suben y Claude queda afuera también.
  * - **Desconectar es inmediato.** Revoca la concesión y todos sus tokens en una transacción; el pedido siguiente
@@ -48,8 +57,21 @@ internal object LasConcesiones {
     const val TIPO_ACCESO = "acceso"
     const val TIPO_REFRESCO = "refresco"
 
-    /** Ver el KDoc del objeto: una carrera de refrescos dentro de esto no corta la concesión. */
-    const val GRACIA_DEL_REFRESCO_MS = 30_000L
+    /** Ver el KDoc del objeto: un refresco repetido dentro de esto no corta la concesión. */
+    const val GRACIA_DEL_REFRESCO_MS = 2 * 60_000L
+
+    /** Ver el KDoc del objeto: 90 días sin uso y la concesión se acaba. También la retención del registro. */
+    const val VIDA_SIN_USO_MS = 90L * 24 * 60 * 60 * 1000
+
+    /**
+     * Topes globales (I2 de la revisión): cuántas solicitudes pendientes y cuántos clientes DCR puede haber a la
+     * vez. Elegidos, no medidos: un uso normal tiene unas pocas de cada uno. Con el tope lleno se contesta 503.
+     */
+    const val MAX_SOLICITUDES_PENDIENTES = 2_000
+    const val MAX_CLIENTES_DCR = 2_000
+
+    /** Un cliente DCR que nunca llegó a una concesión se borra al día: Claude registra uno por conexión. */
+    const val VIDA_DE_UN_CLIENTE_SIN_USO_MS = 24L * 60 * 60 * 1000
 
     private val FORMA = Regex("^mvc_[arcs]_[A-Za-z0-9_-]{${TokenDeEnlace.LARGO}}$")
 
@@ -192,7 +214,7 @@ internal fun Transaction.canjearCodigo(
     if (fila[CodigosDelConector.clientId] != clientId) return falla(FallaDelToken.INVALIDO)
     if (fila[CodigosDelConector.redirectUri] != redirectUri) return falla(FallaDelToken.INVALIDO)
     if (!pkceCoincide(verificador, fila[CodigosDelConector.codeChallenge])) return falla(FallaDelToken.INVALIDO)
-    val concesion = concesionVigente(concesionId) ?: return falla(FallaDelToken.INVALIDO)
+    val concesion = concesionVigente(concesionId, ahora) ?: return falla(FallaDelToken.INVALIDO)
     return Result.success(emitirPar(concesion.userId, concesionId, concesion.scope, ahora))
 }
 
@@ -213,7 +235,7 @@ internal fun Transaction.refrescar(refresco: String, clientId: String, ahora: Lo
     }
     if (fila[TokensDelConector.venceEn] <= ahora) return falla(FallaDelToken.INVALIDO)
     if (fila[TokensDelConector.audiencia] != ConfigDelConector.urlDelMcp) return falla(FallaDelToken.INVALIDO)
-    val concesion = concesionVigente(concesionId) ?: return falla(FallaDelToken.INVALIDO)
+    val concesion = concesionVigente(concesionId, ahora) ?: return falla(FallaDelToken.INVALIDO)
     if (concesion.clientId != clientId) return falla(FallaDelToken.INVALIDO)
     val cambiado = TokensDelConector.update({ (TokensDelConector.hash eq hash) and TokensDelConector.revocadoEn.isNull() }) {
         it[revocadoEn] = ahora
@@ -230,11 +252,16 @@ private const val UN_DIA_MS = 24L * 60 * 60 * 1000
 
 private data class ConcesionVigente(val userId: String, val clientId: String, val scope: String)
 
-/** La concesión si sigue vigente: no revocada y con la misma versión de sesiones que su dueño tiene hoy. */
-private fun Transaction.concesionVigente(id: String): ConcesionVigente? {
+/**
+ * La concesión si sigue vigente: no revocada, usada en los últimos [LasConcesiones.VIDA_SIN_USO_MS] y con la misma
+ * versión de sesiones que su dueño tiene hoy.
+ */
+private fun Transaction.concesionVigente(id: String, ahora: Long): ConcesionVigente? {
     val fila = ConcesionesDelConector.selectAll()
         .where { (ConcesionesDelConector.id eq id) and ConcesionesDelConector.revocadaEn.isNull() }
         .firstOrNull() ?: return null
+    val usada = fila[ConcesionesDelConector.ultimoUso] ?: fila[ConcesionesDelConector.creadaEn]
+    if (ahora - usada > LasConcesiones.VIDA_SIN_USO_MS) return null
     val uid = fila[ConcesionesDelConector.userId]
     val vigente = Users.select(Users.tokenVersion).where { Users.id eq uid }.firstOrNull()?.get(Users.tokenVersion) ?: return null
     if (vigente != fila[ConcesionesDelConector.versionDeSesion]) return null
@@ -281,7 +308,7 @@ internal fun Transaction.accesoDelToken(token: String, ahora: Long): AccesoDelCo
     if (fila[TokensDelConector.revocadoEn] != null || fila[TokensDelConector.venceEn] <= ahora) return null
     if (fila[TokensDelConector.audiencia] != ConfigDelConector.urlDelMcp) return null
     val concesionId = fila[TokensDelConector.concesionId]
-    val concesion = concesionVigente(concesionId) ?: return null
+    val concesion = concesionVigente(concesionId, ahora) ?: return null
     if (concesion.userId != fila[TokensDelConector.userId]) return null
     return AccesoDelConector(concesion.userId, concesionId)
 }
@@ -357,11 +384,79 @@ internal fun Transaction.conexionesActivas(uid: String, ahora: Long): List<Conex
         .sortedByDescending { it.ultimoUso ?: it.conectadaEn }
 }
 
-/**
- * Lo vencido que ya no sirve para nada: solicitudes y códigos pasados de su vida. Los tokens y las concesiones se
- * quedan (dicen cuándo se conectó y cuándo se cortó), y se van con la cuenta.
- */
+/** Lo vencido de lo que se guarda en cada pedido de autorización: solicitudes y códigos pasados de su vida. */
 private fun Transaction.limpiarLoVencido(ahora: Long) {
-    SolicitudesDelConector.deleteWhere { SolicitudesDelConector.venceEn less ahora - ConfigDelConector.VIDA_DE_LA_SOLICITUD_MS }
-    CodigosDelConector.deleteWhere { CodigosDelConector.venceEn less ahora - ConfigDelConector.VIDA_DEL_CODIGO_MS }
+    SolicitudesDelConector.deleteWhere { SolicitudesDelConector.venceEn less ahora }
+    CodigosDelConector.deleteWhere { CodigosDelConector.venceEn less ahora }
+}
+
+/** ¿Cuántas solicitudes pendientes (sin usar y sin vencer) hay? Para el tope de [LasConcesiones.MAX_SOLICITUDES_PENDIENTES]. */
+internal fun Transaction.solicitudesPendientes(ahora: Long): Long =
+    SolicitudesDelConector.selectAll()
+        .where { SolicitudesDelConector.usadaEn.isNull() and (SolicitudesDelConector.venceEn greater ahora) }
+        .count()
+
+/** Los clientes DCR registrados que nunca llegaron a una concesión y tienen más de un día. Un `NOT IN` en SQL. */
+internal fun Transaction.borrarClientesSinUso(ahora: Long): Int =
+    ClientesDelConector.deleteWhere {
+        (ClientesDelConector.creadoEn less ahora - LasConcesiones.VIDA_DE_UN_CLIENTE_SIN_USO_MS) and
+            (ClientesDelConector.id notInSubQuery ConcesionesDelConector.select(ConcesionesDelConector.clientId))
+    }
+
+/**
+ * **El barrido diario del conector** (I2 y M6 de la revisión), en el mismo bucle que la retención de la
+ * observabilidad (`startReminderScheduler`): solicitudes, códigos y tokens vencidos; clientes DCR sin uso;
+ * llamadas de más de 90 días; y las concesiones que nadie usó en 90 días o que se revocaron hace más de 90 días
+ * (con sus tokens y códigos). Devuelve cuántas filas se fueron.
+ */
+internal fun Transaction.limpiarElConector(ahora: Long): Int {
+    var filas = 0
+    filas += SolicitudesDelConector.deleteWhere { SolicitudesDelConector.venceEn less ahora }
+    filas += CodigosDelConector.deleteWhere { CodigosDelConector.venceEn less ahora }
+    filas += TokensDelConector.deleteWhere { TokensDelConector.venceEn less ahora }
+    filas += borrarClientesSinUso(ahora)
+    val corte = ahora - LasConcesiones.VIDA_SIN_USO_MS
+    filas += LlamadasDelConector.deleteWhere { LlamadasDelConector.en less corte }
+    val viejas = ConcesionesDelConector.selectAll()
+        .filter { fila ->
+            val revocada = fila[ConcesionesDelConector.revocadaEn]
+            val usada = fila[ConcesionesDelConector.ultimoUso] ?: fila[ConcesionesDelConector.creadaEn]
+            (revocada != null && revocada < corte) || usada < corte
+        }
+        .map { it[ConcesionesDelConector.id] }
+    viejas.chunked(500).forEach { lote ->
+        filas += TokensDelConector.deleteWhere { TokensDelConector.concesionId inList lote }
+        filas += CodigosDelConector.deleteWhere { CodigosDelConector.concesionId inList lote }
+        filas += ConcesionesDelConector.deleteWhere { ConcesionesDelConector.id inList lote }
+    }
+    return filas
+}
+
+/**
+ * **`POST /oauth/revoke`** (RFC 7009): el cliente avisa que ya no usará un token (quitar el conector en Claude).
+ * Revoca la concesión entera del token —acceso o refresco— si es de ese [clientId]. Lo que no se encuentra no se
+ * dice: la ruta contesta 200 igual.
+ */
+internal fun Transaction.revocarPorToken(token: String, clientId: String, ahora: Long) {
+    if (!LasConcesiones.tieneForma(token, LasConcesiones.PREFIJO_ACCESO) && !LasConcesiones.tieneForma(token, LasConcesiones.PREFIJO_REFRESCO)) return
+    val concesionId = TokensDelConector.select(TokensDelConector.concesionId)
+        .where { TokensDelConector.hash eq LasConcesiones.hash(token) }
+        .firstOrNull()?.get(TokensDelConector.concesionId) ?: return
+    val deEseCliente = !ConcesionesDelConector.selectAll()
+        .where { (ConcesionesDelConector.id eq concesionId) and (ConcesionesDelConector.clientId eq clientId) }
+        .empty()
+    if (deEseCliente) revocarConcesion(concesionId, ahora)
+}
+
+/** La concesión de un código o de un refresco (para el límite por concesión de `/oauth/token`), sin gastarlo. */
+internal fun Transaction.concesionDe(codigoORefresco: String): String? = when {
+    LasConcesiones.tieneForma(codigoORefresco, LasConcesiones.PREFIJO_CODIGO) ->
+        CodigosDelConector.select(CodigosDelConector.concesionId)
+            .where { CodigosDelConector.hash eq LasConcesiones.hash(codigoORefresco) }
+            .firstOrNull()?.get(CodigosDelConector.concesionId)
+    LasConcesiones.tieneForma(codigoORefresco, LasConcesiones.PREFIJO_REFRESCO) ->
+        TokensDelConector.select(TokensDelConector.concesionId)
+            .where { TokensDelConector.hash eq LasConcesiones.hash(codigoORefresco) }
+            .firstOrNull()?.get(TokensDelConector.concesionId)
+    else -> null
 }

@@ -159,10 +159,10 @@ class ConectorOAuthTest {
         val (_, refresco) = with(c) { conectar() }
         val rotado = with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to refresco, "client_id" to CIMD_DE_CLAUDE)) }
         val (acceso2, refresco2) = c.tokensDe(rotado.bodyAsText())
-        // El viejo se cambió hace un minuto: ya no es una carrera.
+        // El viejo se cambió hace tres minutos: pasó la gracia de dos.
         transaction {
             TokensDelConector.update({ TokensDelConector.hash eq LasConcesiones.hash(refresco) }) {
-                it[revocadoEn] = System.currentTimeMillis() - 60_000
+                it[revocadoEn] = System.currentTimeMillis() - 3 * 60_000
             }
         }
         val reuso = with(c) { token(mapOf("grant_type" to "refresh_token", "refresh_token" to refresco, "client_id" to CIMD_DE_CLAUDE)) }

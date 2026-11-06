@@ -22,6 +22,7 @@ internal object PantallaDeConsentimiento {
     const val DONDE_SE_DESCONECTA = "Puedes desconectarlo cuando quieras en Movi: Tú → Movi en Claude."
     const val CREDENCIALES_MALAS = "El correo o la contraseña no coinciden."
     const val DEMASIADOS_INTENTOS = "Demasiados intentos. Espera unos minutos y vuelve a intentarlo."
+    const val OCUPADO = "Movi tiene demasiadas conexiones a medio hacer ahora. Espera unos minutos y vuelve a conectar desde Claude."
 
     /** Los colores de `Tokens.kt` (la misma paleta que la página compartida). */
     private val ESTILOS = """
