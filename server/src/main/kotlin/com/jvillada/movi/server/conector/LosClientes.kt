@@ -309,8 +309,9 @@ internal suspend fun resolverCliente(clientId: String, ahora: Long = System.curr
     if (clientId.startsWith("https://")) {
         if (!esClientIdCimd(clientId)) return null
         val sabido = cimdEnMemoria[clientId]
-        if (sabido?.bueno != null && ahora - sabido.buenoEn < VIDA_DEL_CIMD_EN_MEMORIA_MS) return sabido.bueno
-        if (sabido?.fallaEn != null && ahora - sabido.fallaEn < VIDA_DE_UNA_FALLA_EN_MEMORIA_MS) return null
+        val fallaReciente = sabido?.fallaEn != null && ahora - sabido.fallaEn < VIDA_DE_UNA_FALLA_EN_MEMORIA_MS
+        if (sabido?.bueno != null && (ahora - sabido.buenoEn < VIDA_DEL_CIMD_EN_MEMORIA_MS || fallaReciente)) return sabido.bueno
+        if (fallaReciente) return null
         val nuevo = CompletableDeferred<ClienteDelConector?>()
         val enCurso = cimdEnCurso.putIfAbsent(clientId, nuevo)
         if (enCurso != null) return withTimeoutOrNull(TOPE_DEL_CIMD_MS) { enCurso.await() } ?: sabido?.bueno
@@ -328,14 +329,14 @@ internal suspend fun resolverCliente(clientId: String, ahora: Long = System.curr
             when (lectura) {
                 is LecturaDelCimd.Documento -> {
                     val cliente = clienteDelDocumentoCimd(clientId, lectura.texto)
-                    cimdEnMemoria[clientId] = if (cliente != null) LoQueSeSabeDelCimd(cliente, ahora, null)
-                    else LoQueSeSabeDelCimd(null, 0L, ahora)
-                    resultado = cliente
+                    if (cliente != null) {
+                        cimdEnMemoria[clientId] = LoQueSeSabeDelCimd(cliente, ahora, null)
+                        resultado = cliente
+                    } else {
+                        resultado = sinElDocumento(clientId, sabido, ahora, "un documento que no se acepta (¿HTML?)")
+                    }
                 }
-                LecturaDelCimd.NoExiste -> {
-                    cimdEnMemoria[clientId] = LoQueSeSabeDelCimd(null, 0L, ahora)
-                    resultado = null
-                }
+                LecturaDelCimd.NoExiste -> resultado = sinElDocumento(clientId, sabido, ahora, "un 404 o un cuerpo de más")
                 // El último bueno sigue (si hay); no se anota nada nuevo.
                 LecturaDelCimd.Pasajera -> Unit
             }
@@ -357,6 +358,20 @@ internal suspend fun resolverCliente(clientId: String, ahora: Long = System.curr
             )
         }
     }
+}
+
+private val logDeClientes = org.slf4j.LoggerFactory.getLogger("ConectorDeClaude")
+
+/**
+ * **El CIMD contestó algo que no sirve** (M-d de la tercera revisión). Si ya había un documento bueno, se sigue usando
+ * —las URL son las fijas de Claude: un 404 o una página HTML suyos durante un despliegue no son «este cliente no
+ * existe»—, con un WARN, y no se vuelve a pedir en 5 minutos. Sin uno bueno, se recuerda la falla 5 minutos.
+ */
+private fun sinElDocumento(clientId: String, sabido: LoQueSeSabeDelCimd?, ahora: Long, que: String): ClienteDelConector? {
+    val bueno = sabido?.bueno
+    cimdEnMemoria[clientId] = if (bueno != null) sabido.copy(fallaEn = ahora) else LoQueSeSabeDelCimd(null, 0L, ahora)
+    if (bueno != null) logDeClientes.warn("Conector: el CIMD $clientId devolvió $que; se sigue con el último documento bueno")
+    return bueno
 }
 
 /**

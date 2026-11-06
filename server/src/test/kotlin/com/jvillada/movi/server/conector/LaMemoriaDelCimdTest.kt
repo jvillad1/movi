@@ -77,4 +77,20 @@ class LaMemoriaDelCimdTest {
         assertNotNull(resolverCliente(CIMD_DE_CLAUDE, 1_000_000L))
         assertEquals(2, lecturas)
     }
+
+    @Test
+    fun `un 404 o un HTML de la URL de Claude no borra el ultimo documento bueno`() = runBlocking {
+        val t0 = 1_000_000L
+        lectorDeCimd = LectorDeCimd { bueno }
+        assertNotNull(resolverCliente(CIMD_DE_CLAUDE, t0))
+        lectorDeCimd = LectorDeCimd { LecturaDelCimd.NoExiste }
+        assertNotNull(resolverCliente(CIMD_DE_CLAUDE, t0 + 11 * minuto), "un 404 de claude.ai: sigue el bueno")
+        lectorDeCimd = LectorDeCimd { LecturaDelCimd.Documento("<html>Cloudflare</html>") }
+        assertNotNull(resolverCliente(CIMD_DE_CLAUDE, t0 + 22 * minuto), "una página HTML: sigue el bueno")
+        // Y no se vuelve a pedir cada vez mientras tanto.
+        var lecturas = 0
+        lectorDeCimd = LectorDeCimd { lecturas++; bueno }
+        assertNotNull(resolverCliente(CIMD_DE_CLAUDE, t0 + 23 * minuto))
+        assertEquals(0, lecturas)
+    }
 }
