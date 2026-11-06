@@ -58,6 +58,20 @@ class UnaSolaFilaDeFacturaReglasTest {
         assertEquals("Recibido · 25 oct", estadoDeLaFactura(pagada.copy(esIngreso = true), null).texto)
     }
 
+    /** Revisión de la 136 (M2, M7): vencida gana a «No suma»; la cadencia va si cabe, solo por vencer. */
+    @Test
+    fun `vencida gana a No suma, y la cadencia se ofrece por vencer`() {
+        val tarjetaVencida = vencida.copy(ruleId = "card_nu", montoEsSaldo = true)
+        assertEquals(
+            EstadoDeLaFactura("Venció hace 3 días", TonoDeSubtitulo.Aviso, siCabe = "Venció hace 3 días · falta el mínimo"),
+            estadoDeLaFactura(tarjetaVencida, null, noSuma = porQueNoSuma(tarjetaVencida)),
+        )
+        val trimestral = porVencer.copy(frecuencia = com.jvillada.movi.shared.model.FrecuenciaDelPago.TRIMESTRAL)
+        assertEquals("Vence el 22 nov · cada 3 meses", estadoDeLaFactura(trimestral, null).siCabe)
+        assertEquals("Vence el 22 nov", estadoDeLaFactura(trimestral, null).texto)
+        assertEquals(null, estadoDeLaFactura(vencida.copy(frecuencia = com.jvillada.movi.shared.model.FrecuenciaDelPago.TRIMESTRAL), null).siCabe)
+    }
+
     @Test
     fun `una tarjeta pagada por debajo del minimo lo dice en el estado, en aviso`() {
         val tarjeta = porVencer.copy(

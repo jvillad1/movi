@@ -348,6 +348,11 @@ data class EstadoDeLaFactura(
     val texto: String,
     val tono: TonoDeSubtitulo,
     val conCheck: Boolean = false,
+    /**
+     * Revisión de la 136 (M2, M7) · la versión larga, solo si cabe entera en la fila («Venció hace 3 días · falta
+     * el mínimo», «Vence el 22 nov · cada 3 meses»); si no, [texto]. `null`: no hay versión larga.
+     */
+    val siCabe: String? = null,
 )
 
 /** Lo que dice el renglón de estado de una fila mientras una escritura suya viaja. */
@@ -370,8 +375,9 @@ const val ABONO_PLANEADO: String = "Abono planeado"
  *   gasto que se parece a la cuota no tapan el vencimiento, se ven en la hoja): «¿Es el de $4.000.000?»
  *   ([enlaceDeLaPropuestaLejana]), en el azul del enlace;
  * - una fila que no suma en «Falta por pagar» (vuelta 86): «No suma: falta el mínimo» ([pildoraDeLoQueNoSuma]), en aviso;
+ *   vencida, gana el vencimiento («Venció hace 3 días · falta el mínimo» si cabe; M2);
  * - un abono: «Abono planeado · el día 15» ([pastillaDelAbono]);
- * - lo demás, la pastilla de vencimiento de siempre ([pastillaDeVencimiento]: «Vence el 17 nov», «Venció hace 3
+ * - lo demás (con «· cada 3 meses» si no es de cada mes, está por vencer y cabe; M7), la pastilla de vencimiento de siempre ([pastillaDeVencimiento]: «Vence el 17 nov», «Venció hace 3
  *   días», «Se cobra sola el 5», «¿Se cobró?»), con su tono: el aviso, o neutro.
  *
  * Todo sale de funciones que ya existían: ningún estado nuevo. Pura.
@@ -401,14 +407,30 @@ fun estadoDeLaFactura(
     }
     lineaDelMinimo(pago)?.let { return EstadoDeLaFactura(it, TonoDeSubtitulo.Aviso) }
     if (candidato != null) return EstadoDeLaFactura(enlaceDeLaPropuestaLejana(candidato), TonoDeSubtitulo.Enlace)
+    val (vencimiento, tonoDelVencimiento) = pastillaDeVencimiento(pago, conPropuesta = false)
     // Vuelta 86: lo que no suma lo dice la fila («No suma: falta el mínimo»); «Cargar mínimo» va en la hoja.
-    if (noSuma != null) return EstadoDeLaFactura(pildoraDeLoQueNoSuma(noSuma), TonoDeSubtitulo.Aviso)
+    // Revisión de la 136 (M2): vencida, gana el vencimiento, con «· falta el mínimo» si cabe.
+    if (noSuma != null) {
+        return if (pago.vencido) {
+            EstadoDeLaFactura(vencimiento, TonoDeSubtitulo.Aviso, siCabe = "$vencimiento · ${pildoraDeLoQueNoSuma(noSuma).removePrefix(PREFIJO_DE_NO_SUMA)}")
+        } else {
+            EstadoDeLaFactura(pildoraDeLoQueNoSuma(noSuma), TonoDeSubtitulo.Aviso)
+        }
+    }
     if (pago.esAbono) {
         return EstadoDeLaFactura("$ABONO_PLANEADO · ${pastillaDelAbono(pago).replaceFirstChar { it.lowercase() }}", TonoDeSubtitulo.Normal)
     }
-    val (texto, tono) = pastillaDeVencimiento(pago, conPropuesta = false)
-    return EstadoDeLaFactura(texto, if (tono == TonoDePildora.Neutra) TonoDeSubtitulo.Normal else TonoDeSubtitulo.Aviso)
+    // Revisión de la 136 (M7): por vencer, la cadencia de una factura que no es de cada mes, si cabe.
+    val cadencia = cadenciaDeLaFila(pago)?.takeIf { !pago.vencido }?.replaceFirstChar { it.lowercase() }
+    return EstadoDeLaFactura(
+        vencimiento,
+        if (tonoDelVencimiento == TonoDePildora.Neutra) TonoDeSubtitulo.Normal else TonoDeSubtitulo.Aviso,
+        siCabe = cadencia?.let { "$vencimiento · $it" },
+    )
 }
+
+/** Lo que se le quita a «No suma: falta el mínimo» para decirlo después del vencimiento. */
+private const val PREFIJO_DE_NO_SUMA: String = "No suma: "
 
 /**
  * **La cifra de una factura y lo que la acompaña** (vuelta 136): «unos» antes del monto de una cuota que
@@ -477,6 +499,7 @@ internal fun FilaDeFactura(
             Fila(
                 titulo = pago.nombre,
                 subtitulo = estado.texto,
+                subtituloSiCabe = estado.siCabe,
                 // Vuelta 40: el ícono de la categoría, o el del nombre si la categoría no dice nada.
                 inicio = { IconoDeCategoria(nombreParaElIconoDeLaFactura(pago.categoria, pago.nombre)) },
                 // Revisión de la 136 (I2, M1): a la derecha solo la cifra; la fecha la dice el renglón de estado.

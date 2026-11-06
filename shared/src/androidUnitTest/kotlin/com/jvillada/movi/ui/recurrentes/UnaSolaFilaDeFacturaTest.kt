@@ -158,6 +158,35 @@ class UnaSolaFilaDeFacturaTest {
         }
     }
 
+    /**
+     * Revisión de la 136 (M2, M7): lo largo va solo si cabe entero en el renglón de estado. A 360 dp con ×1,12
+     * caben «Vence el 22 nov · cada 3 meses» y «Venció hace 3 días · falta el mínimo».
+     */
+    @Test
+    fun `la cadencia y lo que no suma van en el estado si caben`() {
+        val trimestral = celular.copy(ruleId = "rr_admin", nombre = "Administración", frecuencia = com.jvillada.movi.shared.model.FrecuenciaDelPago.TRIMESTRAL)
+        val tarjeta = vencida.copy(ruleId = "card_nu", nombre = "Tarjeta Nu", montoEsSaldo = true)
+        composeRule.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
+                MoviTheme {
+                    Column(Modifier.fillMaxWidth()) {
+                        for (pago in listOf(trimestral, tarjeta)) {
+                            val lo = loDeLaFactura(pago, emptySet(), false, emptyMap(), emptyMap(), emptyMap(), enElTotal = true)
+                            FilaDeFactura(pago = pago, estado = lo.estado, extracto = null, onAbrir = {})
+                        }
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        for (texto in listOf("Vence el 22 nov · cada 3 meses", "Venció hace 3 días · falta el mínimo")) {
+            val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
+            assertEquals(1, nodos.size, "«$texto»")
+            assertTrue(seVeEntero(nodos.single()), "«$texto» entero")
+        }
+    }
+
     @Test
     fun `con la letra al 130 por ciento crecen todas igual y nada corto se corta`() {
         montarLasFilas(1.456f)

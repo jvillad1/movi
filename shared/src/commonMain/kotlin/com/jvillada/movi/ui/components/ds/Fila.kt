@@ -214,6 +214,11 @@ fun Fila(
      * el banco entre paréntesis). El lector de pantalla oye el título entero. Ver [recortarPorElPrincipio].
      */
     cortarElTituloPorElPrincipio: Boolean = false,
+    /**
+     * Revisión de la vuelta 136 (M2, M7) · una versión más larga del [subtitulo] que se usa **solo si cabe
+     * entera** en sus renglones («Vence el 22 nov · cada 3 meses»); si no, va [subtitulo]. Nunca se corta.
+     */
+    subtituloSiCabe: String? = null,
 ) {
     Row(
         modifier = modifier
@@ -282,8 +287,16 @@ fun Fila(
                         Spacer(Modifier.width(Espacio.xxs))
                     }
                     // Vuelta 87: un subtítulo que termina en «·4057» recorta la cabeza, nunca esa cola.
-                    val partido = if (lineasDelSubtitulo == 1) partirLaColaDelNombreCorto(subtitulo) else null
-                    if (partido == null) {
+                    val partido = if (lineasDelSubtitulo == 1 && subtituloSiCabe == null) partirLaColaDelNombreCorto(subtitulo) else null
+                    if (subtituloSiCabe != null) {
+                        SubtituloLargoSiCabe(
+                            corto = subtitulo,
+                            largo = subtituloSiCabe,
+                            color = colorDelSubtitulo,
+                            renglones = lineasDelSubtitulo,
+                            reservar = reservarRenglones,
+                        )
+                    } else if (partido == null) {
                         Text(
                             text = subtitulo,
                             style = Movi.textos.apoyo,
@@ -525,6 +538,34 @@ private fun TituloQueSeCortaPorElPrincipio(titulo: String, color: Color, renglon
                     this[TituloVisibleDeFilaKey] = visible
                 }
             },
+        )
+    }
+}
+
+/**
+ * El subtítulo de una [Fila] con una versión larga que se usa solo si cabe entera en [renglones] (revisión de la
+ * vuelta 136): mide con la letra de verdad y el ancho que le queda; si no cabe, [corto] (con «…» si hace falta).
+ */
+@Composable
+private fun SubtituloLargoSiCabe(corto: String, largo: String, color: Color, renglones: Int, reservar: Boolean) {
+    androidx.compose.foundation.layout.BoxWithConstraints {
+        val medidor = androidx.compose.ui.text.rememberTextMeasurer()
+        val estilo = Movi.textos.apoyo
+        val ancho = constraints.maxWidth
+        val texto = androidx.compose.runtime.remember(corto, largo, ancho, estilo, renglones, medidor) {
+            val cabe = !medidor.measure(
+                largo, estilo, maxLines = renglones,
+                constraints = androidx.compose.ui.unit.Constraints(maxWidth = ancho),
+            ).hasVisualOverflow
+            if (cabe) largo else corto
+        }
+        Text(
+            text = texto,
+            style = estilo,
+            color = color,
+            maxLines = renglones,
+            minLines = if (reservar) renglones else 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
