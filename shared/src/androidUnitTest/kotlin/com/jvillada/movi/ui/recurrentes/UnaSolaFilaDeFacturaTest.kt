@@ -159,8 +159,8 @@ class UnaSolaFilaDeFacturaTest {
     }
 
     /**
-     * Revisión de la 136 (M2, M7): lo largo va solo si cabe entero en el renglón de estado. A 360 dp con ×1,12
-     * caben «Vence el 22 nov · cada 3 meses» y «Venció hace 3 días · falta el mínimo».
+     * Revisión de la 136 (M2, M7): lo largo va solo si cabe entero en el renglón de estado; si no, lo corto,
+     * entero. Vencida, gana el vencimiento sobre «No suma».
      */
     @Test
     fun `la cadencia y lo que no suma van en el estado si caben`() {
@@ -180,11 +180,14 @@ class UnaSolaFilaDeFacturaTest {
             }
         }
         composeRule.waitForIdle()
-        for (texto in listOf("Vence el 22 nov · cada 3 meses", "Venció hace 3 días · falta el mínimo")) {
+        // La cadencia cabe: va. «Venció hace 3 días · falta el mínimo» al lado de «$145.000 saldo» no cabe a 360:
+        // gana el vencimiento, entero, y nada se corta a medias.
+        for (texto in listOf("Vence el 22 nov · cada 3 meses", "Venció hace 3 días")) {
             val nodos = composeRule.onAllNodesWithText(texto, useUnmergedTree = true).fetchSemanticsNodes()
             assertEquals(1, nodos.size, "«$texto»")
             assertTrue(seVeEntero(nodos.single()), "«$texto» entero")
         }
+        assertTrue(composeRule.onAllNodesWithText("falta el mínimo", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
     }
 
     @Test
