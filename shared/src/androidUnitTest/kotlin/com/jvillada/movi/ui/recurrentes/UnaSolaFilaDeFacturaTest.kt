@@ -352,4 +352,27 @@ class UnaSolaFilaDeFacturaTest {
         composeRule.waitForIdle()
         assertEquals(listOf("rr_internet"), anotados, "lo vencido primero")
     }
+
+    // ── La ficha ancha (revisión, M8) ───────────────────────────────────────────
+
+    /** Fuera del teléfono la hoja es la ficha de 520 dp, con «Anotar pago» a la izquierda y no a todo el ancho. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w1280dp-h900dp-mdpi")
+    fun `en la ficha ancha Anotar pago va a la izquierda, no a todo el ancho`() {
+        composeRule.setContent {
+            MoviTheme {
+                CompositionLocalProvider(com.jvillada.movi.ui.components.LocalWindowWidthClass provides com.jvillada.movi.ui.components.WindowWidthClass.Expanded) {
+                    Box(Modifier.fillMaxSize()) { Seccion(listOf(celular)) }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.abrirLaFactura("Celular")
+        composeRule.waitForIdle()
+        val hoja = hoja()!!.boundsInRoot
+        val boton = composeRule.onAllNodesWithTag(TAG_ANOTAR_EN_LA_HOJA, useUnmergedTree = true).fetchSemanticsNodes().single().boundsInRoot
+        assertTrue(abs(boton.left - hoja.left) <= 1f, "a la izquierda de la ficha")
+        assertTrue(boton.width < hoja.width / 2, "no a todo el ancho (${boton.width} de ${hoja.width})")
+    }
 }
+

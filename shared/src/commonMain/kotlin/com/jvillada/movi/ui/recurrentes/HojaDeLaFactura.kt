@@ -31,6 +31,8 @@ import com.jvillada.movi.theme.Icono
 import com.jvillada.movi.theme.Medida
 import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.ui.components.MarcoDeHoja
+import com.jvillada.movi.ui.components.LocalWindowWidthClass
+import com.jvillada.movi.ui.components.WindowWidthClass
 import com.jvillada.movi.ui.components.desplazableConElTeclado
 import com.jvillada.movi.ui.components.ds.Boton
 import com.jvillada.movi.ui.components.ds.EncabezadoDeHoja
@@ -147,6 +149,9 @@ internal fun claveDeLaFactura(pago: PagoDelPeriodo): String = "${pago.ruleId}@${
 /** El tag de la hoja de una factura y el de su bloque del candidato. */
 const val TAG_HOJA_DE_LA_FACTURA: String = "pagos:hoja-de-la-factura"
 const val TAG_CANDIDATO_EN_LA_HOJA: String = "pagos:candidato-en-la-hoja"
+
+/** El tag de «Anotar pago» en la hoja. */
+const val TAG_ANOTAR_EN_LA_HOJA: String = "pagos:anotar-en-la-hoja"
 
 /** La acción de anotar de una factura: «Anotar pago», «Anotar ingreso» o «Anotar este abono». Pura. */
 internal fun etiquetaDeAnotarLaFactura(pago: PagoDelPeriodo): String = when {
@@ -280,7 +285,10 @@ internal fun HojaDeLaFactura(
                     etiquetaDeAnotarLaFactura(pago),
                     onClick = cerrarY(onAnotar),
                     variante = if (principal == PrincipalDeLaHoja.ANOTAR) VarianteDeBoton.Principal else VarianteDeBoton.Secundario,
-                    anchoCompleto = true,
+                    // Revisión de la 136 (M8): en la ficha ancha, a la izquierda, como la ficha del movimiento
+                    // (vuelta 81); en el teléfono, a todo el ancho.
+                    anchoCompleto = LocalWindowWidthClass.current == WindowWidthClass.Compact,
+                    modifier = Modifier.testTag(TAG_ANOTAR_EN_LA_HOJA),
                     habilitado = !lo.enVuelo,
                 )
             }
