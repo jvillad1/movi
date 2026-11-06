@@ -143,12 +143,21 @@ internal fun loDeLaFactura(
  */
 class HojaDeLaFacturaFuera {
     var abierta: String? by androidx.compose.runtime.mutableStateOf(null)
-    internal var contenido: (@Composable () -> Unit)? by androidx.compose.runtime.mutableStateOf(null)
 
-    /** Pinta la hoja abierta, si la hay. */
+    /**
+     * Re-revisión (4): la hoja **con la clave de la factura que la armó**. [Pintar] la pinta solo si esa clave es
+     * la [abierta]: nunca un cuadro de la hoja de otra factura. La sección la limpia al salir de la composición.
+     */
+    internal var contenido: Pair<String, @Composable () -> Unit>? by androidx.compose.runtime.mutableStateOf(null)
+
+    /** Pinta la hoja abierta, si la hay y es la de esa factura. */
     @Composable
     fun Pintar() {
-        if (abierta != null) contenido?.invoke()
+        val armada = contenido
+        if (abierta != null && armada != null && armada.first == abierta) {
+            val hoja: @Composable () -> Unit = armada.second
+            hoja()
+        }
     }
 }
 

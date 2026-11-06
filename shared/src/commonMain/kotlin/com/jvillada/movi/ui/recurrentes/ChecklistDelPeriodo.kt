@@ -342,9 +342,19 @@ fun SeccionChecklistDelPeriodo(
     )
     // Vuelta 136: la factura cuya hoja está abierta (regla + vencimiento), o `null`. Revisión (M3): con
     // [hojaFuera], vive en el estado de quien monta la lista, no en este item.
-    var abiertaAqui by rememberSaveable { mutableStateOf<String?>(null) }
-    val facturaAbierta: String? = if (hojaFuera != null) hojaFuera.abierta else abiertaAqui
-    fun abrirLaFactura(clave: String?) { if (hojaFuera != null) hojaFuera.abierta = clave else abiertaAqui = clave }
+    // Re-revisión (4): la clave se guarda también con `rememberSaveable`, así una rotación no cierra la hoja; al
+    // volver, si quien monta la lista la perdió, se la devuelve.
+    var abiertaGuardada by rememberSaveable { mutableStateOf<String?>(null) }
+    val facturaAbierta: String? = hojaFuera?.abierta ?: abiertaGuardada
+    fun abrirLaFactura(clave: String?) {
+        abiertaGuardada = clave
+        if (hojaFuera != null) hojaFuera.abierta = clave
+    }
+    if (hojaFuera != null) {
+        LaunchedEffect(hojaFuera) { if (hojaFuera.abierta == null && abiertaGuardada != null) hojaFuera.abierta = abiertaGuardada }
+        // Al salir esta sección de la composición, la hoja que armó no queda colgada con lo que sabía.
+        androidx.compose.runtime.DisposableEffect(hojaFuera) { onDispose { hojaFuera.contenido = null } }
+    }
     @Composable
     fun FilaDe(pago: PagoDelPeriodo, enElTotal: Boolean = true) {
         val lo = loDe(pago, enElTotal)
@@ -575,7 +585,8 @@ fun SeccionChecklistDelPeriodo(
         hoja?.invoke()
     } else {
         // Revisión de la 136 (M3): la hoja se pinta con las demás de quien monta la lista, fuera del item.
-        androidx.compose.runtime.SideEffect { hojaFuera.contenido = hoja }
+        val clave = abierta?.first?.let(::claveDeLaFactura)
+        androidx.compose.runtime.SideEffect { hojaFuera.contenido = if (hoja != null && clave != null) clave to hoja else null }
     }
 }
 
