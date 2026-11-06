@@ -58,7 +58,12 @@ const val CUOTAS_SOLO_EN_UNA_COMPRA_CON_TARJETA: String =
  * eso), `PUT /api/events/{id}/cuotas` (que las rechaza) y las pantallas (que solo ahí preguntan). Pura.
  */
 fun llevaCuotas(evento: FinancialEvent, tipoDeLaCuenta: AccountType?): Boolean =
-    evento.type == TransactionType.EXPENSE && tipoDeLaCuenta == AccountType.CREDIT_CARD && evento.transferId == null
+    evento.type == TransactionType.EXPENSE && tipoDeLaCuenta == AccountType.CREDIT_CARD && evento.transferId == null &&
+        // Revisión de la vuelta 133: un ajuste de saldo, una apertura o un cargo del banco (intereses, cuota
+        // de manejo, 4x1000) no es una compra: «a 36 cuotas» haría que el extracto lo repartiera.
+        !esCategoriaQueNoSeElige(evento.category) &&
+        evento.category != CATEGORIA_DE_COMISIONES_DEL_BANCO && evento.category != CATEGORIA_DE_IMPUESTOS &&
+        cargoDelBanco(evento.description, evento.type) == null
 
 /** «A 12 cuotas», «A 1 cuota», o «¿A cuántas cuotas?» sin saberlas (vuelta 133: el detalle y el aviso). */
 fun rotuloDeLasCuotas(cuotas: Int?): String = when {

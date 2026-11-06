@@ -48,7 +48,8 @@ class LaCuotaQueCambiaTest {
 
     @Test
     fun `la cuota que cambia se dice con unos y la del mes pasado`() {
-        assertEquals("unos \$1.080.500 (la de octubre fue \$1.080.500)", textoDeLaCuotaQueCambia(1_080_500, pagadaEnOctubre))
+        assertEquals("unos \$1.080.500, como la de octubre", textoDeLaCuotaQueCambia(1_080_500, pagadaEnOctubre), "la estimación es la anterior: no se repite la cifra")
+        assertEquals("unos \$1.065.000 (la de octubre fue \$1.080.500)", textoDeLaCuotaQueCambia(1_065_000, pagadaEnOctubre))
         assertEquals("unos \$1.065.000", textoDeLaCuotaQueCambia(1_065_000, null))
         assertEquals("\$1.065.000", cuotaEnPalabras(terms, pagadaEnOctubre))
         assertEquals("unos \$1.080.500", cuotaEnPalabras(terms.copy(tipoDeCuota = TipoDeCuota.UVR), pagadaEnOctubre))
@@ -143,5 +144,56 @@ class LaCuotaQueCambiaTest {
         val variable = deudasParaSalir(listOf(credito(terms.copy(tipoDeCuota = TipoDeCuota.TASA_VARIABLE), ultima = pagadaEnOctubre)), emptyList()).single()
         assertEquals(1_080_500L, variable.cuota)
         assertNull(variable.capitalFijo)
+    }
+
+    // ── Revisión de la vuelta 133 ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `el simulador de abono parte del mismo plan que la ficha en un abono constante`() {
+        val t = terms.copy(tipoDeCuota = TipoDeCuota.ABONO_CONSTANTE)
+        val ficha = assertNotNull(planDelCredito(credito(t)))
+        val simulacion = assertNotNull(simularAbonoUnico(credito(t), 2_000_000))
+        assertEquals(ficha, simulacion.antes, "«sin abono» es la ficha")
+        assertEquals(12, simulacion.antes.mesesHastaLaUltimaCuota)
+        assertEquals(10, simulacion.despues.mesesHastaLaUltimaCuota, "dos capitales fijos menos")
+        // Y en tasa variable, con la cuota de este mes, como la ficha.
+        val variable = credito(terms.copy(tipoDeCuota = TipoDeCuota.TASA_VARIABLE), ultima = pagadaEnOctubre)
+        assertEquals(planDelCredito(variable), assertNotNull(simularAbonoUnico(variable, 500_000)).antes)
+    }
+
+    @Test
+    fun `segun tu plan, un abono constante baja su capital fijo por cuota vencida`() {
+        val plan = saldoSegunElPlan(
+            capital = 12_000_000, tasaEa = 12.0, sinIntereses = false, plazoMeses = 12, cuota = 1_065_000,
+            seguroMensual = null, otrosCargosMensuales = null, diaDePago = 5,
+            desde = kotlinx.datetime.LocalDate(2026, 1, 10), hoy = kotlinx.datetime.LocalDate(2026, 4, 20),
+            capitalFijo = 1_000_000,
+        )
+        assertEquals(9_000_000L, plan.saldo, "febrero, marzo y abril: tres capitales fijos")
+    }
+
+    @Test
+    fun `uvr · Como salir de tus deudas sin abono dice el mismo interes que la ficha`() {
+        val c = credito(terms.copy(tipoDeCuota = TipoDeCuota.UVR))
+        val ficha = assertNotNull(planDelCredito(c))
+        val salida = planDeSalida(deudasParaSalir(listOf(c), emptyList()), 0L, EstrategiaDeSalida.AVALANCHA).enElCalculo.single()
+        assertEquals(ficha.mesesHastaLaUltimaCuota, salida.mesesSinAbono)
+        assertEquals(ficha.interesPorPagar, salida.interesSinAbono, "la misma inflación supuesta en las dos pantallas")
+    }
+
+    @Test
+    fun `un ajuste de saldo o un cargo del banco en la tarjeta no lleva cuotas`() {
+        val compra = FinancialEvent(id = "e", accountId = "t", type = TransactionType.EXPENSE, amount = 100_000, category = "Hogar", description = "Alkosto", timestamp = 0L)
+        assertTrue(llevaCuotas(compra, AccountType.CREDIT_CARD))
+        assertTrue(!llevaCuotas(compra.copy(category = ADJUSTMENT_CATEGORY), AccountType.CREDIT_CARD))
+        assertTrue(!llevaCuotas(compra.copy(category = CATEGORIA_DE_COMISIONES_DEL_BANCO, description = "CUOTA DE MANEJO"), AccountType.CREDIT_CARD))
+        assertTrue(!llevaCuotas(compra.copy(category = "Otros", description = "INTERESES CORRIENTES"), AccountType.CREDIT_CARD))
+    }
+
+    @Test
+    fun `un pago solo se compara contra la cuota pactada si la cuota es fija`() {
+        assertTrue(esCuotaQueSeComparaConLaPactada(terms))
+        assertTrue(!esCuotaQueSeComparaConLaPactada(terms.copy(tipoDeCuota = TipoDeCuota.UVR)))
+        assertTrue(!esCuotaQueSeComparaConLaPactada(terms.copy(tipoDeCuota = TipoDeCuota.ABONO_CONSTANTE)))
     }
 }

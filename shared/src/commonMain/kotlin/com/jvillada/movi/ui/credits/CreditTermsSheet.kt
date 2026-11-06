@@ -188,7 +188,8 @@ fun CreditTermsSheet(
     var otrosCargos by remember { mutableStateOf(existingTerms?.otrosCargosMensuales) }
     // Vuelta 133 · «¿Tu cuota es siempre la misma?» (ver `LaCuotaQueCambiaEnLaHoja.kt`): Sí por defecto.
     var tipoDeCuota by remember { mutableStateOf(existingTerms?.tipoDeCuota ?: com.jvillada.movi.shared.model.TipoDeCuota.FIJA) }
-    var puntosSobreElIbr by remember { mutableStateOf(existingTerms?.puntosSobreElIndice?.toString()?.removeSuffix(".0") ?: "") }
+    // Con coma, como se escribe en Colombia (el campo acepta las dos y guarda con punto).
+    var puntosSobreElIbr by remember { mutableStateOf(existingTerms?.puntosSobreElIndice?.toString()?.removeSuffix(".0")?.replace('.', ',') ?: "") }
     var alCambiarLaTasa by remember { mutableStateOf(existingTerms?.alCambiarLaTasa) }
     var dayOfMonth by remember { mutableStateOf(existingTerms?.dayOfMonth?.toString() ?: "") }
     // F23: aceptaba cualquier cosa como fecha — el filtro de abajo (solo dígitos y guiones) más
@@ -251,7 +252,7 @@ fun CreditTermsSheet(
         isValidCreditDate(startDate) &&
         // Vuelta 133: unos puntos escritos tienen que tener sentido (la misma regla que el server).
         (tipoDeCuota != com.jvillada.movi.shared.model.TipoDeCuota.TASA_VARIABLE || puntosSobreElIbr.isBlank() ||
-            puntosSobreElIbr.toDoubleOrNull()?.let { it in 0.0..com.jvillada.movi.shared.model.MAXIMO_DE_PUNTOS_SOBRE_EL_INDICE } == true)
+            puntosSobreElIbr.replace(',', '.').toDoubleOrNull()?.let { it in 0.0..com.jvillada.movi.shared.model.MAXIMO_DE_PUNTOS_SOBRE_EL_INDICE } == true)
     // Las cuentas a las que puede entrar la plata de un desembolso. Se filtran del selector y no
     // solo de la validación, mismo criterio que [transferableAccounts]: ofrecer una cuenta para
     // después decir que no se puede es peor que no ofrecerla.
@@ -404,8 +405,9 @@ fun CreditTermsSheet(
                     // Vuelta 133: la cuota que cambia. Viaja siempre (volver a «Sí» la apaga); los datos
                     // de la tasa variable, solo con ella (`conLaCuotaQueCambiaLimpia`, lo mismo que el server).
                     tipoDeCuota = tipoDeCuota,
-                    indiceDeLaTasa = com.jvillada.movi.shared.model.IndiceDeLaTasa.IBR,
-                    puntosSobreElIndice = puntosSobreElIbr.toDoubleOrNull(),
+                    // La hoja pregunta por el IBR; un «Otro» que ya estaba guardado no se reescribe.
+                    indiceDeLaTasa = existingTerms?.indiceDeLaTasa ?: com.jvillada.movi.shared.model.IndiceDeLaTasa.IBR,
+                    puntosSobreElIndice = puntosSobreElIbr.replace(',', '.').toDoubleOrNull(),
                     alCambiarLaTasa = alCambiarLaTasa,
                 ).conLaCuotaQueCambiaLimpia()
                 if (editing == null && newAccountMode) {

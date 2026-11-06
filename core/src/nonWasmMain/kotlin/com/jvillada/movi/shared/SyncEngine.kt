@@ -245,7 +245,8 @@ class SyncEngine(
                         cuotas = cuotasPorSubir[row.id],
                     )
                 )
-                if (row.id in cuotasPorSubir) CuotasPorSubir.olvidar(db, row.userId, row.id)
+                // Revisión de la vuelta 133: solo si no cambiaron mientras viajaba (el detalle las cambia).
+                cuotasPorSubir[row.id]?.let { CuotasPorSubir.olvidarSiSigueSiendo(db, row.userId, row.id, it) }
                 db.financialEventQueries.markSyncedIfUnchanged(
                     Clock.System.now().toEpochMilliseconds(), row.id, row.category, row.timestamp,
                     // Y el monto, la cuenta y el concepto desde que se pueden corregir (ver
