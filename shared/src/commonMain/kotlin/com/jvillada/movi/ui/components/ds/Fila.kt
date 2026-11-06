@@ -56,8 +56,19 @@ const val LINEAS_DEL_TITULO_DE_FILA: Int = 2
 /**
  * **El tono del subtítulo de una [Fila]**: [Normal] (texto medio) casi siempre; [Aviso] cuando el
  * subtítulo pide algo al dueño («Faltan datos», en Créditos).
+ *
+ * Vuelta 136: [Exito] (el verde de `entra`: «Pagado» en una factura) y [Enlace] (el azul del enlace: lo que
+ * Movi pregunta, «¿Es el de $4.000.000?»). Un estado en su renglón, siempre en el mismo lugar.
  */
-enum class TonoDeSubtitulo { Normal, Aviso }
+enum class TonoDeSubtitulo { Normal, Aviso, Exito, Enlace }
+
+/** El color de un [TonoDeSubtitulo], en la paleta del tema. Pura. */
+fun colorDelTonoDeSubtitulo(tono: TonoDeSubtitulo, colores: ColoresDeMovi): Color = when (tono) {
+    TonoDeSubtitulo.Normal -> colores.textoMedio
+    TonoDeSubtitulo.Aviso -> colores.aviso
+    TonoDeSubtitulo.Exito -> colores.entra
+    TonoDeSubtitulo.Enlace -> colores.enlace
+}
 
 /** Entre el `inicio` de una [Fila] (el avatar) y su texto: [Espacio.s]. */
 val ESPACIO_ANTES_DEL_TEXTO_DE_FILA = Espacio.s
@@ -191,6 +202,12 @@ fun Fila(
      * (más el tag de quien la monta) con el id en los datos, y nunca con su título.
      */
     entidadDeUso: String? = null,
+    /**
+     * Vuelta 136 · el título y el subtítulo **ocupan siempre** sus renglones ([lineasDelTitulo] y
+     * [lineasDelSubtitulo]), aunque el texto quepa en menos: una lista cuyas filas tienen que medir lo
+     * mismo (las facturas de Pagos).
+     */
+    reservarRenglones: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -236,13 +253,11 @@ fun Fila(
                 style = Movi.textos.cuerpo,
                 color = colorDelTituloDeFila(tonoDelTitulo, Movi.colores),
                 maxLines = lineasDelTitulo,
+                minLines = if (reservarRenglones) lineasDelTitulo else 1,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitulo != null) {
-                val colorDelSubtitulo = when (tonoDelSubtitulo) {
-                    TonoDeSubtitulo.Normal -> Movi.colores.textoMedio
-                    TonoDeSubtitulo.Aviso -> Movi.colores.aviso
-                }
+                val colorDelSubtitulo = colorDelTonoDeSubtitulo(tonoDelSubtitulo, Movi.colores)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (iconoDelSubtitulo != null) {
                         Icon(
@@ -261,6 +276,7 @@ fun Fila(
                             style = Movi.textos.apoyo,
                             color = colorDelSubtitulo,
                             maxLines = lineasDelSubtitulo,
+                            minLines = if (reservarRenglones) lineasDelSubtitulo else 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     } else {
