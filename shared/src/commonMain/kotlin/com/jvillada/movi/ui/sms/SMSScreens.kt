@@ -1354,6 +1354,11 @@ fun SMSReconcileScreen(
         lasDosPatas?.operacion == OperacionDelAviso.CUOTA && lasDosPatas?.destino?.id == creditoId
     }?.second
 
+    // La nota: para qué fue el pago. `null` = no la ha tocado (arranca con la del correo de PSE, si la hay).
+    var notaEscrita by remember(smsId) { mutableStateOf<String?>(null) }
+    fun laNotaDelAviso(leido: ParsedSms): ParsedSms =
+        leido.copy(nota = (notaEscrita ?: leido.nota.orEmpty()).trim().ifEmpty { null })
+
     /** [comoAbono]: «Un abono extra», la respuesta a esa pregunta (ver [pedidoDeDosPatas]). */
     fun confirm(comoAbono: Boolean = false) {
         if (working) return
@@ -1370,7 +1375,7 @@ fun SMSReconcileScreen(
         }
         val cat = (selectedCategory ?: parsed?.category)?.takeIf { it.isNotBlank() } ?: return
         val acct = resolvedAccount ?: return
-        val p = parsed ?: return
+        val p = parsed?.let(::laNotaDelAviso) ?: return
         // Un aviso que se anota igual: sin monto no hay nada que anotar.
         if (p.amount <= 0.0) return
         // Se lee ACÁ, antes del `coroutine.launch`: si el dueño toca dos veces rápido, la segunda
@@ -2047,6 +2052,16 @@ fun SMSReconcileScreen(
                                 ),
                             )
                         }
+                    }
+
+                    // «Nota»: para qué fue. No con «Es este» (nada se crea) ni en partes (cada una tiene la suya).
+                    if (parsed != null && pendiente && unicoYaAnotado == null && !enPartes) {
+                        FilaDeLaNota(
+                            valor = notaEscrita ?: parsed?.nota.orEmpty(),
+                            habilitada = !working,
+                            onCambio = { notaEscrita = it },
+                            modifier = Modifier.padding(top = Medida.dentroDeSeccion),
+                        )
                     }
 
                     // Vuelta 56 · «Es la cuota de un crédito ›» / «Es el pago de una tarjeta ›»: las dos
