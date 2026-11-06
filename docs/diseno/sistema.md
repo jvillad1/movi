@@ -5619,7 +5619,7 @@ el punto 3 de §52** (la fila pagada compacta con su «⋯»). **Sin reglas de p
    - a la derecha **solo la cifra** (`cifraDeLaFactura`: `MontoDeFila`, `TAG_CIFRA`; «unos» delante de una cuota
      que cambia con `ConUnos` y `laCifraDelPagoEsEstimada`, de la vuelta 134; «saldo» o «extracto» después; el
      extracto solo en la que no está pagada). Sin fecha a la derecha: la dice el estado (revisión, M1);
-   - **el nombre, si no cabe, se corta por el principio** («…Master Black 3684», «…Papá (Davibank)»):
+   - **el nombre, si no cabe, se corta por el principio** («…Master Black 3684», «…Papá (Davibank)»), **en el borde de una palabra** si se puede (re-revisión, 3):
      `Fila(cortarElTituloPorElPrincipio = true)` mide con la letra de verdad (`recortarPorElPrincipio`) para que
      quede a la vista lo que distingue una factura de su hermana; el lector oye el nombre entero (revisión, I2);
    - **toda la fila se toca** y abre la hoja de la factura. Sin botones, sin «⋯», sin chevrón (como las filas
@@ -5630,8 +5630,9 @@ el punto 3 de §52** (la fila pagada compacta con su «⋯»). **Sin reglas de p
 2. **El renglón de estado: un texto y un tono** (`estadoDeLaFactura`, pura; sale de las funciones de siempre),
    lo primero que aplica:
    - «Guardando…» con una escritura en vuelo;
-   - **sellada con el extracto de su tarjeta todavía abierto**: `loQueFaltaDelExtracto` («Abonaste $100.000 ·
-     faltan $1.292.700 del extracto…») en aviso: **no se ve pagada** (revisión, C1; la regla de la vuelta 62);
+   - **sellada con el extracto de su tarjeta todavía abierto**: «Faltan $1.292.700 del extracto» en aviso, y la
+     frase de la vuelta 62 (`loQueFaltaDelExtracto`, «Abonaste $100.000 · faltan $1.292.700 del extracto…») solo si
+     cabe entera: **no se ve pagada** y la cifra que falta nunca se corta (revisión, C1; re-revisión, 1);
    - **pagada**: «Pagado · 25 oct» («Recibido», «Mínimo cubierto») en el verde de `entra`, con el visto delante;
    - por debajo del mínimo: `lineaDelMinimo`, en aviso;
    - **con una propuesta del server cerca del monto**: «¿Es el de $4.000.000?» en el azul del enlace. Un candidato
@@ -5644,7 +5645,8 @@ el punto 3 de §52** (la fila pagada compacta con su «⋯»). **Sin reglas de p
      «Vence mañana», «¿Se cobró?» en aviso; «Se cobra sola el 5»), con «· cada 3 meses» si la factura no es de
      cada mes, está por vencer y cabe entera (revisión, M7).
    **Lo largo va solo si cabe entero**: `EstadoDeLaFactura.siCabe` y `Fila(subtituloSiCabe)`, que mide con la
-   letra de verdad; si no cabe, va lo corto. `TonoDeSubtitulo` ganó `Exito` y `Enlace` (y `colorDelTonoDeSubtitulo`).
+   letra de verdad; si no cabe, va lo corto, y **el lector de pantalla oye siempre lo largo**
+   (`SubtituloVisibleDeFilaKey` dice lo que se dibuja; re-revisión, 5). `TonoDeSubtitulo` ganó `Exito` y `Enlace` (y `colorDelTonoDeSubtitulo`).
 3. **Lo que no cabe va a la hoja de la factura** (`HojaDeLaFactura`, `ui/recurrentes/HojaDeLaFactura.kt`,
    `MarcoDeHoja`; fuera del teléfono una ficha de `Medida.anchoDeFicha`, como el detalle de un movimiento,
    §79): el nombre como `EncabezadoDeHoja`, la cifra en `Grande`, el estado entero; la cuota anterior, la
@@ -5657,13 +5659,16 @@ el punto 3 de §52** (la fila pagada compacta con su «⋯»). **Sin reglas de p
    hace lo de siempre** (la fila dice «Guardando…»).
    **Un solo amarillo** (`principalDeLaHoja`): «Anotar pago» si falta; «Sí, fue este» (o «Sí, es la cuota») si
    el candidato está cerca del monto —entonces no se ofrece «Anotar pago», que duplicaría el gasto—; **ninguno si
-   el candidato es de otro monto** (`candidatoConOtroMonto`: «Sí, fue este» con borde, para revisarlo; revisión,
-   duda 1); ninguno si está pagada. Con un candidato lejano, «Anotar pago» sigue en amarillo y el candidato va con
+   el candidato se aleja más del ±5 % del monto** (`candidatoConOtroMonto`, `montoQueSeParece`: la banda del abono
+   de la vuelta 63; «Sí, fue este» con borde, para revisarlo; revisión, duda 1, y re-revisión, 2). El aviso «No es
+   el monto que anotaste» sigue comparando exacto; ninguno si está pagada. Con un candidato lejano, «Anotar pago» sigue en amarillo y el candidato va con
    borde. **La regla de la vuelta 72** («Sí, fue este» nunca es amarillo) **queda para la lista**: ahí no hay
    ninguno.
    **La hoja no vive en la lista perezosa** (revisión, M3): `HojaDeLaFacturaFuera` está en
    `EstadoDelTableroDeRecurrentes` y `HojasDelTableroDeRecurrentes` la pinta con las demás hojas del tablero. Una
-   lista suelta (sin `hojaFuera`) la pinta ahí mismo.
+   lista suelta (sin `hojaFuera`) la pinta ahí mismo. La hoja va con la clave de su factura y solo se pinta si es
+   la abierta; la sección la limpia al salir, y la clave se guarda con `rememberSaveable` (una rotación no la
+   cierra; re-revisión, 4).
 4. **«Anotar pago» sin abrir la hoja: en «Falta por pagar»** (`TarjetaFaltaPorPagar(loMasUrgente)`). Debajo de
    «Llevas $X pagados», un hilo, «Lo más urgente: Arriendo» (el nombre en `cuerpoFuerte`) y, **siempre en su
    propio renglón**, el botón `S` —«Anotar pago» en amarillo (lo de siempre, `hojaParaAnotar`) o, si Movi tiene un
