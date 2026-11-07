@@ -538,6 +538,28 @@ fun cuentaDelDebitoAutomatico(terms: CreditTerms?, elegibles: List<Account>): St
     terms?.debitoAutomaticoDesde?.takeIf { id -> elegibles.any { it.id == id } }
 
 /**
+ * Vuelta 141 · **la cuenta que «Sale de» propone para la cuota de este crédito**, con su porqué: la del
+ * débito automático («Débito automático») o, si no, la de [CreditTerms.sePagaDesde] («La de la cuota»),
+ * si es una de [elegibles]. `null` si ninguna. Para que una cuenta fuera de «Tu plata» (la AFC) pueda
+ * estar en [elegibles], la hoja la conserva en la lista ([cuentasDeDondeSaleLaCuota]).
+ */
+fun cuentaDeLaCuotaDelCredito(terms: CreditTerms?, elegibles: List<Account>): Pair<String, OrigenCuenta>? {
+    cuentaDelDebitoAutomatico(terms, elegibles)?.let { return it to OrigenCuenta.DEBITO_AUTOMATICO }
+    return terms?.sePagaDesde?.takeIf { id -> elegibles.any { it.id == id } }?.let { it to OrigenCuenta.DE_LA_CUOTA }
+}
+
+/**
+ * Vuelta 141 · **de dónde puede salir la plata de una cuota**: la plata propia de siempre
+ * ([UsoDeCuenta.DINERO_PROPIO]) y, además, la cuenta de la que el crédito dice que sale su cuota
+ * ([CreditTerms.sePagaDesde]) aunque esté condicionada —la AFC que paga la Hipoteca 1254—: el dueño ya la
+ * eligió en las condiciones del crédito, así que no es la app proponiéndola sola.
+ */
+fun cuentasDeDondeSaleLaCuota(accounts: List<Account>, sePagaDesde: String?): List<Account> =
+    cuentasPara(accounts, UsoDeCuenta.DINERO_PROPIO, conservar = sePagaDesde?.takeIf { id ->
+        accounts.firstOrNull { it.id == id }?.let { com.jvillada.movi.shared.model.sirveParaPagarLaCuota(it) } == true
+    }).principales
+
+/**
  * **El encabezado de la hoja de Cuota** (vuelta 48), que dice qué se está anotando: «Cuota de Libre
  * inversión 9695 · octubre», «Abono extra a Libre inversión 9695», «Pago de Master Black · octubre»,
  * o —sin nada elegido— [CUOTA_SIN_ELEGIR]. Va siempre en un renglón: elegir qué pagar cambia el
@@ -764,8 +786,11 @@ internal fun TransferBody(
     val esPago = modo == ModoDeTraspaso.PAGO_DE_CUOTA
     // En un pago, los dos lados ofrecen cosas distintas: de dónde sale la plata son cuentas de
     // dinero, y lo que se paga son deudas. En un traspaso, la misma lista para los dos.
-    val elegibles = remember(accounts, esPago) {
-        if (esPago) cuentasPara(accounts, UsoDeCuenta.DINERO_PROPIO).principales
+    // Vuelta 141: la cuenta de la que sale la cuota del crédito elegido (`CreditTerms.sePagaDesde`), que
+    // entra a «Sale de» aunque esté fuera de Tu plata. La pone el efecto de la deuda elegida, más abajo.
+    var cuentaDeLaCuotaElegida by remember { mutableStateOf<String?>(null) }
+    val elegibles = remember(accounts, esPago, cuentaDeLaCuotaElegida) {
+        if (esPago) cuentasDeDondeSaleLaCuota(accounts, cuentaDeLaCuotaElegida)
         else transferableAccounts(accounts)
     }
     /** Lo que se puede pagar: préstamos y tarjetas. Vacío si el dueño no tiene ninguno. */
@@ -808,7 +833,9 @@ internal fun TransferBody(
     val destinoDelTraspaso = if (esPago) null else elegiblesDestino.firstOrNull { it.id == presetDestinoId }
     LaunchedEffect(elegibles, elegiblesDestino) {
         // Vuelta 48: la cuenta del débito automático del crédito elegido tampoco se pisa.
-        val origenFirme = (origenFrom == OrigenCuenta.ELEGIDA || origenFrom == OrigenCuenta.DEBITO_AUTOMATICO) &&
+        // Vuelta 141: ni la de la cuota (`CreditTerms.sePagaDesde`).
+        val origenFirme = (origenFrom == OrigenCuenta.ELEGIDA || origenFrom == OrigenCuenta.DEBITO_AUTOMATICO ||
+            origenFrom == OrigenCuenta.DE_LA_CUOTA) &&
             elegibles.any { it.id == fromId }
         if (!origenFirme) {
             val elegida = resolverCuenta(
@@ -1059,10 +1086,13 @@ internal fun TransferBody(
             else if (cuota == null && montoActual.isNotBlank()) proponerMonto("")
             montoPropuesto = cuota
         }
-        val debito = cuentaDelDebitoAutomatico(terms, elegibles)
-        if (debito != null && origenFrom != OrigenCuenta.ELEGIDA && origenFrom != OrigenCuenta.CONTEXTO) {
-            fromId = debito
-            origenFrom = OrigenCuenta.DEBITO_AUTOMATICO
+        // Vuelta 141: la del débito automático o, si no, la de la cuota (`sePagaDesde`), que puede estar fuera
+        // de Tu plata (la AFC): se mira contra la lista que la conserva, la misma que `elegibles` tendrá.
+        cuentaDeLaCuotaElegida = terms?.sePagaDesde
+        val deLaCuota = cuentaDeLaCuotaDelCredito(terms, cuentasDeDondeSaleLaCuota(accounts, terms?.sePagaDesde))
+        if (deLaCuota != null && origenFrom != OrigenCuenta.ELEGIDA && origenFrom != OrigenCuenta.CONTEXTO) {
+            fromId = deLaCuota.first
+            origenFrom = deLaCuota.second
         }
     }
     val interesEstimado = interesEstimadoDelMes(to, termsDelDestino)

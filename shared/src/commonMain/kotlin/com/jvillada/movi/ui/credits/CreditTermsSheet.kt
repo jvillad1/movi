@@ -212,6 +212,9 @@ fun CreditTermsSheet(
     // Ver `CreditTerms.debitoAutomaticoDesde`.
     var seDebitaSolo by remember { mutableStateOf(existingTerms?.debitoAutomaticoDesde != null) }
     var cuentaDelDebito by remember { mutableStateOf(existingTerms?.debitoAutomaticoDesde) }
+    // Vuelta 141 · ¿de qué cuenta sale la cuota? (`CreditTerms.sePagaDesde`). Opcional; la AFC que paga la
+    // Hipoteca 1254 es el caso: una cuenta fuera de Tu plata, y la cuota no baja «Te quedan».
+    var cuentaDeLaCuota by remember { mutableStateOf(existingTerms?.sePagaDesde) }
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     // ¿A quién le giras la cuota? (`CreditTerms.destinoConocidoId`): el papá le paga al banco con lo
@@ -244,6 +247,18 @@ fun CreditTermsSheet(
             .onFailure { falloCuentasDelDebito = true }
     }
     val monedaDelCredito = editing?.account?.currency ?: "COP"
+    // Vuelta 141: la pregunta de la cuenta de la cuota va con «¿La paga alguien más?» (no con la libranza, que
+    // ya contestó, ni con el débito automático, que ya dice de cuál sale). Las cuentas se leen una vez.
+    val cuentaDeLaCuotaVisible = seVeLaCuentaDeLaCuota(esLibranza, debitoVisible && seDebitaSolo)
+    var cuentasDeLaCuota by remember { mutableStateOf<List<Account>?>(null) }
+    var falloCuentasDeLaCuota by remember { mutableStateOf(false) }
+    LaunchedEffect(cuentaDeLaCuotaVisible, intentoDeCarga) {
+        if (!cuentaDeLaCuotaVisible || cuentasDeLaCuota != null) return@LaunchedEffect
+        falloCuentasDeLaCuota = false
+        runCatching { Repositories.wallets.getAccounts() }
+            .onSuccess { cuentasDeLaCuota = it }
+            .onFailure { falloCuentasDeLaCuota = true }
+    }
 
     val termsValid = !debitoPendiente && bank.isNotBlank() &&
         (principal ?: 0L) > 0L &&
@@ -402,6 +417,9 @@ fun CreditTermsSheet(
                     // Solo si la cuota sale de una cuenta suya; desmarcar manda `null` explícito
                     // (el campo viaja siempre, ver el KDoc de `CreditTerms`).
                     debitoAutomaticoDesde = if (debitoVisible && seDebitaSolo) cuentaDelDebito else null,
+                    // Vuelta 141: nunca junto con «la paga otro», la libranza o el débito (la hoja ya los
+                    // excluye al elegir; acá se asegura). Quitarla manda `null` (el campo viaja siempre).
+                    sePagaDesde = sePagaDesdeParaGuardar(cuentaDeLaCuota, cuentaDeLaCuotaVisible, quienPaga),
                     // `null` = no lo toques; `""` = lo quitó; un id = ese tercero.
                     destinoConocidoId = com.jvillada.movi.ui.recurrentes.destinoParaElWire(destinoDeLaCuota, quitoElDestinoDeLaCuota),
                     // Vuelta 133: la cuota que cambia. Viaja siempre (volver a «Sí» la apaga); los datos
@@ -842,7 +860,8 @@ fun CreditTermsSheet(
                 // algo: la duda («¿esto qué hace?») llega ANTES de escribir.
                 Campo(
                     quienPaga,
-                    { quienPaga = it.take(60) },
+                    // Vuelta 141: escribir quién la paga quita la cuenta de la que sale (no van las dos).
+                    { quienPaga = it.take(60); if (it.isNotBlank()) cuentaDeLaCuota = null },
                     rotulo = "¿La paga alguien más?",
                     guia = "Skandia, Caro, mi papá…",
                     ayuda = if (quienPaga.isBlank()) "Déjalo vacío si la pagas tú." else "La deuda sigue siendo tuya y suma entera.",
@@ -853,6 +872,24 @@ fun CreditTermsSheet(
                         "Suma entera en tu deuda total. Lo que cambia es que la cuota deja de " +
                             "contar como gasto tuyo del mes y Movi deja de recordártela — en su " +
                             "lugar te ofrece bajar la deuda con un toque."
+                    },
+                )
+            }
+
+            // Vuelta 141 · ¿De qué cuenta sale la cuota? Con «¿La paga alguien más?», porque contesta lo mismo
+            // de otra forma: elegir una cuenta borra quién la paga (no quedan las dos).
+            if (cuentaDeLaCuotaVisible) {
+                Spacer(Modifier.height(Espacio.m))
+                CampoDeLaCuentaDeLaCuota(
+                    cuentas = cuentasDeLaCuota?.let { com.jvillada.movi.shared.model.cuentasParaLaCuota(it, monedaDelCredito) },
+                    fallo = falloCuentasDeLaCuota,
+                    elegida = cuentaDeLaCuota,
+                    habilitado = !saving,
+                    onReintentar = { intentoDeCarga++ },
+                    onElegir = { id ->
+                        cuentaDeLaCuota = id
+                        // Elegir la cuenta borra «La paga otra persona».
+                        if (id != null) quienPaga = ""
                     },
                 )
             }
@@ -992,6 +1029,101 @@ fun CreditTermsSheet(
 
 /** El título de la casilla del débito automático en la hoja del crédito. */
 const val TITULO_DEL_DEBITO_AUTOMATICO: String = "El banco la cobra solo"
+
+/**
+ * Vuelta 141 · **«¿De qué cuenta sale la cuota?»**: un campo que se abre en su lugar (como el de la persona o
+ * comercio) con «Ninguna en particular» y las cuentas de dinero o inversión del crédito ([cuentasParaLaCuota]),
+ * también las condicionadas. Si la elegida no es Tu plata, lo dice antes de guardar.
+ */
+@Composable
+private fun CampoDeLaCuentaDeLaCuota(
+    cuentas: List<Account>?,
+    fallo: Boolean,
+    elegida: String?,
+    habilitado: Boolean,
+    onReintentar: () -> Unit,
+    onElegir: (String?) -> Unit,
+) {
+    var abierto by remember { mutableStateOf(false) }
+    val laElegida = cuentas?.firstOrNull { it.id == elegida }
+    Text(PREGUNTA_DE_LA_CUENTA_DE_LA_CUOTA, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+    Spacer(Modifier.height(Espacio.xs))
+    when {
+        fallo -> {
+            Text(NO_PUDIMOS_CARGAR_TUS_CUENTAS, style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            Text(
+                "Reintentar",
+                style = Movi.textos.cuerpo,
+                color = Movi.colores.texto,
+                modifier = Modifier.clickable(enabled = habilitado) { onReintentar() }.padding(vertical = Espacio.xxs),
+            )
+        }
+        cuentas == null -> Text("Cargando tus cuentas…", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+        else -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(Radio.m))
+                    .background(Movi.colores.tarjeta)
+                    .border(Medida.trazo, Movi.colores.borde, RoundedCornerShape(Radio.m))
+                    .clickable(enabled = habilitado) { abierto = !abierto }
+                    .padding(horizontal = Espacio.s, vertical = Espacio.s)
+                    .testTag(TAG_CAMPO_DE_LA_CUENTA_DE_LA_CUOTA),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    laElegida?.name ?: SIN_CUENTA_DE_LA_CUOTA,
+                    style = Movi.textos.cuerpo,
+                    color = if (laElegida != null) Movi.colores.texto else Movi.colores.textoMedio,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(if (abierto) "Cerrar" else "Elegir", style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
+            }
+            if (abierto) {
+                Spacer(Modifier.height(Espacio.xs))
+                SelectRow(label = SIN_CUENTA_DE_LA_CUOTA, selected = elegida == null, onClick = { onElegir(null); abierto = false })
+                Spacer(Modifier.height(Espacio.xs))
+                cuentas.forEach { acc ->
+                    SelectRow(label = acc.name, selected = elegida == acc.id, onClick = { onElegir(acc.id); abierto = false })
+                    Spacer(Modifier.height(Espacio.xs))
+                }
+            }
+            // Si está fuera de Tu plata, se dice antes de guardar.
+            if (laElegida != null && com.jvillada.movi.shared.model.laCuotaSaleDeFueraDeTuPlata(laElegida)) {
+                Spacer(Modifier.height(Espacio.xxs))
+                Text(
+                    com.jvillada.movi.shared.model.CUENTA_DE_LA_CUOTA_FUERA_DE_TU_PLATA,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.testTag(TAG_CUENTA_DE_LA_CUOTA_FUERA),
+                )
+            }
+        }
+    }
+}
+
+/** Vuelta 141 · el tag del campo de la cuenta de la cuota (tocarlo lo abre). */
+const val TAG_CAMPO_DE_LA_CUENTA_DE_LA_CUOTA: String = "credito:campo-de-la-cuenta-de-la-cuota"
+
+/** Vuelta 141 · la pregunta de la cuenta de la que sale la cuota. */
+const val PREGUNTA_DE_LA_CUENTA_DE_LA_CUOTA: String = "¿De qué cuenta sale la cuota?"
+
+/** Vuelta 141 · la opción de no decir de qué cuenta sale. */
+const val SIN_CUENTA_DE_LA_CUOTA: String = "Ninguna en particular"
+
+/** Vuelta 141 · el tag del aviso «Esta cuenta no es Tu plata…». */
+const val TAG_CUENTA_DE_LA_CUOTA_FUERA: String = "credito:cuenta-de-la-cuota-fuera"
+
+/**
+ * Vuelta 141 · ¿la hoja pregunta de qué cuenta sale la cuota? No con una libranza (ya contestó) ni con el
+ * débito automático marcado (ya dice de cuál sale). Sí con «la paga otro» escrito: elegir una cuenta lo borra.
+ */
+internal fun seVeLaCuentaDeLaCuota(esLibranza: Boolean, conDebitoAutomatico: Boolean): Boolean =
+    !esLibranza && !conDebitoAutomatico
+
+/** Vuelta 141 · lo que se guarda en `sePagaDesde`: la cuenta elegida, solo si la pregunta se ve y nadie más la paga. */
+internal fun sePagaDesdeParaGuardar(cuenta: String?, visible: Boolean, quienPaga: String): String? =
+    cuenta?.takeIf { visible && quienPaga.isBlank() }
 
 /**
  * El campo de texto de siempre de las hojas de créditos, con su API de siempre. **Vuelta de diseño

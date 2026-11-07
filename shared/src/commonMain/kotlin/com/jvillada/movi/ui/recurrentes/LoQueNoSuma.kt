@@ -35,7 +35,7 @@ enum class PorQueNoSuma {
  */
 fun aporteALoQueFalta(pago: PagoDelPeriodo): Long = when {
     pago.esIngreso -> 0L
-    !pago.montoEsSaldo -> if (!pago.pagado && !pago.esAbono) pago.monto else 0L
+    !pago.montoEsSaldo -> if (!pago.pagado && !pago.esAbono && !pago.saleDeFueraDeTuPlata) pago.monto else 0L
     pago.hecho -> 0L
     else -> pago.restoDelMinimo ?: pago.faltaDelMinimo ?: 0L
 }

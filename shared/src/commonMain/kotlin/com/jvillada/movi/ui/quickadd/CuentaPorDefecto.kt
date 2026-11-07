@@ -31,6 +31,12 @@ enum class OrigenCuenta {
     DEBITO_AUTOMATICO,
 
     /**
+     * Vuelta 141 · Cuota de un crédito: la cuenta de la que el dueño dijo que sale la cuota
+     * (`CreditTerms.sePagaDesde`), aunque no sea de Tu plata. «La de la cuota».
+     */
+    DE_LA_CUOTA,
+
+    /**
      * Vuelta 43 · modo pago con una regla SIN cuenta: la hoja **no elige** —poner una tarjeta en
      * silencio fue el error del día del dueño— y pide la cuenta, con la sugerencia arriba
      * ([CuentaElegida.sugerida]).
@@ -155,6 +161,7 @@ fun avisoDeCuenta(origen: OrigenCuenta, cuentasDisponibles: Int, para: String? =
         // se corta con «…» sin partir la fila.
         OrigenCuenta.REGLA -> "La de la regla"
         OrigenCuenta.DEBITO_AUTOMATICO -> "Débito automático"
+        OrigenCuenta.DE_LA_CUOTA -> "La de la cuota"
         OrigenCuenta.EFECTIVO -> "Es en efectivo"
         OrigenCuenta.POR_NOMBRE, OrigenCuenta.POR_CATEGORIA -> para?.let { "La que usas para $it" }
         OrigenCuenta.POR_ELEGIR -> "Elige de dónde sale"

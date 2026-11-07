@@ -126,7 +126,8 @@ fun resumenDeFacturas(checklist: List<PagoDelPeriodo>): ResumenDeFacturas = Resu
     pagado = yaPagadoEnElPeriodo(checklist),
     quedan = pagosPendientes(checklist).size,
     // Vuelta 63: un abono planeado no es un pago del período (no cuenta en «quedan 4 de 7»).
-    de = checklist.count { !it.esIngreso && !it.esAbono },
+    // Vuelta 141: ni la cuota que sale de una cuenta fuera de «Tu plata»: se lista, no es de «de $Y».
+    de = checklist.count { !it.esIngreso && !it.esAbono && !it.saleDeFueraDeTuPlata },
     abonos = abonosPlaneados(checklist),
     sinContar = lineaDeLoQueNoSuma(checklist),
 )
@@ -171,7 +172,8 @@ fun enOrdenDeFacturas(pagos: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
     )
 
 /** La factura cuyo «Anotar pago» va en amarillo: la primera sin pagar del orden. `null` sin ninguna. */
-fun laMasUrgente(ordenadas: List<PagoDelPeriodo>): PagoDelPeriodo? = ordenadas.firstOrNull { !it.hecho && !it.esAbono }
+fun laMasUrgente(ordenadas: List<PagoDelPeriodo>): PagoDelPeriodo? =
+    ordenadas.firstOrNull { !it.hecho && !it.esAbono && !it.saleDeFueraDeTuPlata }
 
 /**
  * Vuelta 72 · **la línea de una tarjeta pagada por debajo de su mínimo**: «Pagaste $100.000 · faltan
@@ -427,9 +429,20 @@ fun estadoDeLaFactura(
     return EstadoDeLaFactura(
         vencimiento,
         if (tonoDelVencimiento == TonoDePildora.Neutra) TonoDeSubtitulo.Normal else TonoDeSubtitulo.Aviso,
-        siCabe = cadencia?.let { "$vencimiento · $it" },
+        // Vuelta 141: la cuota que sale de una cuenta fuera de Tu plata lo dice si cabe («Vence el 5 · no toca
+        // Tu plata»); la hoja dice de qué cuenta sale, entero.
+        siCabe = when {
+            pago.saleDeFueraDeTuPlata -> "$vencimiento · $NO_TOCA_TU_PLATA"
+            else -> cadencia?.let { "$vencimiento · $it" }
+        },
     )
 }
+
+/** Vuelta 141 · lo que dice el estado de una cuota que sale de una cuenta fuera de Tu plata, si cabe. */
+const val NO_TOCA_TU_PLATA: String = "no toca Tu plata"
+
+/** Vuelta 141 · el tag de «Sale de AFC Davibank 9497: no toca Tu plata» en la hoja de la factura. */
+const val TAG_FUERA_DE_TU_PLATA: String = "pagos:fuera-de-tu-plata"
 
 /** Lo que se le quita a «No suma: falta el mínimo» para decirlo después del vencimiento. */
 private const val PREFIJO_DE_NO_SUMA: String = "No suma: "
