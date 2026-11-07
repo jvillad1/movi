@@ -104,7 +104,8 @@ internal class InvalidaElInicioAlEscribir(
     override suspend fun updateBudget(category: String, budget: Budget): Budget = trasEscribir { delegado.updateBudget(category, budget) }
     override suspend fun deleteBudget(category: String): Unit = trasEscribir { delegado.deleteBudget(category) }
     override suspend fun renameBudget(category: String, newCategory: String): Budget = trasEscribir { delegado.renameBudget(category, newCategory) }
-    override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult = trasEscribir { delegado.renameCategory(from, to) }
+    override suspend fun renameCategory(from: String, to: String, icono: String?, color: String?): CategoryRewriteResult =
+        trasEscribir { delegado.renameCategory(from, to, icono, color) }
     override suspend fun mergeCategory(from: String, into: String): CategoryRewriteResult = trasEscribir { delegado.mergeCategory(from, into) }
     override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?, icono: String?, color: String?): CategoryUsage =
         trasEscribir { delegado.setCategoryPrefs(name, hidden, pinnedType, icono, color) }

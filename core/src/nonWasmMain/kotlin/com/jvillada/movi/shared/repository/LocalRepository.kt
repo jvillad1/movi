@@ -2433,8 +2433,8 @@ class LocalRepository(
      * caso acotado (un movimiento anotado offline entre el rename y el próximo sync) pero no es
      * cero, y decirlo redondo sería el tipo de tranquilidad falsa que este KDoc vino a corregir.
      */
-    override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult = enDisco {
-        val result = remote.renameCategory(from, to)
+    override suspend fun renameCategory(from: String, to: String, icono: String?, color: String?): CategoryRewriteResult = enDisco {
+        val result = remote.renameCategory(from, to, icono, color)
         db.financialEventQueries.renameCategory(newCategory = result.name, oldCategory = from, userId = userId())
         return@enDisco result
     }

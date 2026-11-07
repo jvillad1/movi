@@ -244,6 +244,7 @@ object UsedCategoriesCache {
                     pinnedType = entry.pinnedType,
                     icono = entry.icono,
                     color = entry.color,
+                    renombradaA = entry.renombradaA,
                 )
             }
             .toMap()
@@ -268,8 +269,11 @@ object UsedCategoriesCache {
     fun applyPref(name: String, pref: CategoryPref) {
         val nombre = name.trim()
         if (nombre.isEmpty()) return
-        val esDefault = !pref.hidden && pref.pinnedType == null && pref.icono == null && pref.color == null
-        prefs = if (esDefault) prefs - nombre else prefs + (nombre to pref)
+        // Vuelta 138: el alias de una del catálogo vive mientras siga escondida, como en el server
+        // (`PUT /api/categories/prefs`); la respuesta de esa ruta no lo trae.
+        val conAlias = if (pref.hidden && pref.renombradaA == null) pref.copy(renombradaA = prefs[nombre]?.renombradaA) else pref
+        val esDefault = !conAlias.hidden && conAlias.pinnedType == null && conAlias.icono == null && conAlias.color == null
+        prefs = if (esDefault) prefs - nombre else prefs + (nombre to conAlias)
     }
 
     /**
@@ -278,7 +282,14 @@ object UsedCategoriesCache {
      * viejo: el caché es una ayuda para escribir, y seguir ofreciendo «Trasnporte» después de
      * arreglarlo sería justo el error que el dueño vino a corregir.
      */
-    fun applyRename(from: String, to: String, escondeElOrigen: Boolean = false) {
+    fun applyRename(
+        from: String,
+        to: String,
+        escondeElOrigen: Boolean = false,
+        /** Vuelta 138: la apariencia que la app mandó al renombrar ([com.jvillada.movi.shared.model.RenameCategoryRequest.icono]). */
+        icono: String? = null,
+        color: String? = null,
+    ) {
         val viejo = from.trim()
         val nuevo = to.trim()
         if (viejo.isEmpty() || nuevo.isEmpty()) return
@@ -300,22 +311,33 @@ object UsedCategoriesCache {
         //
         // Que sea un espejo y no una regla propia es el punto: dos reglas paralelas para el mismo
         // efecto se desincronizan, y esta ya se desincronizó una vez.
+        //
+        // Vuelta 138, el mismo espejo de lo nuevo del server: volver a «Vivienda» borra su alias
+        // (la fila del destino era el alias, no una preferencia suya); renombrar una del catálogo
+        // fija su tipo en el nombre nuevo y deja la vieja escondida con el alias; los alias que
+        // apuntaban al nombre viejo pasan al nuevo; y la apariencia que mandó la app queda si el
+        // destino no tenía.
+        val delCatalogo = PREDEFINED_CATEGORIES.firstOrNull { it.name == viejo }
         val prefOrigen = prefs[viejo]
-        val prefDestino = prefs[nuevo]
-        val tipoFijadoDestino = prefDestino?.pinnedType ?: prefOrigen?.pinnedType
-        val iconoDestino = prefDestino?.icono ?: prefOrigen?.icono
-        val colorDestino = prefDestino?.color ?: prefOrigen?.color
-        var siguiente = prefs - viejo - nuevo
-        if (tipoFijadoDestino != null || iconoDestino != null || colorDestino != null) {
+        val prefDestino = prefs[nuevo]?.takeUnless { it.renombradaA != null && it.renombradaA.equals(viejo, ignoreCase = true) }
+        val tipoQueViaja = delCatalogo?.type?.takeIf { !escondeElOrigen && PREDEFINED_CATEGORIES.none { c -> c.name == nuevo } }
+        val tipoFijadoDestino = prefDestino?.pinnedType ?: prefOrigen?.pinnedType ?: tipoQueViaja
+        val iconoDestino = prefDestino?.icono ?: prefOrigen?.icono ?: icono
+        val colorDestino = prefDestino?.color ?: prefOrigen?.color ?: color
+        val escondidoDestino = !escondeElOrigen && prefOrigen?.hidden == true
+        var siguiente = (prefs - viejo - nuevo).mapValues { (_, p) ->
+            if (p.renombradaA != null && p.renombradaA.equals(viejo, ignoreCase = true)) p.copy(renombradaA = nuevo) else p
+        }
+        if (tipoFijadoDestino != null || iconoDestino != null || colorDestino != null || escondidoDestino) {
             siguiente = siguiente + (nuevo to CategoryPref(
-                hidden = false,
+                hidden = escondidoDestino,
                 pinnedType = tipoFijadoDestino,
                 icono = iconoDestino,
                 color = colorDestino,
             ))
         }
-        if (escondeElOrigen && PREDEFINED_CATEGORIES.any { it.name == viejo }) {
-            siguiente = siguiente + (viejo to CategoryPref(hidden = true))
+        if (delCatalogo != null) {
+            siguiente = siguiente + (viejo to CategoryPref(hidden = true, renombradaA = nuevo))
             // El nombre viejo vuelve a la lista de conocidas, pero escondido: lo que NO puede
             // pasar es que se siga ofreciendo. `used` ya no lo tiene (arriba se movió al nuevo).
         }

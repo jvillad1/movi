@@ -173,9 +173,33 @@ class UsedCategoriesCacheTest {
         UsedCategoriesCache.record("Otros ingresos", TransactionType.INCOME)
         UsedCategoriesCache.applyRename("Otros ingresos", "Otros", escondeElOrigen = true)
 
-        assertEquals(CategoryPref(hidden = true), UsedCategoriesCache.prefs["Otros ingresos"])
+        // Vuelta 138: y dice a dónde fue, como el server (`unificada_en`): lo que propone «Otros
+        // ingresos» pasa a decir «Otros».
+        assertEquals(CategoryPref(hidden = true, renombradaA = "Otros"), UsedCategoriesCache.prefs["Otros ingresos"])
         assertFalse("Otros ingresos" in UsedCategoriesCache.categories)
         assertTrue("Otros" in UsedCategoriesCache.categories)
+    }
+
+    /**
+     * Vuelta 138: renombrar una del catálogo deja la vieja escondida con su alias y el tipo en la nueva;
+     * volver a su nombre borra el alias. El mismo espejo que el server.
+     */
+    @Test
+    fun `renombrar una del catalogo y volver espeja al server`() {
+        UsedCategoriesCache.record("Vivienda", TransactionType.EXPENSE)
+        UsedCategoriesCache.applyRename("Vivienda", "Hogar", icono = "casa", color = "ambar")
+        assertEquals(CategoryPref(hidden = true, renombradaA = "Hogar"), UsedCategoriesCache.prefs["Vivienda"])
+        assertEquals(
+            CategoryPref(pinnedType = TransactionType.EXPENSE.name, icono = "casa", color = "ambar"),
+            UsedCategoriesCache.prefs["Hogar"],
+        )
+
+        UsedCategoriesCache.applyRename("Hogar", "Casa")
+        assertEquals("Casa", UsedCategoriesCache.prefs["Vivienda"]?.renombradaA)
+
+        UsedCategoriesCache.applyRename("Casa", "Vivienda")
+        assertEquals(null, UsedCategoriesCache.prefs["Vivienda"]?.renombradaA)
+        assertEquals(false, UsedCategoriesCache.prefs["Vivienda"]?.hidden ?: false)
     }
 
     @Test
