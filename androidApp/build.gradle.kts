@@ -74,8 +74,8 @@ android {
         // Adentro van además #175-#179: Movi AI leyendo tus documentos, la cuota que no es ni
         // interés ni seguro ni capital, qué pasa si abonas de más, y los mínimos de tarjeta
         // descontados del flujo libre.
-        versionCode = 93
-        versionName = "1.92"
+        versionCode = 94
+        versionName = "1.93"
     }
     /*
      * Vuelta 109 · **dos canales, la misma app.** `directa` es el APK de siempre —el de Drive, con la
