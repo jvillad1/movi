@@ -231,6 +231,44 @@ class UnaSolaFilaDeFacturaTest {
         assertEquals("Venció hace 3 días · falta el mínimo", texto(visibles.single()))
     }
 
+    /**
+     * Vuelta 141 (revisión) · a 360 dp «Vence el 5 dic · no toca Tu plata» al lado de «$9.145.256» no cabe: la fila
+     * no pierde la señal, dice la fecha corta («5 dic · no toca Tu plata»), entera. Antes caía en «Vence el 5 dic».
+     */
+    @Test
+    fun `a 360 la cuota de la AFC dice que no toca Tu plata aunque no quepa el estado largo`() {
+        val deLaAfc = PagoDelPeriodo(
+            ruleId = "${CREDIT_RULE_PREFIX}acc_1254", nombre = "Cuota Hipoteca 1254", monto = 9_145_256, pagado = false,
+            diasParaVencer = 29, vence = "2026-12-05", categoria = "Cuota de crédito", sePagaDesde = "acc_afc",
+            saleDeFueraDeTuPlata = true,
+        )
+        composeRule.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * 1.12f)) {
+                MoviTheme {
+                    Column(Modifier.fillMaxWidth()) {
+                        for (pago in listOf(deLaAfc, celular)) {
+                            val lo = loDeLaFactura(pago, emptySet(), false, emptyMap(), emptyMap(), emptyMap(), enElTotal = true)
+                            FilaDeFactura(pago = pago, estado = lo.estado, extracto = null, onAbrir = {})
+                        }
+                    }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        val visibles = composeRule.onAllNodes(
+            SemanticsMatcher("el estado de la cuota de la AFC") {
+                it.config.getOrNull(com.jvillada.movi.ui.components.ds.SubtituloVisibleDeFilaKey)?.contains(NO_TOCA_TU_PLATA) == true
+            },
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes()
+        assertEquals(1, visibles.size, "la fila dice «no toca Tu plata»")
+        assertTrue(seVeEntero(visibles.single()), "entero: «${visibles.single().config.getOrNull(com.jvillada.movi.ui.components.ds.SubtituloVisibleDeFilaKey)}»")
+        // Mide lo mismo que cualquier otra factura.
+        val altos = altos()
+        assertTrue(abs(altos[0] - altos[1]) <= 0.5f, "$altos")
+    }
+
     @Test
     fun `con la letra al 130 por ciento crecen todas igual y nada corto se corta`() {
         montarLasFilas(1.456f)

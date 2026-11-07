@@ -98,7 +98,7 @@ data class TeAlcanzaHastaQueTePaguen(
  */
 fun pagosQueFaltanDelPeriodo(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
     checklist
-        .filter { !it.esIngreso && !it.pagado && !it.montoEsSaldo && !it.esAbono && it.moneda == "COP" && it.monto > 0L }
+        .filter { !it.esIngreso && !it.pagado && !it.montoEsSaldo && !it.esAbono && !it.saleDeFueraDeTuPlata && it.moneda == "COP" && it.monto > 0L }
         .sortedWith(compareByDescending<PagoDelPeriodo> { it.monto }.thenBy { it.vence })
 
 /**

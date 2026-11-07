@@ -265,7 +265,10 @@ fun fijosDelPeriodo(checklist: List<PagoDelPeriodo>): Long =
         // Vuelta 63: el abono mensual a una deuda no es un fijo, ni pendiente ni hecho. Hecho, su
         // traspaso ya resta como «otro pago de deuda» (`pagosDeDeudaFueraDelChecklist`): contarlo acá
         // lo restaría dos veces.
-        .filter { !it.esIngreso && !it.montoEsSaldo && !it.esAbono && it.moneda == "COP" }
+        // Vuelta 141: la cuota que sale de una cuenta fuera de «Tu plata» (la AFC) tampoco, ni pendiente ni
+        // pagada: esa plata no es de tu sueldo. Pagada, la compensan `pagadoDesdeFuera` y
+        // `pagosDeDeudaFueraDelChecklist` (el server no la cuenta en los fijos: `cuotasDelChecklistPagadas`).
+        .filter { !it.esIngreso && !it.montoEsSaldo && !it.esAbono && !it.saleDeFueraDeTuPlata && it.moneda == "COP" }
         .sumOf { if (it.pagado) it.montoPagado ?: it.monto else it.monto }
 
 /** Los ingresos del checklist que todavía no llegan: el sueldo que falta, un arriendo que se cobra. */

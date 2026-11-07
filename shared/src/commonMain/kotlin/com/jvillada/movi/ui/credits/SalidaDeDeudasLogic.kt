@@ -186,8 +186,9 @@ fun motivoDeFuera(d: DeudaParaSalir): String = when (d.porQueNoEntra) {
     null -> ""
 }
 
-/** «La paga tu nómina» / «La paga Skandia». */
-fun quienPagaEnTexto(d: DeudaParaSalir): String = "La paga ${d.quienLaPaga}"
+/** «La paga tu nómina» / «La paga Skandia»; vuelta 141: «Se paga desde AFC Davibank 9497». */
+fun quienPagaEnTexto(d: DeudaParaSalir): String =
+    d.sePagaDesde?.let { com.jvillada.movi.shared.model.textoDeSePagaDesde(it) } ?: "La paga ${d.quienLaPaga}"
 
 /**
  * El total de interés de este mes de las deudas del cálculo. **Ya no es la cifra de la pantalla**

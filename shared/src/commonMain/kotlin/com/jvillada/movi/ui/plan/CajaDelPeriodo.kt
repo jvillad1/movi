@@ -315,7 +315,7 @@ internal fun comparacionConTeQuedan(data: DashboardData, hoy: LocalDate): Compar
     val disponible = disponibleDelInicio(data, hoy) ?: return null
     // Lo que vence hoy o ya venció lo resta la caja hoy: queda fuera de la explicación.
     val porVenir = checklistDelPeriodoDe(data)
-        .filter { !it.pagado && !it.esAbono && !it.montoEsSaldo && it.moneda == "COP" && it.vence > hoy.toString() }
+        .filter { !it.pagado && !it.esAbono && !it.saleDeFueraDeTuPlata && !it.montoEsSaldo && it.moneda == "COP" && it.vence > hoy.toString() }
     return ComparacionConTeQuedan(
         teQuedan = disponible.periodo.teQuedan,
         fijosQueFaltan = porVenir.filter { !it.esIngreso }.sumOf { it.monto },

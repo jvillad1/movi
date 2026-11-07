@@ -56,4 +56,21 @@ class QuienPagaLoQueNoSaleDeTuBolsilloTest {
         assertEquals(ALCANCE_INTERES_AJENO, alcanceDelInteresAjeno(emptyList()))
         assertEquals(ALCANCE_FALTA_AJENO, alcanceDeLaFaltaAjena(emptyList()))
     }
+    /** Vuelta 141 · la cuota que sale de la AFC (fuera de Tu plata) va aparte y dice de qué cuenta se paga. */
+    @Test
+    fun `la cuota que sale de la AFC dice que se paga desde la AFC`() {
+        val afc = com.jvillada.movi.shared.model.Account("afc", "AFC Davibank 9497", com.jvillada.movi.shared.model.AccountType.SAVINGS, 1L, condicionadaA = "vivienda")
+        val hipoteca = com.jvillada.movi.shared.model.CreditSummary(
+            account = com.jvillada.movi.shared.model.Account("h1254", "Hipoteca 1254", com.jvillada.movi.shared.model.AccountType.LOAN, 1L),
+            terms = credito().copy(sePagaDesde = afc.id), paidPct = null,
+            cuotaSePagaDesdeFuera = com.jvillada.movi.shared.model.cuentaDeLaCuotaFueraDeTuPlata(credito().copy(sePagaDesde = afc.id), listOf(afc))?.name,
+        )
+        val cuentas = cuentasFueraDeLasCuotas(listOf(hipoteca))
+        assertEquals(listOf("AFC Davibank 9497"), cuentas)
+        assertEquals("Se pagan desde AFC Davibank 9497", alcanceDelInteresAjeno(emptyList(), cuentas))
+        assertEquals("En los que se pagan desde AFC Davibank 9497 y se terminan", alcanceDeLaFaltaAjena(emptyList(), cuentas))
+        assertEquals("Los paga Skandia o salen de AFC Davibank 9497", alcanceDelInteresAjeno(listOf("Skandia"), cuentas))
+        val deuda = com.jvillada.movi.shared.model.deudasParaSalir(listOf(hipoteca), emptyList()).single()
+        assertEquals("Se paga desde AFC Davibank 9497", quienPagaEnTexto(deuda))
+    }
 }

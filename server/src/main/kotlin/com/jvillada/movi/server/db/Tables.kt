@@ -1122,6 +1122,11 @@ object Credits : Table("credit_terms") {
      */
     val debitoAutomaticoDesde = varchar("debito_automatico_desde", 50).nullable()
     /**
+     * Vuelta 141 · la cuenta de la que el dueño paga la cuota (a mano); ver `CreditTerms.sePagaDesde`.
+     * Nullable y sin FK por lo mismo que [debitoAutomaticoDesde]: si la cuenta se borra, se suelta.
+     */
+    val sePagaDesde = varchar("se_paga_desde", 50).nullable()
+    /**
      * El tercero al que el dueño le gira la cuota; ver `CreditTerms.destinoConocidoId`. Nullable por
      * lo mismo que las de arriba (`ADD COLUMN … NULL` dentro de la transacción de arranque no puede
      * fallar), y sin FK a `known_destinations` por lo mismo que `recurring_rules.destino_conocido_id`:

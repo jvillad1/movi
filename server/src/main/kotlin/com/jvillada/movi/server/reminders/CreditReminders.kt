@@ -4,6 +4,7 @@ import com.jvillada.movi.server.credits.toCreditTerms
 import com.jvillada.movi.server.db.Accounts
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.dbQuery
+import com.jvillada.movi.server.routes.cuentasDelDisponible
 import com.jvillada.movi.shared.model.CREDIT_RULE_PREFIX
 import com.jvillada.movi.shared.model.CUOTA_CATEGORY
 import com.jvillada.movi.shared.model.CreditTerms
@@ -33,6 +34,12 @@ fun virtualRuleFor(
      * cambia: su monto es [cuotaDeEsteMes]. Sin ella (o en uno fijo), `installment`, como siempre.
      */
     ultimaCuotaPagada: CuotaPagada? = null,
+    /**
+     * Vuelta 141 · la cuenta de [CreditTerms.sePagaDesde] está fuera de «Tu plata» (la AFC): la fila sale en
+     * Pagos pero no suma en lo que te queda. Lo decide quien conoce la cuenta, con la regla del patrimonio
+     * ([laCuotaSaleDeFueraDeTuPlata]); sin saberlo, `false` (lo de siempre). Ver [fueraDeTuPlataEn].
+     */
+    fueraDeTuPlata: Boolean = false,
 ): RecurringRule =
     RecurringRule(
         id         = "$CREDIT_RULE_PREFIX${terms.accountId}",
@@ -100,7 +107,21 @@ fun virtualRuleFor(
         // regla viaje igual que siempre. La cuenta del débito NO va en `accountId`: el emparejador
         // de las reglas reales lee ese campo y una sintética no tiene por qué pasar por ahí.
         seDebitaSolo = true.takeIf { !terms.debitoAutomaticoDesde.isNullOrBlank() },
+        // Vuelta 141: de qué cuenta sale la cuota, y si esa cuenta está fuera de Tu plata. `null` y no
+        // `false` cuando no, para que la regla viaje igual que siempre.
+        sePagaDesde = terms.sePagaDesde?.takeIf { it.isNotBlank() },
+        saleDeFueraDeTuPlata = true.takeIf { fueraDeTuPlata && !terms.sePagaDesde.isNullOrBlank() },
     )
+
+/**
+ * Vuelta 141 · **¿la cuota de [terms] sale de una cuenta fuera de «Tu plata»?** Con las cuentas del dueño
+ * ([cuentas], de `cuentasDelDisponible`) y la regla del patrimonio ([laCuotaSaleDeFueraDeTuPlata]). Una
+ * cuenta que no se conoce (borrada, ajena) no saca nada: lo de siempre. Pura.
+ */
+fun fueraDeTuPlataEn(terms: CreditTerms, cuentas: Map<String, com.jvillada.movi.shared.model.CuentaDelDisponible>): Boolean {
+    val cuenta = terms.sePagaDesde?.takeIf { it.isNotBlank() }?.let { cuentas[it] } ?: return false
+    return com.jvillada.movi.shared.model.laCuotaSaleDeFueraDeTuPlata(cuenta.tipo, cuenta.condicionadaA, cuenta.esBien)
+}
 
 /**
  * Vuelta 134 · **la última cuota pagada de cada crédito de cuota que cambia** de [creditos] (las condiciones
@@ -145,6 +166,9 @@ suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String
     // todo lo demás de Pagos), para estimar su cuota con la última pagada de verdad. Revisión de la 134
     // (m-6): con el armado único.
     val ultimas = ultimasCuotasPagadasDe(userId, filas.map { (terms, row) -> terms to row[Accounts.name] })
+    // Vuelta 141: las cuentas del dueño, solo si algún crédito dice de cuál sale su cuota.
+    val cuentas = if (filas.none { (terms, _) -> !terms.sePagaDesde.isNullOrBlank() }) emptyMap()
+    else cuentasDelDisponible(userId)
     filas
         // Una LIBRANZA no entra al barrido de avisos: su cuota ya se pagó sola, retenida del
         // sueldo antes de que la plata llegara a la cuenta. Recordarle al dueño que «pague» algo
@@ -155,7 +179,8 @@ suspend fun loadCreditRulePairs(userId: String): List<Pair<RecurringRule, String
         // crédito, con `POST /api/credits/{id}/payroll-deduction`.
         .filter { (terms, _) -> entraAlBarridoDeAvisos(terms) }
         .map { (terms, row) ->
-            virtualRuleFor(terms, row[Accounts.name], ultimas[terms.accountId]) to row[Credits.lastRemindedPeriod]
+            virtualRuleFor(terms, row[Accounts.name], ultimas[terms.accountId], fueraDeTuPlata = fueraDeTuPlataEn(terms, cuentas)) to
+                row[Credits.lastRemindedPeriod]
         }
 }
 

@@ -325,7 +325,11 @@ fun cuotasDelChecklistPagadas(
     historialDePagosDeDeuda: List<FinancialEvent>,
     zone: ZoneId = AppClock.zone,
 ): Map<String, Long> {
-    if (reglasDeCredito.isEmpty()) return emptyMap()
+    // Vuelta 141: la cuota que sale de una cuenta fuera de Tu plata (la AFC) no está en los fijos del
+    // cliente (`fijosDelPeriodo` la deja afuera), así que su pago tampoco se descuenta acá: queda en «otros
+    // pagos de deuda», que lo resta, y `pagadoDesdeFuera` lo suma. Se compensan: «Te quedan» no se mueve.
+    val deTuPlata = reglasDeCredito.filterNot { it.saleDeFueraDeTuPlata == true }
+    if (deTuPlata.isEmpty()) return emptyMap()
     // Los dos juntos: el historial para saber qué período ya estaba saldado, y los del período por si
     // alguno quedara fuera de la franja (un período armado a mano más largo que un mes). Un mismo
     // movimiento viene en los dos: se cuenta una vez.
@@ -333,9 +337,9 @@ fun cuotasDelChecklistPagadas(
         .filter { it.category in CATEGORIAS_QUE_SALDAN }
         .distinctBy { it.id }
     val dias = diasDelPeriodo(hoy, settings, zone)
-    return pagosDeDeudaPorPeriodo(reglasDeCredito, pagos, zone = zone, settings = settings)
+    return pagosDeDeudaPorPeriodo(deTuPlata, pagos, zone = zone, settings = settings)
         .mapNotNull { (ruleId, porPeriodo) ->
-            val regla = reglasDeCredito.first { it.id == ruleId }
+            val regla = deTuPlata.first { it.id == ruleId }
             val vence = ocurrenciaPorPreguntar(hoy, regla, settings, zone = zone) ?: return@mapNotNull null
             if (vence !in dias) return@mapNotNull null
             val pago = porPeriodo[periodOf(vence)] ?: return@mapNotNull null

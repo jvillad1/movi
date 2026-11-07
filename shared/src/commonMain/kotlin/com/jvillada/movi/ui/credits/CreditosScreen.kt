@@ -336,6 +336,8 @@ fun CreditosScreen(onNavigate: (Screen) -> Unit) {
                             mesDeLaPrimeraCuota(c, hoyEnAppZone())?.let { plan to it }
                         },
                         quienesPaganLoQueNoSaleDeTuBolsillo(creditosALaVista.mapNotNull { it.terms }),
+                        // Vuelta 141: las cuentas fuera de Tu plata de las que salen cuotas (la AFC).
+                        cuentasFuera = cuentasFueraDeLasCuotas(creditosALaVista),
                         onRenglonesDelAvisoAmbar = { renglonesDelAvisoAmbar = it },
                         onRenglonesDelAvisoRojo = { renglonesDelAvisoRojo = it },
                     )
@@ -519,6 +521,7 @@ private fun LoQueCuestaLaDeuda(
     /** Cada plan con el mes de su primera cuota sin pagar: de ahí sale «Tu última cuota». */
     planesConSuPrimeraCuota: List<Pair<PlanDelCredito, PeriodoFinanciero>>,
     quienesPagan: List<String> = emptyList(),
+    cuentasFuera: List<String> = emptyList(),
     onRenglonesDelAvisoAmbar: (Int) -> Unit = {},
     onRenglonesDelAvisoRojo: (Int) -> Unit = {},
 ) {
@@ -541,7 +544,7 @@ private fun LoQueCuestaLaDeuda(
     FilaDelResumen(alcanceDelInteresPropio(interes), interes.propio)
     if (interes.ajeno > 0L) {
         Spacer(Modifier.height(Espacio.xxs))
-        FilaDelResumen(alcanceDelInteresAjeno(quienesPagan), interes.ajeno)
+        FilaDelResumen(alcanceDelInteresAjeno(quienesPagan, cuentasFuera), interes.ajeno)
     }
 
     if (resumen.interesPorPagarPropio > 0L || resumen.interesPorPagarAjeno > 0L) {
@@ -552,7 +555,7 @@ private fun LoQueCuestaLaDeuda(
         }
         if (resumen.interesPorPagarAjeno > 0L) {
             Spacer(Modifier.height(Espacio.xxs))
-            FilaDelResumen(alcanceDeLaFaltaAjena(quienesPagan), resumen.interesPorPagarAjeno)
+            FilaDelResumen(alcanceDeLaFaltaAjena(quienesPagan, cuentasFuera), resumen.interesPorPagarAjeno)
         }
     }
 

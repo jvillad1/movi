@@ -223,6 +223,9 @@ fun Route.creditRoutes() {
             validarLaCuotaQueCambia(terms)?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
             dbQuery { motivoDelDebitoAutomatico(uid, terms, cuentaAlAbrir.currency) }
                 ?.let { return@post call.respond(HttpStatusCode.BadRequest, it) }
+            // Vuelta 141: de qué cuenta sale la cuota (una de dinero o inversión del dueño, sola).
+            dbQuery { motivoDeLaCuentaDeLaCuota(uid, terms, cuentaAlAbrir.currency) }
+                ?.let { return@post call.respond(HttpStatusCode.UnprocessableEntity, it) }
             val opening = openingEventFor(cuentaAlAbrir, now = System.currentTimeMillis())
             // Las patas se construyen con `transferLegsFor`, la MISMA función que usa
             // `POST /api/transfers` (vive en :core justamente para eso): misma categoría
@@ -355,6 +358,10 @@ fun Route.creditRoutes() {
                 // Movi la propuesta de la cuota que el banco cobra solo.
                 .let { if ("debitoAutomaticoDesde" in crudo) it else it.copy(debitoAutomaticoDesde = previo?.debitoAutomaticoDesde) }
                 .let { it.copy(debitoAutomaticoDesde = it.debitoAutomaticoDesde?.trim()?.takeIf { v -> v.isNotBlank() }) }
+                // Vuelta 141 · de qué cuenta sale la cuota, por el mismo agujero: sin la clave (un APK viejo) se
+                // conserva; con `null`, se borra.
+                .let { if ("sePagaDesde" in crudo) it else it.copy(sePagaDesde = previo?.sePagaDesde) }
+                .let { it.copy(sePagaDesde = it.sePagaDesde?.trim()?.takeIf { v -> v.isNotBlank() }) }
                 // A quién le gira la cuota: tres estados, como en la regla (`null` = no lo toques,
                 // `""` = quítalo, un id = ese tercero si es suyo). Ver `CreditTerms.destinoConocidoId`.
                 .let { pedido ->
@@ -389,6 +396,10 @@ fun Route.creditRoutes() {
             validarLaCuotaQueCambia(body)?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
             dbQuery { motivoDelDebitoAutomatico(uid, body, account.currency) }
                 ?.let { return@put call.respond(HttpStatusCode.BadRequest, it) }
+            // Vuelta 141: de qué cuenta sale la cuota. 422 con «la paga otro», la libranza, el débito o una
+            // cuenta que no es del dueño (o no es de dinero ni de inversión).
+            dbQuery { motivoDeLaCuentaDeLaCuota(uid, body, account.currency) }
+                ?.let { return@put call.respond(HttpStatusCode.UnprocessableEntity, it) }
             // upsert atómico por PK (accountId): elimina la carrera check-then-insert.
             // lastRemindedPeriod no está en el body del upsert, así que se conserva
             // a propósito: un cambio de día aplica desde el mes siguiente (v1).
@@ -705,6 +716,23 @@ fun Route.creditRoutes() {
 }
 
 /**
+ * Vuelta 141 · el motivo para rechazar [CreditTerms.sePagaDesde], o `null` si está bien (o no hay). Lee la
+ * cuenta **del usuario** —una ajena se trata como inexistente— y delega en [validarCuentaDeLaCuota], la
+ * misma regla de la hoja.
+ */
+private fun org.jetbrains.exposed.sql.Transaction.motivoDeLaCuentaDeLaCuota(
+    uid: String,
+    terms: CreditTerms,
+    monedaDelCredito: String,
+): String? {
+    val id = terms.sePagaDesde?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val cuenta = Accounts.selectAll()
+        .where { (Accounts.id eq id) and (Accounts.userId eq uid) }
+        .firstOrNull()?.toAccount()
+    return com.jvillada.movi.shared.model.validarCuentaDeLaCuota(terms, cuenta, monedaDelCredito)
+}
+
+/**
  * El motivo para rechazar el débito automático de [terms], o `null` si está bien (o no hay). Lee la
  * cuenta **del usuario** —una ajena se trata como inexistente, mismo aislamiento que el resto— y
  * delega la regla en [validarDebitoAutomatico], la misma de la hoja.
@@ -743,6 +771,7 @@ private fun fillTerms(
     it[Credits.otrosCargosMensuales] = terms.otrosCargosMensuales?.takeIf { v -> v > 0L }
     it[Credits.sinIntereses] = terms.sinIntereses
     it[Credits.debitoAutomaticoDesde] = terms.debitoAutomaticoDesde?.trim()?.takeIf { v -> v.isNotBlank() }
+    it[Credits.sePagaDesde] = terms.sePagaDesde?.trim()?.takeIf { v -> v.isNotBlank() }
     it[Credits.destinoConocidoId] = terms.destinoConocidoId?.takeIf { v -> v.isNotBlank() }
     it[Credits.interesReal] = terms.interesReal?.takeIf { v -> v >= 0L }
     it[Credits.interesRealCuota] = terms.interesRealCuota?.takeIf { v -> Regex("""\d{4}-\d{2}""").matches(v) }
@@ -846,6 +875,10 @@ internal suspend fun creditosDe(uid: String): List<CreditSummary> {
         pagosDeDeuda,
         periodo,
     )
+    // Vuelta 141: las cuentas del dueño, solo si algún crédito dice de cuál sale su cuota: la que sale de una
+    // fuera de Tu plata (la AFC) va aparte, como la que paga otro (`saleDeTuBolsillo(credit)`).
+    val cuentas = if (termsByAccount.values.none { !it.sePagaDesde.isNullOrBlank() }) emptyList()
+    else dbQuery { Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() } }
     return loans.map { acc ->
         val terms = termsByAccount[acc.id]
         val eventos = eventsByAccount[acc.id] ?: emptyList()
@@ -853,6 +886,7 @@ internal suspend fun creditosDe(uid: String): List<CreditSummary> {
             cuotasPagadas = terms?.let { cuotasPagadasAlrededorDe(eventos, it, acc.name, hoy, periodo) },
             saldoFijadoEn = saldoFijadoEn(eventos),
             ultimaCuotaPagada = ultimas[acc.id],
+            cuotaSePagaDesdeFuera = com.jvillada.movi.shared.model.cuentaDeLaCuotaFueraDeTuPlata(terms, cuentas)?.name,
         )
     }
 }

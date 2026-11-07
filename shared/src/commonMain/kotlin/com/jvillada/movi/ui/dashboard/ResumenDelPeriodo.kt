@@ -295,7 +295,8 @@ fun yaRecibidoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
  */
 fun avanceDelChecklist(checklist: List<PagoDelPeriodo>): Pair<Int, Int> {
     // Vuelta 63: un abono planeado tampoco es uno de los pagos del período (Hoy y Pagos cuentan igual).
-    val pagos = checklist.filter { !it.esIngreso && !it.esAbono }
+    // Vuelta 141: ni la cuota que sale de una cuenta fuera de «Tu plata» (se lista aparte, no suma).
+    val pagos = checklist.filter { !it.esIngreso && !it.esAbono && !it.saleDeFueraDeTuPlata }
     // Vuelta 72: una tarjeta pagada por debajo de su mínimo no cuenta como hecha («queda 1 de 5»).
     return pagos.count { it.hecho } to pagos.size
 }
@@ -565,7 +566,7 @@ fun gastoSinCategoriaDe(gastoPorCategoria: Map<String, Long>): Long =
 
 /** El monto que el checklist dice que ya se pagó, para el rótulo de avance. */
 fun yaPagado(checklist: List<PagoDelPeriodo>): Long =
-    checklist.filter { it.pagado && !it.montoEsSaldo && !it.esIngreso && !it.esAbono }.sumOf { it.monto }
+    checklist.filter { it.pagado && !it.montoEsSaldo && !it.esIngreso && !it.esAbono && !it.saleDeFueraDeTuPlata }.sumOf { it.monto }
 
 /** Un pago de [checklist] que sirva de ejemplo de lo que urge, o `null` si no falta nada. */
 fun loQueUrge(checklist: List<PagoDelPeriodo>): PagoDelPeriodo? =
