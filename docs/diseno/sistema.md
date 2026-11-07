@@ -5709,3 +5709,35 @@ al llegar los gastos), `ChecklistDelPeriodoEnElTableroTest` (la hoja fuera de la
 - **La página de consentimiento** (server, `conector/PantallaDeConsentimiento.kt`) usa los colores de `Tokens.kt`:
   la marca en pastilla, una tarjeta blanca con a qué host vuelves y qué podrá hacer Claude, y el formulario con
   «Permitir» (el único amarillo) y «Cancelar» con borde.
+
+## Vuelta 138 · La hoja de una categoría: editar a la vista, plegar lo largo
+
+Viene de una foto del iPhone de Caro: la hoja de «Vivienda» era el nombre, el uso y una cuadrícula de íconos que
+llenaba la pantalla; «Renombrar», «Unificar en otra» y «Esconder» quedaban abajo, sin verse, y a una del catálogo
+ni siquiera se le ofrecía renombrar («no permite editar categorías»). El patrón, el mismo «Editar» de la vuelta 98:
+
+- **Arriba, lo que se edita, a la vista**: debajo del uso, una `Superficie` de capa 2 con tres `Fila`s:
+  «Nombre» (subtítulo el nombre de hoy, o «Hogar · antes «Vivienda», de Movi»), «Ícono y color» (el ícono actual
+  con su círculo de color en `inicio` y «Casa · Ámbar») y «Tipo» («Gasto · automático» o el tipo fijado). A
+  390×844 con la letra de la app se ven sin bajar, junto con las acciones.
+- **Lo largo, plegado**: la cuadrícula de íconos y colores y las pastillas del tipo se despliegan debajo de su fila
+  (`Chevron(abierto)`), dentro de la misma superficie. Se decidió plegar también el tipo: las tres filas se
+  leen igual, y las acciones no dependen de cuánto ocupen las pastillas y su explicación con la letra grande (no se
+  midió abierto).
+- **Después, las acciones de siempre**, en su propia superficie: «Unificar en otra», «Esconder» / «Volver a
+  sugerirla» y, en una del catálogo renombrada, «Volver a «Vivienda»».
+- **El título también renombra** (`alPresionar`, «Renombrar»): es el atajo de quien toca lo que quiere cambiar.
+- **Lo que no se puede, no se ofrece como control**: en «Cuota de crédito», «Desembolso de crédito» y «Otros»
+  (donde Movi pone lo que no entendió) la fila «Nombre» va apagada y sin chevron, y debajo el porqué; no hay
+  «Unificar».
+- **Las filas plegables dicen su estado** al lector de pantalla (`stateDescription`: «Abierto» / «Cerrado»).
+- **Escribir un nombre del catálogo ya retirado** («Vivienda», que hoy es «Hogar») dice ««Vivienda» ahora se
+  llama «Hogar».» y ofrece «Unificar en «Hogar»».
+- **Renombrar** llega con el nombre lleno y seleccionado (`Campo(seleccionadoAlEmpezar = true)`, con el foco), un
+  solo amarillo («Guardar», o «Unificar en «X»» si el nombre ya existe) y, en una del catálogo, la línea «Solo
+  cambia para ti: tus movimientos, presupuestos y pagos fijos pasan a «X»».
+
+Lo vigilan `LaHojaDeUnaCategoriaSeEditaALaVistaTest` (las cuatro filas enteras dentro de 844 dp, la cuadrícula al
+tocar, renombrar lleno y seleccionado, el título, volver y la cuota), `ElegirIconoYColorEnLaHojaTest`,
+`CategoriasConPildorasYFilasTest`, `LosRotulosDeIconosNoSePartenTest` (las celdas, ahora dentro de la superficie) y
+`UnSoloAmarilloPorVistaTest`.

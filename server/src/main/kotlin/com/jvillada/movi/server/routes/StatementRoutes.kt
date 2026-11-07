@@ -680,11 +680,16 @@ internal suspend fun conciliarYArchivar(
     // proponga dos veces. Contra los movimientos que el emparejador de arriba NO usó. Ver
     // `CargosDelExtracto.kt` en :core.
     val memoria = dbQuery { memoriaDe(uid) }
-    val (nuevasConCargos, cargosDelBanco) = cargosDelExtracto(
+    val (nuevasDelCatalogo, cargosDelBanco) = cargosDelExtracto(
         nuevas = newTransactions,
         eventos = existing.filter { it.id !in yaEmparejados },
         memoria = memoria,
     )
+    // Vuelta 138: el modelo y los lectores sin IA proponen nombres del catálogo («Vivienda»); si el
+    // dueño la renombró o la unificó en otra, la revisión la propone con la suya.
+    val alias = dbQuery { aliasDeCategorias(uid) }
+    val nuevasConCargos = if (alias.isEmpty()) nuevasDelCatalogo
+    else nuevasDelCatalogo.map { it.copy(category = com.jvillada.movi.shared.model.nombreVigente(it.category, alias)) }
 
     val period = if (isFamirios) {
         val years = parsed.mapNotNull { fechaDelExtracto(it.date)?.year }
@@ -1342,7 +1347,10 @@ private fun Transaction.createEventFromParsed(tx: ParsedTransaction, accountId: 
             tx.category == CARD_PAYMENT_CATEGORY && tx.type == TransactionType.EXPENSE &&
                 looksLikeCardPayment(tx.description + " " + tx.rawText, category = "") -> CARD_PAYMENT_CATEGORY
             // El desembolso cuenta como ingreso y solo nace con su par: una fila suelta la inflaría.
-            isReservedCategory(tx.category) || esCategoriaDelDesembolso(tx.category) -> FALLBACK_CATEGORY
+            // Vuelta 138: «Otros» con el nombre del dueño, si la renombró o la unificó en otra. La
+            // lectura del alias solo corre acá, que es lo raro.
+            isReservedCategory(tx.category) || esCategoriaDelDesembolso(tx.category) ->
+                com.jvillada.movi.shared.model.nombreVigente(FALLBACK_CATEGORY, aliasDeCategorias(uid))
             else -> tx.category
         }
         it[description]          = tx.description

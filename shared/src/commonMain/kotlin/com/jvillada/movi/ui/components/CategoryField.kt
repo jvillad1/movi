@@ -32,6 +32,9 @@ import com.jvillada.movi.theme.Movi
 import com.jvillada.movi.shared.model.CATEGORY_NAME_ORDER
 import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
+import com.jvillada.movi.shared.model.aliasDeLasPreferencias
+import com.jvillada.movi.shared.model.nombreVigente
+import com.jvillada.movi.shared.model.nombreDeMoviEnLasPreferencias
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
@@ -131,7 +134,8 @@ internal fun seOfreceParaTipo(
     val pref = prefs.entries.firstOrNull { (key, _) -> normalizarParaBuscar(key.trim()) == normalizarParaBuscar(name.trim()) }?.value
     if (pref?.hidden == true) return false
     if (tipo == null) return true
-    val efectivos = effectiveCategoryTypes(name, pref?.pinnedType, tiposUsados)
+    // Vuelta 138: «Hogar», que era «Vivienda», es de gasto sin que nadie lo haya fijado.
+    val efectivos = effectiveCategoryTypes(name, pref?.pinnedType, tiposUsados, nombreDeMoviEnLasPreferencias(name, prefs))
     return efectivos.isEmpty() || tipo in efectivos
 }
 
@@ -159,7 +163,16 @@ private fun categoriasQueCoinciden(
     // Para deduplicar hace falta el catálogo ENTERO, no solo el visible: una categoría del
     // catálogo escondida no puede volver a colarse por la puerta de las propias.
     val todasLasDelCatalogo = PREDEFINED_CATEGORIES.map { it.name }
-    val predefined = todasLasDelCatalogo
+    // Vuelta 138: una del catálogo que el dueño renombró («Vivienda» → «Hogar») ocupa su lugar con el
+    // nombre nuevo —también para el valor inicial de Agregar— y se encuentra escribiendo cualquiera
+    // de los dos. Sin alias, el catálogo de siempre.
+    val alias = aliasDeLasPreferencias(prefs)
+    val vigentes = todasLasDelCatalogo.map { nombreVigente(it, alias) }
+    val q = normalizarParaBuscar(query)
+    val predefined = todasLasDelCatalogo.indices
+        .filter { i -> normalizarParaBuscar(vigentes[i]).contains(q) || normalizarParaBuscar(todasLasDelCatalogo[i]).contains(q) }
+        .map { vigentes[it] }
+        .distinct()
         // «Pago de tarjeta» está en el catálogo Y es reservada: la app se la ofrecía al anotar un
         // gasto y, si el dueño la elegía, `isCashFlow` sacaba ese gasto real de «Gastos del mes»
         // sin decir nada. Ninguna reservada se sugiere en este campo.
@@ -176,9 +189,8 @@ private fun categoriasQueCoinciden(
         // Vuelta 51: tampoco las que pide el flujo de dos patas («Cuota de crédito», «Desembolso de
         // crédito»): una sola lista en `:core`, [esCategoriaQueNoSeElige].
         .filterNot { esCategoriaQueNoSeElige(it) }
-        .filter { seOfrece(it, emptySet()) }
-    val q = normalizarParaBuscar(query)
-    val predefinedMatches = predefined.filter { normalizarParaBuscar(it).contains(q) }
+        .filter { seOfrece(it, usedCategories[it].orEmpty()) }
+    val predefinedMatches = predefined
     val usedMatches = usedCategories.entries
         .mapNotNull { (name, types) ->
             val clean = name.trim()
@@ -188,7 +200,7 @@ private fun categoriasQueCoinciden(
         .filter { (name, types) -> seOfrece(name, types) }
         .map { (name, _) -> name }
         .distinct()
-        .filterNot { used -> todasLasDelCatalogo.any { it.equals(used, ignoreCase = true) } }
+        .filterNot { used -> (todasLasDelCatalogo + vigentes).any { it.equals(used, ignoreCase = true) } }
         .filter { normalizarParaBuscar(it).contains(q) }
     return predefinedMatches to usedMatches
 }
@@ -237,8 +249,9 @@ fun categoriaSirveParaTipo(
     val pref = prefs.entries.firstOrNull { normalizarParaBuscar(it.key.trim()) == normalizarParaBuscar(limpio) }?.value
     if (pref?.hidden == true) return false
     val esDelCatalogo = PREDEFINED_CATEGORIES.any { it.name.equals(limpio, ignoreCase = true) }
-    if (!esDelCatalogo && pref?.pinnedType == null) return true
-    val tipos = effectiveCategoryTypes(limpio, pref?.pinnedType, usedCategories[limpio].orEmpty())
+    val deMovi = nombreDeMoviEnLasPreferencias(limpio, prefs)
+    if (!esDelCatalogo && pref?.pinnedType == null && deMovi == null) return true
+    val tipos = effectiveCategoryTypes(limpio, pref?.pinnedType, usedCategories[limpio].orEmpty(), deMovi)
     return tipos.isEmpty() || type in tipos
 }
 
@@ -314,7 +327,7 @@ fun categoriaPorDefectoPara(
     val (delCatalogo, propias) = categoriasQueCoinciden("", type, usedCategories, prefs)
     return delCatalogo.firstOrNull()
         ?: propias.firstOrNull()
-        ?: PREDEFINED_CATEGORIES.first { it.type == type.name }.name
+        ?: nombreVigente(PREDEFINED_CATEGORIES.first { it.type == type.name }.name, aliasDeLasPreferencias(prefs))
 }
 
 /**
@@ -396,7 +409,7 @@ fun ladoConocidoDeCategoria(
     // catálogo. Sin esto, «Otros» fijada en «Ambos» seguiría diciendo «Ya la tienes en Gastos»
     // al anotar un ingreso, contradiciendo lo que él mismo acababa de decidir.
     val pinned = prefs.entries.firstOrNull { normalizarParaBuscar(it.key.trim()) == q }?.value?.pinnedType
-    val tipos = effectiveCategoryTypes(nombre, pinned, tiposUsados)
+    val tipos = effectiveCategoryTypes(nombre, pinned, tiposUsados, nombreDeMoviEnLasPreferencias(nombre, prefs))
     val delOtroLado = tipos - setOfNotNull(type)
     return when {
         delOtroLado.isEmpty() -> null
@@ -426,7 +439,9 @@ fun nombreCanonicoConocido(
 ): String? {
     val q = normalizarParaBuscar(query.trim())
     if (q.isEmpty()) return null
-    PREDEFINED_CATEGORIES.firstOrNull { normalizarParaBuscar(it.name) == q }?.let { return it.name }
+    // Vuelta 138: escribir «vivienda» con «Vivienda» renombrada a «Hogar» es pedir «Hogar».
+    PREDEFINED_CATEGORIES.firstOrNull { normalizarParaBuscar(it.name) == q }
+        ?.let { return nombreVigente(it.name, aliasDeLasPreferencias(prefs)) }
     usedCategories.keys.map { it.trim() }.firstOrNull { normalizarParaBuscar(it) == q }?.let { return it }
     return prefs.keys.map { it.trim() }.firstOrNull { normalizarParaBuscar(it) == q }
 }

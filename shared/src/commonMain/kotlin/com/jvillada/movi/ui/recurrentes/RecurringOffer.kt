@@ -597,9 +597,11 @@ fun categoriaSugeridaPorNombre(
 ): String? {
     val key = claveDeNombre(name)
     if (key.isEmpty()) return null
+    // Vuelta 138: una del catálogo que el dueño renombró se propone con su nombre («Hogar»).
     return PREDEFINED_CATEGORIES
         .firstOrNull { claveDeNombre(it.name) == key }
         ?.name
+        ?.let { com.jvillada.movi.shared.model.nombreVigente(it, com.jvillada.movi.shared.model.aliasDeLasPreferencias(prefs)) }
         ?.takeIf { categoriaSirveParaTipo(it, type, usedCategories, prefs) }
 }
 

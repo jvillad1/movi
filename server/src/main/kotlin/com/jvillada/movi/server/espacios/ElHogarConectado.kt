@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.espacios
 
+import com.jvillada.movi.server.routes.aliasDeCategorias
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.EspaciosConectados
@@ -207,7 +208,11 @@ internal fun Transaction.resolverDeCategoriasDe(uid: String): (String) -> String
     siExiste(RecurringRules) { select(category).where { userId eq uid }.withDistinct().forEach { sumar(it[category]) } }
     siExiste(CategoryPrefs) { select(name).where { userId eq uid }.forEach { sumar(it[name]) } }
     PREDEFINED_CATEGORIES.forEach { sumar(it.name) }
-    return { categoria -> mias[claveComparableDeNombre(categoria)] ?: SIN_CATEGORIA }
+    // Vuelta 138: una del catálogo que este dueño renombró o unificó se resuelve con su nombre.
+    val alias = aliasDeCategorias(uid)
+    return { categoria ->
+        com.jvillada.movi.shared.model.nombreVigente(mias[claveComparableDeNombre(categoria)] ?: SIN_CATEGORIA, alias)
+    }
 }
 
 /** El nombre del perfil de [uid] como lo dice Movi: su primer nombre («Juan»), o «Alguien». */

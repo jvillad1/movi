@@ -233,6 +233,39 @@ class MoviActuaTest {
         assertEquals(45_000L, p.movimiento!!.amount, "«45.000» con punto de miles")
     }
 
+    /**
+     * Vuelta 138: el modelo conoce el catálogo («Vivienda»); el dueño la renombró a «Hogar». La
+     * propuesta sale en «Hogar», no como una categoría «nueva» con el nombre que retiró.
+     */
+    @Test
+    fun `una del catalogo que el dueno renombro se propone con su nombre`() {
+        anotar("e-hogar", "Arreglo", "Hogar", 80_000, hoy.minusDays(1))
+        transaction {
+            com.jvillada.movi.server.db.CategoryPrefs.insert {
+                it[userId] = a.duenoA; it[name] = "Vivienda"; it[hidden] = true; it[renombradaA] = "Hogar"
+            }
+        }
+        val r = proponerDirecto(PROPONER_MOVIMIENTO, "monto" to "45000", "cuenta" to "Nu", "categoria" to "vivienda")
+        val p = (r as ResultadoDePropuesta.Lista).accion
+        assertEquals("Hogar", p.categoria)
+        assertFalse(p.categoriaNueva)
+    }
+
+    /** Revisión: el cruce con el alias usa la misma normalización que el de lo existente («educacion»). */
+    @Test
+    fun `una del catalogo renombrada se reconoce aunque el modelo la escriba sin tilde`() {
+        anotar("e-colegio", "Matrícula", "Colegio", 800_000, hoy.minusDays(1))
+        transaction {
+            com.jvillada.movi.server.db.CategoryPrefs.insert {
+                it[userId] = a.duenoA; it[name] = "Educación"; it[hidden] = true; it[renombradaA] = "Colegio"
+            }
+        }
+        val r = proponerDirecto(PROPONER_MOVIMIENTO, "monto" to "45000", "cuenta" to "Nu", "categoria" to "educacion")
+        val p = (r as ResultadoDePropuesta.Lista).accion
+        assertEquals("Colegio", p.categoria)
+        assertFalse(p.categoriaNueva)
+    }
+
     // ── «No» ─────────────────────────────────────────────────────────────────
 
     @Test

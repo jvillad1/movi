@@ -168,11 +168,16 @@ fun contenidoDelSelectorDeCategoria(
     val especial: CeldaDeCategoria? = when {
         shouldOfferCreateCategory(escrito, coinciden, conocidas) -> CeldaDeCategoria.Crear(escrito)
         shouldOfferKnownFromOtherSide(escrito, coinciden, conocidas) -> {
-            val escondida = prefs.entries
+            val pref = prefs.entries
                 .firstOrNull { normalizarParaBuscar(it.key.trim()) == normalizarParaBuscar(escrito) }
-                ?.value?.hidden == true
+                ?.value
+            // Vuelta 138: una renombrada («Vivienda» → «Hogar») no está escondida, está con otro nombre.
+            val escondida = pref?.hidden == true && pref.renombradaA == null
+            val nombre = nombreCanonicoConocido(escrito, usadas, prefs) ?: escrito
+            // Y si su nombre de hoy ya está en la lista, no hace falta otra celda que lo repita.
+            if (coinciden.any { it.equals(nombre, ignoreCase = true) }) return ContenidoDelSelectorDeCategoria(existentes)
             CeldaDeCategoria.Usar(
-                nombre = nombreCanonicoConocido(escrito, usadas, prefs) ?: escrito,
+                nombre = nombre,
                 porQue = if (escondida) {
                     "La escondiste en Categorías; puedes usarla igual"
                 } else {

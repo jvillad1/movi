@@ -243,4 +243,6 @@ data class UsedCategory(
      * nunca se usó.
      */
     val usosRecientes: Int = 0,
+    /** Vuelta 138: ver [CategoryPref.renombradaA]. Un APK viejo la ignora. */
+    val renombradaA: String? = null,
 )

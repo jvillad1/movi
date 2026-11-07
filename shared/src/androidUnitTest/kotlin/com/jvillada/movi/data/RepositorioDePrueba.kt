@@ -84,7 +84,8 @@ open class RepositorioDePrueba : WalletRepository {
     override suspend fun deleteBudget(category: String) = noUsado("deleteBudget")
     override suspend fun renameBudget(category: String, newCategory: String): Budget = noUsado("renameBudget")
     override suspend fun getCategories(): List<CategoryUsage> = noUsado("getCategories")
-    override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult = noUsado("renameCategory")
+    override suspend fun renameCategory(from: String, to: String, icono: String?, color: String?): CategoryRewriteResult =
+        noUsado("renameCategory")
     override suspend fun mergeCategory(from: String, into: String): CategoryRewriteResult = noUsado("mergeCategory")
     override suspend fun setCategoryPrefs(name: String, hidden: Boolean, pinnedType: String?, icono: String?, color: String?): CategoryUsage = noUsado("setCategoryPrefs")
     override suspend fun getMemoriaDeCategorias(): List<RecuerdoDeCategoria> = noUsado("getMemoriaDeCategorias")

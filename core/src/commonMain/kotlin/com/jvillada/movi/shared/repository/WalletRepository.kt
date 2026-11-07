@@ -523,15 +523,23 @@ interface WalletRepository {
     suspend fun getCategories(): List<CategoryUsage>
 
     /**
-     * Renombrar una categoría **propia**: el arreglo del error de tipeo. Reescribe los
-     * movimientos, el presupuesto y las reglas recurrentes que la llevan, **en una sola
-     * transacción del server**.
+     * Renombrar una categoría: el arreglo del error de tipeo y, desde la vuelta 138, ponerle su
+     * nombre a una del catálogo (solo para este dueño). Reescribe los movimientos, el presupuesto y
+     * las reglas recurrentes que la llevan, **en una sola transacción del server**.
      *
-     * Rechaza (422) las reservadas y las del catálogo — ver `CategoryRoutes`. Si el nombre
-     * destino ya existe devuelve 409: eso ya no es renombrar sino unificar, y lo decide el dueño
-     * ([mergeCategory]).
+     * Rechaza (422) las reservadas y las que sostienen reglas de plata — ver `CategoryRoutes`. Si el
+     * nombre destino ya existe devuelve 409: eso ya no es renombrar sino unificar, y lo decide el
+     * dueño ([mergeCategory]).
+     *
+     * [icono] y [color]: la apariencia ya resuelta que la app tenía a la vista, cuando el dueño no
+     * había elegido una (ver [com.jvillada.movi.shared.model.RenameCategoryRequest]).
      */
-    suspend fun renameCategory(from: String, to: String): CategoryRewriteResult
+    suspend fun renameCategory(
+        from: String,
+        to: String,
+        icono: String? = null,
+        color: String? = null,
+    ): CategoryRewriteResult
 
     /**
      * Unificar una categoría dentro de otra: el arreglo de los duplicados. Misma reescritura

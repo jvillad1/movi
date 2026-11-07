@@ -40,6 +40,7 @@ import com.jvillada.movi.shared.model.destinoQueNombra
 import com.jvillada.movi.shared.model.esUnComprobante
 import com.jvillada.movi.shared.model.identificador
 import com.jvillada.movi.shared.model.momentoDelSms
+import com.jvillada.movi.shared.model.nombreVigente
 import com.jvillada.movi.shared.model.ofreceGuardarElDestino
 import com.jvillada.movi.shared.model.unoPorPago
 import io.ktor.server.response.respond
@@ -81,6 +82,11 @@ internal class LoQueMoviSabeDelDueno(
     leerLaBandeja: () -> List<SmsMessage>,
     /** Vuelta 91: las cuentas del dueño, para reconocer un traspaso a otro banco suyo. */
     leerLasCuentas: () -> List<Account> = { emptyList() },
+    /**
+     * Vuelta 138: las categorías del catálogo que el dueño renombró o unificó ([aliasDeCategorias]).
+     * Lo que el parser propone con un nombre del catálogo sale con el suyo ([nombreVigente]).
+     */
+    val alias: Map<String, String> = emptyMap(),
 ) {
     /** Solo se lee si hace falta: un aviso que no está pendiente no tiene otros avisos del pago. */
     val bandeja: List<SmsMessage> by lazy(leerLaBandeja)
@@ -92,6 +98,7 @@ internal fun Transaction.loQueMoviSabeDelDueno(uid: String, ahora: Long): LoQueM
         memoriaDe(uid), destinosDelDueno(uid), numerosPropiosDe(uid),
         leerLaBandeja = { bandejaConLosPagos(uid, ahora) },
         leerLasCuentas = { Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() } },
+        alias = aliasDeCategorias(uid),
     )
 
 /**
@@ -105,6 +112,26 @@ internal fun Transaction.leerElAviso(
     sms: SmsMessage,
     sabe: LoQueMoviSabeDelDueno,
     ahora: Long = System.currentTimeMillis(),
+): LecturaDelAviso = when (val lectura = leerElAvisoConElCatalogo(uid, sms, sabe, ahora)) {
+    // Vuelta 138: **la categoría, con el nombre del dueño.** El parser, las palabras clave, el correo de
+    // PSE y el comprobante proponen nombres del catálogo («Vivienda»); si el dueño la renombró
+    // («Hogar») o la unificó en otra, sale la suya. Un solo lugar para el /parse, la bandeja y la fila.
+    is LecturaDelAviso.Leido -> LecturaDelAviso.Leido(conElNombreVigente(lectura.parsed, sabe.alias))
+    is LecturaDelAviso.NoTraeMovimiento -> lectura
+}
+
+/** [ParsedSms.category] pasado por [nombreVigente]. Sin alias, el mismo objeto. */
+internal fun conElNombreVigente(parsed: ParsedSms, alias: Map<String, String>): ParsedSms {
+    if (alias.isEmpty()) return parsed
+    val vigente = nombreVigente(parsed.category, alias)
+    return if (vigente == parsed.category) parsed else parsed.copy(category = vigente)
+}
+
+private fun Transaction.leerElAvisoConElCatalogo(
+    uid: String,
+    sms: SmsMessage,
+    sabe: LoQueMoviSabeDelDueno,
+    ahora: Long,
 ): LecturaDelAviso {
     // Ola 2: la propuesta de un comprobante no se lee con el parser de SMS sino con lo que leyó
     // Claude del papel, ya pasado por la memoria y las cuentas de otros (ver `PapelesRoutes`).

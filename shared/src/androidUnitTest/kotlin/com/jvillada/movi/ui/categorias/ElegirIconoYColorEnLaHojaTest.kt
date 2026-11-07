@@ -117,7 +117,10 @@ class ElegirIconoYColorEnLaHojaTest {
         composeRule.waitUntil(5_000) { hay("Mercado") }
 
         tocar("Mercado")
-        composeRule.waitUntil(5_000) { hay("Ícono") }
+        // Vuelta 138: la cuadrícula va plegada detrás de la fila «Ícono y color».
+        composeRule.waitUntil(5_000) { hay("Ícono y color") }
+        tocar("Ícono y color")
+        composeRule.waitUntil(5_000) { hay("Comer fuera") }
 
         // Elegir un ícono del catálogo: manda su clave y no toca el color.
         tocar("Comer fuera")
@@ -170,7 +173,9 @@ class ElegirIconoYColorEnLaHojaTest {
         composeRule.setContent { MoviTheme { Box(Modifier.fillMaxSize()) { CategoriasScreen(onNavigate = {}) } } }
         composeRule.waitUntil(5_000) { hay("Mercado") }
         tocar("Mercado")
-        composeRule.waitUntil(5_000) { hay("Ícono") }
+        composeRule.waitUntil(5_000) { hay("Ícono y color") }
+        tocar("Ícono y color")
+        composeRule.waitUntil(5_000) { hay("Comer fuera") }
 
         tocar("Comer fuera")
         composeRule.waitUntil(5_000) { llamadas.size == 1 }

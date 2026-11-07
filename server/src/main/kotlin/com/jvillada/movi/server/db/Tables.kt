@@ -627,6 +627,18 @@ object CategoryPrefs : Table("category_prefs") {
     val icono      = varchar("icono", 40).nullable()
     /** Clave de texto (p. ej. "naranja"), o NULL = el color que Movi asigna por defecto. */
     val color      = varchar("color", 20).nullable()
+    /**
+     * Vuelta 138: en la fila de una categoría del CATÁLOGO que el dueño renombró («Vivienda»), el
+     * nombre nuevo («Hogar»). La fila queda escondida y todo lo que propone categorías pasa por
+     * `nombreVigente` (`:core`). NULL en las demás.
+     */
+    val renombradaA = varchar("renombrada_a", 100).nullable()
+    /**
+     * Vuelta 138: lo mismo que [renombradaA] para una del catálogo que el dueño UNIFICÓ en otra. Va
+     * aparte porque la hoja ofrece «Volver a «Vivienda»» solo a un renombrado: la que recibió una
+     * unificación tiene su propia historia.
+     */
+    val unificadaEn = varchar("unificada_en", 100).nullable()
     override val primaryKey = PrimaryKey(userId, name)
 }
 

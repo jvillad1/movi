@@ -15,6 +15,9 @@ import com.jvillada.movi.shared.model.periodoSiguiente
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.plus
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
+import com.jvillada.movi.shared.model.esLaCategoriaDeLoQueMoviNoEntendio
+import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
+import com.jvillada.movi.shared.model.nombreVigente
 import com.jvillada.movi.theme.COLORES_DEL_CATALOGO
 import com.jvillada.movi.ui.components.formatCOP
 import com.jvillada.movi.shared.model.normalizarParaBuscar
@@ -43,7 +46,8 @@ fun etiquetaDeFiltro(filtro: CategoryFilter): String = when (filtro) {
 
 /** Los tipos que valen para esta categoría, ya resueltos (fijado > catálogo > uso). */
 fun tiposEfectivos(c: CategoryUsage): Set<TransactionType> =
-    effectiveCategoryTypes(c.name, c.pinnedType, c.usedTypes.toSet())
+    // Vuelta 138: una del catálogo renombrada resuelve «Automático» con el tipo de su nombre de Movi.
+    effectiveCategoryTypes(c.name, c.pinnedType, c.usedTypes.toSet(), c.nombreDeMovi)
 
 /**
  * Filtra y ordena la lista.
@@ -261,10 +265,31 @@ fun colisionAlRenombrar(
     categoria: CategoryUsage,
     nombreEscrito: String,
     existentes: List<CategoryUsage>,
+    /**
+     * Vuelta 138: el alias del dueño ([com.jvillada.movi.shared.model.aliasDeLasPreferencias]). Escribir
+     * «Vivienda», ya renombrada a «Hogar», no es un nombre libre: choca con «Hogar» (y se ofrece unificar
+     * ahí), salvo que la que se renombra sea la misma «Hogar» volviendo a su nombre de Movi.
+     */
+    alias: Map<String, String> = emptyMap(),
 ): CategoryUsage? {
     val buscado = normalizarParaBuscar(nombreEscrito)
     if (buscado.isEmpty()) return null
-    return existentes.firstOrNull { it.name != categoria.name && normalizarParaBuscar(it.name) == buscado }
+    existentes.firstOrNull { it.name != categoria.name && normalizarParaBuscar(it.name) == buscado }?.let { return it }
+    return nombreRetiradoAlRenombrar(categoria, nombreEscrito, alias)
+        ?.let { vigente -> existentes.firstOrNull { it.name == vigente } }
+}
+
+/**
+ * Vuelta 138: si [nombreEscrito] es una del catálogo que el dueño retiró y no es el nombre de Movi de
+ * [categoria], el nombre en que se convirtió («Hogar»); si no, `null`.
+ */
+fun nombreRetiradoAlRenombrar(categoria: CategoryUsage, nombreEscrito: String, alias: Map<String, String>): String? {
+    if (alias.isEmpty()) return null
+    val buscado = normalizarParaBuscar(nombreEscrito.trim())
+    val delCatalogo = PREDEFINED_CATEGORIES.firstOrNull { normalizarParaBuscar(it.name) == buscado }?.name ?: return null
+    if (alias.keys.none { it.equals(delCatalogo, ignoreCase = true) }) return null
+    val vigente = nombreVigente(delCatalogo, alias)
+    return vigente.takeIf { !it.equals(categoria.name, ignoreCase = true) }
 }
 
 /**
@@ -306,6 +331,26 @@ fun avisoDeUnificacion(origen: CategoryUsage, destino: CategoryUsage): String {
             "el de «${destino.name}» queda en ${formatCOP(suma)}. Eso no se puede deshacer."
     }
     return base
+}
+
+/**
+ * Vuelta 138 · el subtítulo de la fila «Nombre» de la hoja: el nombre de hoy y, si es una del catálogo
+ * renombrada, de dónde viene («Hogar · antes «Vivienda», de Movi»).
+ */
+fun subtituloDelNombre(c: CategoryUsage): String =
+    c.nombreDeMovi?.let { "${c.name} · antes «$it», de Movi" } ?: c.name
+
+/**
+ * Vuelta 138 · el subtítulo de la fila «Tipo» de la hoja: el tipo que vale hoy y, si nadie lo fijó,
+ * que es automático («Gasto · automático»).
+ */
+fun subtituloDelTipo(c: CategoryUsage): String {
+    val tipo = etiquetaDeTipo(c)
+    return when {
+        c.pinnedType != null -> tipo
+        tipo == "Sin usar" -> etiquetaDeTipoFijado(null)
+        else -> "$tipo · automático"
+    }
 }
 
 /** El texto del selector de tipo, incluida la opción de no fijar nada. */
@@ -481,7 +526,10 @@ fun propuestasDeOrden(
             if (totalMovimientos(destino) == 0) continue
             // «Cuota de crédito» solo puede recibir: ver [SOSTIENEN_REGLAS_DE_PLATA]. Y «Desembolso
             // de crédito» ni eso: unificar movimientos sueltos en ella inflaría «Entró».
-            if (sostieneReglasDePlata(origen) || esCategoriaDelDesembolso(destino.name)) continue
+            // Vuelta 138: tampoco «Otros» como origen (el server lo rechaza: es lo que Movi no entendió).
+            if (sostieneReglasDePlata(origen) || esLaCategoriaDeLoQueMoviNoEntendio(origen.name) ||
+                esCategoriaDelDesembolso(destino.name)
+            ) continue
             unificarParecidas += PropuestaDeOrden.UnificarParecidas(origen, destino)
         }
     }

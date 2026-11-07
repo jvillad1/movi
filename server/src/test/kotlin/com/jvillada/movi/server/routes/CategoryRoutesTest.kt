@@ -9,6 +9,8 @@ import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.GastosDelEspacio
+import com.jvillada.movi.server.db.ReglasDeComercio
 import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
@@ -102,12 +104,12 @@ class CategoryRoutesTest {
 
         transaction {
             SchemaUtils.drop(
-                Apartados, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
+                GastosDelEspacio, ReglasDeComercio, Apartados, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users, CardPaymentDismissals, CategoryPrefs,
                 RecurringOccurrences, OccurrenceRejections,
             )
             SchemaUtils.create(
-                Apartados, Users, Accounts, StatementImports, Events, VoidEvents,
+                GastosDelEspacio, ReglasDeComercio, Apartados, Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, CategoryPrefs,
                 // El resumen del Inicio lee los sellos para el gasto variable («Disponible»).
                 RecurringOccurrences, OccurrenceRejections,
@@ -445,15 +447,316 @@ class CategoryRoutesTest {
         assertEquals("Transporte propio", categoriaDeRegla("r1"))
     }
 
-    @Test
-    fun `renombrar una del catalogo se rechaza — el catalogo volveria a sugerir el nombre viejo`() =
-        testApplication {
-            wireApp()
-            seedEvent("e1", "Comida")
-            val res = rename("Comida", "Alimentación")
-            assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
-            assertEquals("Comida", categoriaEnEventos("e1"))
+    // ── Vuelta 138: renombrar una del catálogo ────────────────────────────────
+
+    private fun seedApartado(id: String, categoria: String) = transaction {
+        Apartados.insert {
+            it[Apartados.id]        = id
+            it[Apartados.userId]    = this@CategoryRoutesTest.userId
+            it[Apartados.accountId] = this@CategoryRoutesTest.accountId
+            it[proposito]           = "Arreglos"
+            it[monto]               = 300_000
+            it[Apartados.categoria] = categoria
+            it[desde]               = 0L
+            it[createdAt]           = 0L
         }
+    }
+
+    private fun categoriaDeApartado(id: String): String? = transaction {
+        Apartados.selectAll().where { Apartados.id eq id }.firstOrNull()?.get(Apartados.categoria)
+    }
+
+    /** La fila de `category_prefs` de [name]: (escondida, renombrada_a, unificada_en, tipo fijado). */
+    private fun filaDePrefs(name: String): List<String?>? = transaction {
+        CategoryPrefs.selectAll()
+            .where { (CategoryPrefs.userId eq userId) and (CategoryPrefs.name eq name) }
+            .firstOrNull()
+            ?.let {
+                listOf(
+                    it[CategoryPrefs.hidden].toString(), it[CategoryPrefs.renombradaA],
+                    it[CategoryPrefs.unificadaEn], it[CategoryPrefs.pinnedType],
+                )
+            }
+    }
+
+    private suspend fun ApplicationTestBuilder.renameConApariencia(from: String, to: String, icono: String, color: String) =
+        client.post("/api/categories/rename") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"from":"$from","to":"$to","icono":"$icono","color":"$color"}""")
+        }
+
+    /**
+     * El pedido de Caro: «Vivienda» → «Hogar». Mueve todo como un renombrado de una propia, deja
+     * «Vivienda» escondida con el alias, y «Hogar» queda de gasto (el tipo de «Vivienda»). Falla sin el
+     * cambio: la ruta contestaba 422 `CATEGORY_CATALOG_RENAME_BLOCKED`.
+     */
+    @Test
+    fun `renombrar una del catalogo mueve todo y deja el nombre viejo escondido con el alias`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        seedEvent("e2", "Vivienda")
+        seedBudget("Vivienda", 2_000_000)
+        seedRule("r1", "Vivienda")
+        seedApartado("ap1", "Vivienda")
+
+        val res = rename("Vivienda", "Hogar")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals("Hogar", categoriaEnEventos("e1"))
+        assertEquals("Hogar", categoriaEnEventos("e2"))
+        assertEquals(2_000_000, limiteDe("Hogar"))
+        assertNull(limiteDe("Vivienda"))
+        assertEquals("Hogar", categoriaDeRegla("r1"))
+        assertEquals("Hogar", categoriaDeApartado("ap1"))
+
+        assertEquals(listOf("true", "Hogar", null, null), filaDePrefs("Vivienda"))
+        val lista = categorias()
+        assertTrue(lista.none { it.nombre() == "Vivienda" }, "no aparece como escondida: es la misma con otro nombre")
+        val hogar = lista.porNombre("Hogar")
+        // Revisión de la vuelta 138: el tipo NO se fija (diría «Fijado por ti»); «Automático» lo resuelve
+        // con el nombre de Movi que viaja en `nombreDeMovi` (ver `effectiveCategoryTypes`).
+        assertNull(hogar.texto("pinnedType"), "nada fijado que el dueño no fijó")
+        assertEquals("Vivienda", hogar.texto("nombreDeMovi"))
+        assertFalse(hogar.flag("hidden"))
+    }
+
+    @Test
+    fun `el Inicio le dice al cliente a donde paso la del catalogo`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        // Para las listas del cliente (Agregar, el selector): «Vivienda» → «Hogar».
+        val resumen = Json.parseToJsonElement(
+            client.get("/api/dashboard/summary") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText(),
+        ).jsonObject
+        val vivienda = resumen["usedCategories"]!!.jsonArray.map { it.jsonObject }.porNombre("Vivienda")
+        assertTrue(vivienda.flag("hidden"))
+        assertEquals("Hogar", vivienda.texto("renombradaA"))
+    }
+
+    @Test
+    fun `una del catalogo sin uso tambien se renombra y queda con su tipo`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.OK, rename("Freelance", "Trabajos").status)
+        val trabajos = categorias().porNombre("Trabajos")
+        assertNull(trabajos.texto("pinnedType"))
+        assertEquals("Freelance", trabajos.texto("nombreDeMovi"))
+        // Y existe: renombrar otra hacia «Trabajos» choca.
+        seedEvent("e-carro", "Carro")
+        assertEquals(HttpStatusCode.Conflict, rename("Carro", "Trabajos").status)
+        assertTrue(categorias().none { it.nombre() == "Freelance" })
+    }
+
+    @Test
+    fun `renombrar una del catalogo escondida la deja escondida y respeta el tipo que habia fijado`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Ropa")
+        assertEquals(HttpStatusCode.OK, prefs("Ropa", hidden = true, pinnedType = "BOTH").status)
+        assertEquals(HttpStatusCode.OK, rename("Ropa", "Vestuario").status)
+        val vestuario = categorias().porNombre("Vestuario")
+        assertTrue(vestuario.flag("hidden"))
+        assertEquals("BOTH", vestuario.texto("pinnedType"))
+    }
+
+    /** Falla sin el cambio: «Vivienda» es del catálogo y existe, así que era un 409 (o el 422 de antes). */
+    @Test
+    fun `volver al nombre de Movi funciona y borra el alias`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        val res = rename("Hogar", "Vivienda")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+
+        assertEquals("Vivienda", categoriaEnEventos("e1"))
+        assertEquals(null, filaDePrefs("Vivienda")?.get(1), "sin alias")
+        val lista = categorias()
+        assertFalse(lista.porNombre("Vivienda").flag("hidden"), "deja de esconderla")
+        assertNull(lista.porNombre("Vivienda").texto("pinnedType"), "y no deja nada fijado")
+        assertNull(lista.porNombre("Vivienda").texto("nombreDeMovi"))
+        assertTrue(lista.none { it.nombre() == "Hogar" })
+    }
+
+    @Test
+    fun `renombrar otra vez mueve el alias`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        assertEquals(HttpStatusCode.OK, rename("Hogar", "Casa").status)
+
+        assertEquals("Casa", categoriaEnEventos("e1"))
+        assertEquals(listOf("true", "Casa", null, null), filaDePrefs("Vivienda"))
+        assertEquals("Vivienda", categorias().porNombre("Casa").texto("nombreDeMovi"))
+        // Y desde «Casa» también se vuelve.
+        assertEquals(HttpStatusCode.OK, rename("Casa", "Vivienda").status)
+        assertEquals("Vivienda", categoriaEnEventos("e1"))
+    }
+
+    @Test
+    fun `renombrar una del catalogo a un nombre ocupado es 409 y no toca nada`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        seedEvent("e2", "Casa")
+        val res = rename("Vivienda", "Casa")
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        assertEquals("Vivienda", categoriaEnEventos("e1"))
+        assertNull(filaDePrefs("Vivienda"))
+        // Ni hacia otra del catálogo.
+        assertEquals(HttpStatusCode.Conflict, rename("Vivienda", "Servicios").status)
+    }
+
+    /** Una propia que se llamó como una del catálogo no es «volver»: el alias tiene que apuntar a ella. */
+    @Test
+    fun `renombrar otra categoria a un nombre del catalogo retirado sigue siendo 409`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        seedEvent("e2", "Carro")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        val res = rename("Carro", "Vivienda")
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        // Revisión: el 409 dice en qué se convirtió, para ofrecer unificar ahí.
+        assertTrue("«Vivienda» ahora se llama «Hogar»" in res.bodyAsText(), res.bodyAsText())
+        // Con otra grafía, igual: «vivienda» nombra la del catálogo.
+        assertTrue("ahora se llama «Hogar»" in rename("Carro", "vivienda").bodyAsText())
+        assertEquals("Carro", categoriaEnEventos("e2"))
+    }
+
+    @Test
+    fun `la apariencia que manda la app se guarda solo si el destino no tenia`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        assertEquals(HttpStatusCode.OK, renameConApariencia("Vivienda", "Hogar", "casa", "ambar").status)
+        val hogar = categorias().porNombre("Hogar")
+        assertEquals("casa", hogar.texto("icono"))
+        assertEquals("ambar", hogar.texto("color"))
+
+        // Una con ícono y color propios los conserva: lo que viaja con la reescritura gana.
+        seedEvent("e2", "Carro")
+        assertEquals(HttpStatusCode.OK, prefs("Carro", icono = "carro", color = "azul").status)
+        assertEquals(HttpStatusCode.OK, renameConApariencia("Carro", "Auto", "casa", "ambar").status)
+        val auto = categorias().porNombre("Auto")
+        assertEquals("carro", auto.texto("icono"))
+        assertEquals("azul", auto.texto("color"))
+    }
+
+    @Test
+    fun `un icono mas largo que la columna al renombrar se rechaza con 400`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Carro")
+        val largo = "x".repeat(CATEGORY_ICONO_MAX_LENGTH + 1)
+        assertEquals(HttpStatusCode.BadRequest, renameConApariencia("Carro", "Auto", largo, "azul").status)
+        assertEquals("Carro", categoriaEnEventos("e1"))
+    }
+
+    /**
+     * Revisión de la vuelta 138: «Otros» es donde Movi pone lo que no entendió. Con otro nombre,
+     * `categoriaEntendida` dejaba confirmar de un toque lo que Movi no supo y la memoria lo aprendía.
+     * Falla sin el arreglo: renombrar y unificar «Otros» daban 200.
+     */
+    @Test
+    fun `Otros no se renombra ni se unifica en otra`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Otros")
+        seedEvent("e2", "Carro")
+        val renombrar = rename("Otros", "Varios")
+        assertEquals(HttpStatusCode.UnprocessableEntity, renombrar.status)
+        assertTrue("donde Movi pone lo que no entendió" in renombrar.bodyAsText(), renombrar.bodyAsText())
+        assertEquals(HttpStatusCode.UnprocessableEntity, merge("Otros", "Carro").status)
+        assertEquals("Otros", categoriaEnEventos("e1"))
+        assertNull(filaDePrefs("Otros"))
+        // Hacia «Otros» sí se unifica (es el caso de «Otros ingresos»), y esconderla también se puede.
+        assertEquals(HttpStatusCode.OK, prefs("Otros", hidden = true).status)
+    }
+
+    /** Revisión: con la grafía de otro teclado, volver al nombre de Movi también funciona. */
+    @Test
+    fun `volver al nombre de Movi sin tilde ni mayuscula resuelve al del catalogo`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Educación")
+        assertEquals(HttpStatusCode.OK, rename("Educación", "Colegio").status)
+        val res = rename("Colegio", "educacion")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals("Educación", categoriaEnEventos("e1"))
+        assertNull(filaDePrefs("Educación")?.get(1))
+    }
+
+    @Test
+    fun `unificar en un nombre retirado unifica en el nombre de hoy`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        seedEvent("e2", "Arriendo casa")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        assertEquals(HttpStatusCode.OK, merge("Arriendo casa", "vivienda").status)
+        assertEquals("Hogar", categoriaEnEventos("e2"))
+    }
+
+    /** Revisión: tu parte de lo que pagó otro y las reglas del importador también cambian de nombre. */
+    @Test
+    fun `renombrar reescribe tambien los gastos de los grupos y las reglas de comercio`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        transaction {
+            GastosDelEspacio.insert {
+                it[id] = "g1"; it[GastosDelEspacio.userId] = this@CategoryRoutesTest.userId; it[espacioId] = "esp1"
+                it[pagadoPor] = "dst_caro"; it[monto] = 100_000; it[GastosDelEspacio.categoria] = "Vivienda"
+                it[descripcion] = "Arreglo"; it[fecha] = 0L; it[partes] = "[]"; it[createdAt] = 0L
+            }
+            GastosDelEspacio.insert {
+                it[id] = "g2"; it[GastosDelEspacio.userId] = otherUserId; it[espacioId] = "esp2"
+                it[pagadoPor] = "dst_x"; it[monto] = 100_000; it[GastosDelEspacio.categoria] = "Vivienda"
+                it[descripcion] = "Ajeno"; it[fecha] = 0L; it[partes] = "[]"; it[createdAt] = 0L
+            }
+            ReglasDeComercio.insert {
+                it[ReglasDeComercio.userId] = this@CategoryRoutesTest.userId; it[patron] = "ferreteria"
+                it[ReglasDeComercio.categoria] = "Vivienda"; it[actualizadaEn] = 0L
+            }
+        }
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        transaction {
+            val gastos = GastosDelEspacio.selectAll().associate { it[GastosDelEspacio.id] to it[GastosDelEspacio.categoria] }
+            assertEquals("Hogar", gastos["g1"])
+            assertEquals("Vivienda", gastos["g2"], "lo de otro usuario no se toca")
+            assertEquals("Hogar", ReglasDeComercio.selectAll().single()[ReglasDeComercio.categoria])
+        }
+    }
+
+    /**
+     * El hueco de unificar, cerrado con la misma función: la fila escondida dice a dónde fue. Las
+     * cifras no cambian (unificar hace lo de siempre).
+     */
+    @Test
+    fun `unificar una del catalogo deja dicho a donde fue`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Otros ingresos", type = "INCOME")
+        assertEquals(HttpStatusCode.OK, merge("Otros ingresos", "Otros").status)
+        assertEquals(listOf("true", null, "Otros", null), filaDePrefs("Otros ingresos"))
+        // Sigue en la lista como escondida (una unificación, no un renombrado) y sin «nombre de Movi».
+        val lista = categorias()
+        assertTrue(lista.porNombre("Otros ingresos").flag("hidden"))
+        assertNull(lista.porNombre("Otros").texto("nombreDeMovi"))
+    }
+
+    @Test
+    fun `unificar la renombrada en otra convierte el alias en unificacion`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        assertEquals(HttpStatusCode.OK, merge("Hogar", "Servicios").status)
+        assertEquals(listOf("true", null, "Servicios", null), filaDePrefs("Vivienda"))
+        assertNull(categorias().porNombre("Servicios").texto("nombreDeMovi"))
+    }
+
+    @Test
+    fun `volver a sugerir una del catalogo unificada le quita el alias`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Otros ingresos", type = "INCOME")
+        assertEquals(HttpStatusCode.OK, merge("Otros ingresos", "Otros").status)
+        // Cambiarle el ícono mientras sigue escondida no le quita el alias…
+        assertEquals(HttpStatusCode.OK, prefs("Otros ingresos", hidden = true, icono = "dinero").status)
+        assertEquals("Otros", filaDePrefs("Otros ingresos")?.get(2))
+        // …volver a sugerirla, sí: es pedir el nombre de Movi otra vez.
+        assertEquals(HttpStatusCode.OK, prefs("Otros ingresos", hidden = false).status)
+        assertEquals(null, filaDePrefs("Otros ingresos")?.get(2))
+    }
 
     @Test
     fun `renombrar a un nombre que ya existe es 409 y no toca nada`() = testApplication {
