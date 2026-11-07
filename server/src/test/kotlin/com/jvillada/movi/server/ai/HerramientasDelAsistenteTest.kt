@@ -322,7 +322,7 @@ class HerramientasDelAsistenteTest {
         val ofrecidas = LAS_HERRAMIENTAS.map { it.name() }
 
         assertEquals(
-            setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, BUSCAR_DOCUMENTOS, PROYECTAR_CAJA, SIMULAR_ABONO, CONSULTAR_PERSONA_O_COMERCIO) +
+            setOf(BUSCAR_MOVIMIENTOS, TOTALES_POR_CATEGORIA, TOTALES_POR_COMERCIO, BUSCAR_DOCUMENTOS, PROYECTAR_CAJA, SIMULAR_ABONO, CONSULTAR_PERSONA_O_COMERCIO) +
                 HERRAMIENTAS_QUE_PROPONEN_NOMBRES,
             ofrecidas.toSet(),
         )
@@ -432,5 +432,62 @@ class HerramientasDelAsistenteTest {
         guardarTercero("dst_ajeno", "Caro", "55500001111", uid = "otro-usuario")
         val texto = preguntar(CONSULTAR_PERSONA_O_COMERCIO, "nombre" to "Caro")
         assertTrue("no tiene a nadie guardado" in texto, texto)
+    }
+
+    // ── Vuelta 142 · el total de un comercio (issue #697) ───────────────────
+
+    /** Lo que pasó el 6-nov: 43 pagos, la búsqueda cortó en 40 y mandaba a una herramienta que no filtra. */
+    @Test
+    fun `una busqueda por texto que se corta manda al total del comercio`() {
+        repeat(TOPE_DE_RESULTADOS + 3) { i -> anotar("e-peaje-$i", "PAGO ELECTRONICO PEAJEPASS", "Transporte", 7_000L + i, "2026-08-10") }
+
+        val texto = preguntar(BUSCAR_MOVIMIENTOS, "texto" to "peajepass", "desde" to "2026-08-01", "hasta" to "2026-08-31")
+
+        assertTrue("$TOTALES_POR_COMERCIO con comercio «peajepass»" in texto, texto.takeLast(300))
+    }
+
+    @Test
+    fun `el total del comercio suma todos los pagos, sin anulados, y separa la otra moneda`() {
+        val montos = (0 until 43).map { 5_000L + it * 211L }
+        montos.forEachIndexed { i, monto ->
+            val nombre = if (i % 7 == 0) "Pago electronico Peajepass" else "PAGO ELECTRONICO PEAJEPASS"
+            anotar("e-peaje-$i", nombre, "Transporte", monto, LocalDate.parse("2026-07-01").plusDays(i * 2L).toString())
+        }
+        anotar("e-peaje-anulado", "PAGO ELECTRONICO PEAJEPASS", "Transporte", 80_000, "2026-08-20")
+        transaction {
+            VoidEvents.insert {
+                it[id] = "v-peaje"; it[userId] = dueno; it[originalEventId] = "e-peaje-anulado"
+                it[timestamp] = appDateToEpochMillis(LocalDate.parse("2026-08-20"))
+            }
+        }
+        anotar("e-peaje-usd", "PEAJEPASS ONLINE", "Transporte", 15, "2026-08-21", moneda = "USD")
+        anotar("e-peaje-espera", "PAGO ELECTRONICO PEAJEPASS", "Transporte", 90_000, "2026-08-22", estado = "UNCONFIRMED")
+        anotar("e-peaje-ajeno", "PAGO ELECTRONICO PEAJEPASS", "Transporte", 60_000, "2026-08-23", uid = "otro-usuario")
+
+        val texto = preguntar(TOTALES_POR_COMERCIO, "comercio" to "peajepass")
+
+        assertTrue("TOTAL EN PESOS: ${montos.sum()} en 43 pagos" in texto, texto)
+        assertTrue("toda la historia que Movi tiene: desde su primer movimiento, el 2026-07-01" in texto, texto)
+        assertTrue("- USD: 15 en 1 pago" in texto, texto)
+        val recientes = texto.lines().dropWhile { "más recientes" !in it }.drop(1).take(3)
+        assertEquals(listOf("2026-09-23", "2026-09-21", "2026-09-19"), recientes.map { it.trim().substringAfter(". ").take(10) }, texto)
+        assertFalse("80000" in texto, "lo anulado no suma ni se nombra:\n$texto")
+    }
+
+    @Test
+    fun `el total del comercio respeta el rango de fechas`() {
+        anotar("e-julio", "PAGO ELECTRONICO PEAJEPASS", "Transporte", 10_000, "2026-07-15")
+        anotar("e-agosto", "PAGO ELECTRONICO PEAJEPASS", "Transporte", 20_000, "2026-08-15")
+
+        val texto = preguntar(TOTALES_POR_COMERCIO, "comercio" to "peajepass", "desde" to "2026-08-01", "hasta" to "2026-08-31")
+
+        assertTrue("TOTAL EN PESOS: 20000 en 1 pago" in texto, texto)
+        assertTrue("del 2026-08-01 al 2026-08-31" in texto, texto)
+    }
+
+    @Test
+    fun `sin comercio no adivina`() {
+        val texto = preguntar(TOTALES_POR_COMERCIO)
+        assertTrue("Dime qué comercio" in texto, texto)
     }
 }
