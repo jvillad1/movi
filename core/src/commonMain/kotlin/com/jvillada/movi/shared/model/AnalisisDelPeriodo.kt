@@ -79,8 +79,9 @@ data class TramoDelAnalisis(
 )
 
 /**
- * El período analizado.
+ * El período analizado (o el rango de períodos, vuelta 140: «3 meses», «12 meses»).
  *
+ * @property periodo el período analizado; en un rango, el último (el más reciente).
  * @property total lo gastado en el período (hasta hoy, en el en curso).
  * @property diasTranscurridos los días del período que ya pasaron, contando hoy (la «altura»).
  * @property anteriorAMismaAltura lo gastado en el anterior en esos mismos días, o `null` si Movi no
@@ -89,6 +90,10 @@ data class TramoDelAnalisis(
  *   transcurridos, o menos si el anterior era más corto.
  * @property gastos los movimientos que suman en [total], para la lista de abajo.
  * @property gastosDelAnterior los del anterior que suman en [anteriorAMismaAltura] (vacía sin comparación).
+ * @property cuantosPeriodos cuántos períodos junta el análisis: 1, o los de un rango.
+ * @property porMes las barras van de a un mes (un período, o dos quincenas): un rango de más de
+ *   [DIAS_MAXIMOS_POR_SEMANA] días.
+ * @property desdeDelAnterior,hastaDelAnterior el período (o el rango) con el que se compara, entero.
  */
 data class AnalisisDelPeriodo(
     val periodo: PeriodoFinanciero,
@@ -102,10 +107,24 @@ data class AnalisisDelPeriodo(
     val diasComparados: Int,
     val gastos: List<FinancialEvent>,
     val gastosDelAnterior: List<FinancialEvent>,
+    val cuantosPeriodos: Int = 1,
+    val porMes: Boolean = false,
+    val desdeDelAnterior: LocalDate? = null,
+    val hastaDelAnterior: LocalDate? = null,
 ) {
     /** ¿Hay contra qué comparar? */
     val conComparacion: Boolean get() = anteriorAMismaAltura != null
+
+    /** ¿Es un rango de varios períodos («3 meses», «12 meses») y no un período solo? */
+    val esRango: Boolean get() = cuantosPeriodos > 1
 }
+
+/**
+ * Desde cuántos días un rango se dibuja por meses y no por semanas (vuelta 140). «3 meses» (unos 90
+ * días) va por semanas, 13 barras; «12 meses» (unos 365) va por meses, 12. Elegido, no medido: 120
+ * días son unas 17 semanas, lo último que todavía se lee como barras en un teléfono.
+ */
+const val DIAS_MAXIMOS_POR_SEMANA: Int = 120
 
 /**
  * **El análisis de [periodo]** sobre [eventos] (sin anulados, como los manda `/api/events/by-day`).
@@ -120,24 +139,41 @@ fun analisisDelPeriodo(
     settings: PeriodSettings,
     hoy: LocalDate,
     tiposDeCuenta: Map<String, AccountType> = emptyMap(),
+): AnalisisDelPeriodo =
+    // Vuelta 105 · «el anterior» es el homólogo (D6): en la quincena, la misma quincena del mes pasado.
+    // En el mensual es el inmediato y termina donde arranca este: lo de siempre.
+    analisisEntre(eventos, listOf(periodo), listOf(periodoHomologo(periodo, settings)), settings, hoy, tiposDeCuenta, periodosPorTramo = 1)
+
+/**
+ * **El motor de [analisisDelPeriodo] y de `analisisDelRango`** (vuelta 140): el gasto de [periodos]
+ * (seguidos, el más viejo primero) contra el de [anteriores] (los mismos tantos, también seguidos), a
+ * la misma altura. Con un solo período es exactamente lo de siempre. [periodosPorTramo] es cuántos
+ * períodos junta una barra cuando el rango va por meses (2 en la quincena).
+ */
+internal fun analisisEntre(
+    eventos: List<FinancialEvent>,
+    periodos: List<PeriodoFinanciero>,
+    anteriores: List<PeriodoFinanciero>,
+    settings: PeriodSettings,
+    hoy: LocalDate,
+    tiposDeCuenta: Map<String, AccountType>,
+    periodosPorTramo: Int,
 ): AnalisisDelPeriodo {
-    val inicio = inicioDelPeriodo(periodo, settings)
-    val siguiente = inicioDelPeriodo(periodoSiguiente(periodo, settings), settings)
+    val inicio = inicioDelPeriodo(periodos.first(), settings)
+    val siguiente = inicioDelPeriodo(periodoSiguiente(periodos.last(), settings), settings)
     val dias = inicio.daysUntil(siguiente).coerceAtLeast(1)
     val transcurridos = when {
         hoy < inicio -> 0
         hoy >= siguiente -> dias
         else -> inicio.daysUntil(hoy) + 1
     }
-    // Vuelta 105 · «el anterior» es el homólogo (D6): en la quincena, la misma quincena del mes pasado.
-    // En el mensual es el inmediato y termina donde arranca este: lo de siempre.
-    val homologo = periodoHomologo(periodo, settings)
-    val inicioDelAnterior = inicioDelPeriodo(homologo, settings)
-    val finDelAnterior = inicioDelPeriodo(periodoSiguiente(homologo, settings), settings)
+    val inicioDelAnterior = inicioDelPeriodo(anteriores.first(), settings)
+    val finDelAnterior = inicioDelPeriodo(periodoSiguiente(anteriores.last(), settings), settings)
     val diasDelAnterior = inicioDelAnterior.daysUntil(finDelAnterior).coerceAtLeast(0)
 
     // La guarda de siempre: el primer movimiento del dueño (cualquiera, no solo un gasto) tiene que
-    // ser anterior al arranque del período anterior. Si no, ese período está a medio anotar.
+    // ser anterior al arranque del período anterior. Si no, ese período está a medio anotar. En un
+    // rango, el arranque del rango anterior entero: un rango anterior a medio anotar no compara.
     val primerMovimiento = eventos.minOfOrNull { it.timestamp }
     val cubierto = primerMovimiento != null && primerMovimiento <= enEpoch(inicioDelAnterior)
 
@@ -161,11 +197,51 @@ fun analisisDelPeriodo(
         }
     }
 
-    val porSemana = dias > DIAS_MAXIMOS_POR_DIA
-    val largo = if (porSemana) DIAS_POR_SEMANA else 1
+    val porMes = periodos.size > 1 && dias > DIAS_MAXIMOS_POR_SEMANA
+    val porSemana = !porMes && dias > DIAS_MAXIMOS_POR_DIA
+    val tramos = if (porMes) {
+        tramosPorMes(periodos, anteriores, settings, inicio, inicioDelAnterior, porDia, porDiaDelAnterior, cubierto, periodosPorTramo, hoy)
+    } else {
+        tramosPorDias(dias, if (porSemana) DIAS_POR_SEMANA else 1, inicio, porDia, porDiaDelAnterior, diasDelAnterior, cubierto, hoy)
+    }
+
+    // La altura: los días transcurridos de este período, en los días del anterior (si era más
+    // corto, se toma entero: no hay más días que comparar). Igual que [anteriorAMismaAltura].
+    val altura = minOf(transcurridos, diasDelAnterior)
+    val delAnterior = gastosDelAnteriorEnteros.filter { (i, _) -> i < altura }.map { it.second }
+    return AnalisisDelPeriodo(
+        periodo = periodos.last(),
+        desde = inicio,
+        hasta = siguiente.minus(1, DateTimeUnit.DAY),
+        porSemana = porSemana,
+        tramos = tramos,
+        total = gastosDelPeriodo.sumOf { montoContado(it) },
+        diasTranscurridos = transcurridos,
+        anteriorAMismaAltura = if (cubierto) delAnterior.sumOf { montoContado(it) } else null,
+        diasComparados = altura,
+        gastos = gastosDelPeriodo,
+        gastosDelAnterior = delAnterior,
+        cuantosPeriodos = periodos.size,
+        porMes = porMes,
+        desdeDelAnterior = inicioDelAnterior,
+        hastaDelAnterior = finDelAnterior.minus(1, DateTimeUnit.DAY),
+    )
+}
+
+/** Las barras de a [largo] días (1, o una semana), con el anterior por los mismos días contados desde su arranque. */
+private fun tramosPorDias(
+    dias: Int,
+    largo: Int,
+    inicio: LocalDate,
+    porDia: LongArray,
+    porDiaDelAnterior: LongArray,
+    diasDelAnterior: Int,
+    cubierto: Boolean,
+    hoy: LocalDate,
+): List<TramoDelAnalisis> {
     var acumulado = 0L
     var acumuladoAnterior = 0L
-    val tramos = (0 until dias step largo).map { primero ->
+    return (0 until dias step largo).map { primero ->
         val ultimo = minOf(primero + largo, dias) - 1
         val gasto = (primero..ultimo).sumOf { porDia[it] }
         acumulado += gasto
@@ -187,24 +263,49 @@ fun analisisDelPeriodo(
             porVenir = inicio.plus(primero, DateTimeUnit.DAY) > hoy,
         )
     }
+}
 
-    // La altura: los días transcurridos de este período, en los días del anterior (si era más
-    // corto, se toma entero: no hay más días que comparar). Igual que [anteriorAMismaAltura].
-    val altura = minOf(transcurridos, diasDelAnterior)
-    val delAnterior = gastosDelAnteriorEnteros.filter { (i, _) -> i < altura }.map { it.second }
-    return AnalisisDelPeriodo(
-        periodo = periodo,
-        desde = inicio,
-        hasta = siguiente.minus(1, DateTimeUnit.DAY),
-        porSemana = porSemana,
-        tramos = tramos,
-        total = gastosDelPeriodo.sumOf { montoContado(it) },
-        diasTranscurridos = transcurridos,
-        anteriorAMismaAltura = if (cubierto) delAnterior.sumOf { montoContado(it) } else null,
-        diasComparados = altura,
-        gastos = gastosDelPeriodo,
-        gastosDelAnterior = delAnterior,
-    )
+/**
+ * Las barras de a un mes (vuelta 140): [periodosPorTramo] períodos por barra, y el anterior es el
+ * mismo grupo de [anteriores] (el i-ésimo mes contra el i-ésimo), no los mismos días contados: los
+ * meses no tienen todos el mismo largo.
+ */
+private fun tramosPorMes(
+    periodos: List<PeriodoFinanciero>,
+    anteriores: List<PeriodoFinanciero>,
+    settings: PeriodSettings,
+    inicio: LocalDate,
+    inicioDelAnterior: LocalDate,
+    porDia: LongArray,
+    porDiaDelAnterior: LongArray,
+    cubierto: Boolean,
+    periodosPorTramo: Int,
+    hoy: LocalDate,
+): List<TramoDelAnalisis> {
+    fun bordes(grupo: List<PeriodoFinanciero>): Pair<LocalDate, LocalDate> =
+        inicioDelPeriodo(grupo.first(), settings) to inicioDelPeriodo(periodoSiguiente(grupo.last(), settings), settings)
+    val delAnterior = anteriores.chunked(periodosPorTramo.coerceAtLeast(1))
+    var acumulado = 0L
+    var acumuladoAnterior = 0L
+    return periodos.chunked(periodosPorTramo.coerceAtLeast(1)).mapIndexed { j, grupo ->
+        val (desde, fin) = bordes(grupo)
+        val gasto = (inicio.daysUntil(desde) until inicio.daysUntil(fin)).sumOf { porDia[it] }
+        acumulado += gasto
+        val anterior = delAnterior.getOrNull(j)?.takeIf { cubierto }?.let { g ->
+            val (d, f) = bordes(g)
+            (inicioDelAnterior.daysUntil(d) until inicioDelAnterior.daysUntil(f)).sumOf { porDiaDelAnterior[it] }
+        }
+        if (anterior != null) acumuladoAnterior += anterior
+        TramoDelAnalisis(
+            desde = desde,
+            hasta = fin.minus(1, DateTimeUnit.DAY),
+            gasto = gasto,
+            acumulado = acumulado,
+            anterior = anterior,
+            acumuladoAnterior = if (anterior != null) acumuladoAnterior else null,
+            porVenir = desde > hoy,
+        )
+    }
 }
 
 private fun enEpoch(fecha: LocalDate): Long = fecha.atStartOfDayIn(AppTimeZone.zone).toEpochMilliseconds()
