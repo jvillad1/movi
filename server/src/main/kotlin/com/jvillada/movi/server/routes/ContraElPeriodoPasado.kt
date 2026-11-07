@@ -4,6 +4,10 @@ import com.jvillada.movi.server.db.Events
 import com.jvillada.movi.shared.model.AccountType
 import com.jvillada.movi.shared.model.PeriodSettings
 import com.jvillada.movi.shared.model.anteriorAMismaAltura
+import com.jvillada.movi.shared.model.sePuedeCompararContraElAnterior
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.greaterEq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.lessEq
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.min
@@ -16,7 +20,7 @@ import org.jetbrains.exposed.sql.min
  * igual.
  *
  * `null` si Movi no cubrió entero el período pasado: el primer movimiento del dueño es posterior a su
- * arranque. Es la misma guarda del gasto del día a día de la caja y de «lo normal» de las anomalías —
+ * arranque, o (vuelta 140) el período pasado no tiene ni un movimiento. Es la misma guarda del gasto del día a día de la caja y de «lo normal» de las anomalías —
  * un período a medio anotar haría ver todo «por encima».
  */
 internal fun Transaction.gastoDelAnteriorAMismaAltura(
@@ -32,7 +36,13 @@ internal fun Transaction.gastoDelAnteriorAMismaAltura(
         .where { Events.userId eq uid }
         .firstOrNull()?.get(primero)
         ?: return null
-    if (primerMovimiento > franja.ventana.first) return null
+    // Vuelta 140: la misma regla de «En qué se va» (`:core` [sePuedeCompararContraElAnterior]): además de
+    // haberlo visto entero, el período pasado no puede ser un hueco (sin un solo movimiento, sin
+    // anulados). Si no, «vs. período pasado» comparaba contra $0 y todo subía.
+    val delPasado = Events.select(Events.id)
+        .where { (Events.userId eq uid) and (Events.timestamp greaterEq franja.entero.first) and (Events.timestamp lessEq franja.entero.last) }
+        .count { it[Events.id] !in voidedIds }
+    if (!sePuedeCompararContraElAnterior(primerMovimiento, franja.ventana.first, listOf(delPasado))) return null
     val (_, porCategoria) = flujoDeCaja(
         movimientosDeFlujo(uid, franja.ventana.first, franja.ventana.last + 1, voidedIds, accountTypeById),
     )

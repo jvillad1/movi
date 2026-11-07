@@ -93,6 +93,21 @@ class ContraElPeriodoPasadoServerTest {
         assertNull(leer())
     }
 
+    /**
+     * Vuelta 140 (#696): el caso de Caro. Historia de antes y movimientos ahora, pero el período pasado
+     * (25-sep → 24-oct) sin un solo movimiento: es un hueco, no un período sin gastos. Antes devolvía
+     * un mapa vacío y el Inicio decía que todo subía.
+     */
+    @Test
+    fun `con el periodo pasado vacio entre dos con movimientos no hay comparacion`() {
+        gasto(LocalDate.of(2026, 8, 20), 1_000)
+        gasto(LocalDate.of(2026, 10, 26), 4_700_000)
+        assertNull(leer())
+        // Uno solo, aunque caiga después de la altura, ya lo llena.
+        gasto(LocalDate.of(2026, 10, 20), 5_000)
+        assertEquals(emptyMap(), leer()!!.first)
+    }
+
     @Test
     fun `sin ningun movimiento tampoco`() {
         assertNull(leer())

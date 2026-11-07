@@ -1274,12 +1274,26 @@ fun TransactionsScreen(
         mutableStateOf(periodoInicial?.let { periodoDelId(it) } ?: periodoDeHoy)
     }
 
-    val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo, accountTypes, filtro) {
+    /**
+     * Vuelta 140: un filtro de un rango de «En qué se va» («Comida · 28 ago – 29 nov») trae días que
+     * pasan del período **con que se abrió** Movimientos ([periodoInicial], o el de hoy). Entonces la
+     * lista no se recorta al período y el encabezado del período se esconde, como con una búsqueda. Se
+     * mide contra el de la apertura, no contra el que se ve: una barra de un solo período, con ‹, sigue
+     * recortándose como siempre.
+     */
+    val filtroDeUnRango = remember(filtro, periodoInicial, periodoDeHoy, ajustesDelPeriodo) {
+        val deLaApertura = periodoInicial?.let { periodoDelId(it) } ?: periodoDeHoy
+        filtro?.cruzaElPeriodo(deLaApertura, ajustesDelPeriodo) == true
+    }
+
+    val visibleDays = remember(activeFilter, allDays, searchQuery, periodoVisible, ajustesDelPeriodo, accountTypes, filtro, filtroDeUnRango) {
         val filtrados = diasVisibles(conElFiltro(allDays, filtro), activeFilter, searchQuery, accountTypes)
         // **Buscar atraviesa los períodos**, por cuarta vez en esta pantalla y por el mismo motivo
         // que las otras tres: escribir una consulta es pedir que algo aparezca, y encontrarlo solo
         // si además caía en el mes que estabas mirando es la peor forma de no encontrarlo.
-        if (searchQuery.isNotBlank()) filtrados
+        // Vuelta 140: un filtro de un rango de «En qué se va» («Comida · 28 ago – 29 nov») también:
+        // sus días pasan del período, y recortarlo dejaría la lista casi vacía.
+        if (searchQuery.isNotBlank() || filtroDeUnRango) filtrados
         else diasDelPeriodo(filtrados, periodoVisible, ajustesDelPeriodo)
     }
 
@@ -1424,7 +1438,8 @@ fun TransactionsScreen(
         // Con una búsqueda puesta no se pinta: buscar atraviesa los períodos (ver `visibleDays`),
         // así que un encabezado que dijera «septiembre» encima de resultados de marzo estaría
         // mintiendo sobre lo que se ve.
-        if (searchQuery.isBlank()) {
+        // Vuelta 140: con el filtro de un rango tampoco (ver [filtroDeUnRango]): el chip dice el rango.
+        if (searchQuery.isBlank() && !filtroDeUnRango) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1847,7 +1862,8 @@ fun TransactionsScreen(
             // Vuelta de diseño 9: sin nada elegido, el resumen del período que la lista tiene a la
             // vista (ver `ResumenEnElPanel.kt`), sobre la misma historia. Sin historia leída todavía,
             // la invitación de siempre. El resumen es el mismo de la franja del teléfono (arriba).
-            if (enElPanel == null && resumen != null && loDeArribaEnElModo(activeFilter)) {
+            // Vuelta 140: con el filtro de un rango, el resumen de un período no es lo que la lista muestra.
+            if (enElPanel == null && resumen != null && loDeArribaEnElModo(activeFilter) && !filtroDeUnRango) {
                 ResumenDelPeriodoEnElPanel(
                     resumen = resumen,
                     // Como desde «En qué se va»: los gastos de esa categoría, con su chip y su ×.
