@@ -114,7 +114,7 @@ class OfertaDeLoteTest {
         assertEquals(listOf("a", "b"), r.idsAMandar())
         assertEquals("Hay 3 movimientos más de «Cooperativa»", tituloDelReparto(r))
 
-        r = r.tras(r.idsAMandar())
+        r = r.tras(r.idsAMandar(), r.idsAMandar())
         assertEquals(listOf("c"), r.quedan.map { it.id })
         assertEquals(listOf("Hipoteca" to 2), r.pasados)
         assertEquals("Pasaste 2 a «Hipoteca»", lineaDeLoPasado(r.pasados.first()))
@@ -123,8 +123,60 @@ class OfertaDeLoteTest {
 
         r = r.conDestino("Ocio")
         assertEquals("Ocio", r.destino)
-        r = r.tras(r.idsAMandar())
+        r = r.tras(r.idsAMandar(), r.idsAMandar())
         assertTrue(r.terminado)
         assertEquals(listOf("Hipoteca" to 2, "Ocio" to 1), r.pasados)
+    }
+
+    private fun tres() = OfertaDeLote("H", mov("e0", "C", "H"), listOf(mov("a", "C", "Otros"), mov("b", "C", "Otros"), mov("c", "C", "Otros")))
+
+    @Test
+    fun `solo cuenta como pasado lo que el server cambio`() {
+        val r = repartoInicial(tres()).tras(listOf("a", "b", "c"), listOf("a"))
+        assertEquals(listOf("H" to 1), r.pasados)
+        assertEquals(2, r.omitidos)
+        assertTrue(r.terminado)
+        assertEquals("2 no se pudieron cambiar", lineaDeLosOmitidos(2))
+        assertEquals("1 no se pudo cambiar", lineaDeLosOmitidos(1))
+    }
+
+    @Test
+    fun `despues de un lote no se vuelve a marcar lo desmarcado`() {
+        val r = repartoInicial(tres()).conMarcados(setOf("a")).tras(listOf("a"), listOf("a"))
+        assertEquals(setOf<String>(), r.marcados)
+        assertTrue(r.idsAMandar().isEmpty())
+    }
+
+    @Test
+    fun `cambiar el destino rehace la seleccion por el tipo del destino`() {
+        val o = OfertaDeLote("H", mov("e0", "C", "H"), listOf(mov("g", "C", "Otros"), ingreso("i")))
+        val r = repartoInicial(o).conDestino("Salario", TransactionType.INCOME)
+        assertEquals(setOf("i"), r.marcados)
+        assertEquals(TransactionType.INCOME, r.tipoDelDestino)
+    }
+
+    @Test
+    fun `el conteo no incluye lo que ya esta en el destino ni lo del otro tipo`() {
+        val o = OfertaDeLote("H", mov("e0", "C", "H"), listOf(mov("g", "C", "Otros"), mov("ya", "C", "H"), ingreso("i")))
+        val r = repartoInicial(o).conMarcados(setOf("g", "ya", "i"))
+        assertEquals(listOf("g"), r.idsAMandar())
+        assertTrue(avisoDeTiposMezclados(r)!!.startsWith("Marcaste ingresos y gastos: «H» es de gastos"))
+        assertEquals(null, avisoDeTiposMezclados(r.conMarcados(setOf("g"))))
+    }
+
+    @Test
+    fun `el selector sigue al tipo de lo marcado`() {
+        val o = OfertaDeLote("H", mov("e0", "C", "H"), listOf(mov("g", "C", "Otros"), ingreso("i")))
+        val r = repartoInicial(o)
+        assertEquals(TransactionType.EXPENSE, tipoParaElSelector(r))
+        assertEquals(TransactionType.INCOME, tipoParaElSelector(r.conMarcados(setOf("i"))))
+        assertEquals(TransactionType.EXPENSE, tipoParaElSelector(r.conMarcados(setOf("i", "g"))))
+    }
+
+    @Test
+    fun `los textos nuevos`() {
+        assertEquals("Marcar todos los que salieron", descripcionDelEnlaceDelGrupo(GrupoDelLote(false, emptyList()), false))
+        assertEquals("Desmarcar los que entraron", descripcionDelEnlaceDelGrupo(GrupoDelLote(true, emptyList()), true))
+        assertTrue(textoDeCategoriaQueNoSeElige("Cuota de crédito").contains("Cuota de crédito"))
     }
 }

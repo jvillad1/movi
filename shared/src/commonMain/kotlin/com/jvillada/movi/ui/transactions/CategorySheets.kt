@@ -24,6 +24,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.data.UsedCategoriesCache
 import com.jvillada.movi.shared.model.ReconciliationStatus
@@ -644,28 +645,29 @@ internal fun ContenidoDelMovimiento(
     }
 
     /**
-     * Vuelta 139: cada lote es su propia llamada. Si queda alguno sin pasar la hoja sigue abierta con
-     * el [RepartoDelLote] ya actualizado ([alQuedar]); si no queda ninguno, se cierra. Si falla, se
-     * muestra el error y lo pasado antes ya quedó.
+     * Vuelta 139: cada lote es su propia llamada. [r] solo dice QUÉ mandar; lo que queda se calcula
+     * sobre el reparto vigente ([actualizar]) y con lo que el server SÍ cambió (`cambiados`: omite
+     * patas de traspaso, aperturas y anulados). Tras cada lote se avisa a quien abrió la hoja
+     * ([onEventChanged]) para que su lista se vea al día; sin nada por pasar, se cierra.
      */
-    fun aplicarElLote(r: RepartoDelLote, alQuedar: (RepartoDelLote) -> Unit) {
+    fun aplicarElLote(r: RepartoDelLote, actualizar: ((RepartoDelLote) -> RepartoDelLote) -> Unit) {
         if (saving) return
         val ids = r.idsAMandar()
         if (ids.isEmpty()) return
+        val destino = r.destino
         saving = true
         error = null
         coroutine.launch {
-            val result = runCatching { Repositories.wallets.recategorizarEnLote(ids, r.destino) }
+            val result = runCatching { Repositories.wallets.recategorizarEnLote(ids, destino) }
             saving = false
             result
-                .onSuccess {
-                    val despues = r.tras(ids)
-                    if (despues.terminado) {
-                        oferta = null
-                        onEventChanged(r.movimiento)
-                    } else {
-                        alQuedar(despues)
+                .onSuccess { respuesta ->
+                    var terminado = false
+                    actualizar { vigente ->
+                        vigente.tras(ids, respuesta.cambiados).also { terminado = it.terminado }
                     }
+                    if (terminado) oferta = null
+                    onEventChanged(r.movimiento)
                 }
                 .onFailure { error = it.toUserMessage(); saving = false }
         }
@@ -849,6 +851,13 @@ internal fun ContenidoDelMovimiento(
                     style = Movi.textos.tituloMedio,
                     color = Movi.colores.texto,
                 )
+                if (reparto.omitidos > 0) {
+                    Text(
+                        lineaDeLosOmitidos(reparto.omitidos),
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.aviso,
+                    )
+                }
                 Spacer(Modifier.height(Espacio.xs))
                 Text(
                     "Movi los reconoce como el mismo lugar. Marca los que quieras cambiar también y no tienes que abrirlos uno por uno.",
@@ -867,12 +876,17 @@ internal fun ContenidoDelMovimiento(
                         elegida = reparto.destino,
                         onElegir = { nueva ->
                             val limpia = nueva.trim()
-                            if (limpia.isNotEmpty() && !esCategoriaQueNoSeElige(limpia)) {
-                                reparto = reparto.conDestino(limpia)
+                            if (saving || limpia.isEmpty()) {
+                                // Mientras guarda, el destino no se toca.
+                            } else if (esCategoriaQueNoSeElige(limpia)) {
+                                error = textoDeCategoriaQueNoSeElige(limpia)
+                            } else {
+                                error = null
+                                reparto = reparto.conDestino(limpia, tipoParaElSelector(reparto))
                                 eligiendoDestino = false
                             }
                         },
-                        tipo = o.movimiento.type,
+                        tipo = tipoParaElSelector(reparto),
                         usadas = UsedCategoriesCache.used,
                         prefs = UsedCategoriesCache.prefs,
                         usos = UsedCategoriesCache.usosRecientes,
@@ -901,6 +915,9 @@ internal fun ContenidoDelMovimiento(
                             variante = VarianteDeBoton.Fantasma,
                             tamano = TamanoDeBoton.S,
                             habilitado = !saving,
+                            modifier = Modifier.semantics(mergeDescendants = true) {
+                                contentDescription = descripcionDelEnlaceDelGrupo(g, todos)
+                            },
                         )
                     }
                     g.filas.forEach { otro ->
@@ -927,16 +944,19 @@ internal fun ContenidoDelMovimiento(
             }
             Spacer(Modifier.height(Espacio.s))
             val cuantos = reparto.idsAMandar().size
+            avisoDeTiposMezclados(reparto)?.let {
+                Text(it, style = Movi.textos.apoyo, color = Movi.colores.aviso, modifier = Modifier.fillMaxWidth().padding(bottom = Espacio.xs))
+            }
             Boton(
                 texto = if (saving) "Cambiando…" else textoDelBotonDelLote(reparto.destino, cuantos),
-                onClick = { aplicarElLote(reparto) { reparto = it } },
+                onClick = { aplicarElLote(reparto) { f -> reparto = f(reparto) } },
                 variante = VarianteDeBoton.Secundario,
                 habilitado = !saving && cuantos > 0,
                 anchoCompleto = true,
             )
             Spacer(Modifier.height(Espacio.xs))
             Boton(
-                texto = if (reparto.pasados.isEmpty()) "No, solo este" else "Dejar el resto así",
+                texto = if (reparto.yaSePaso) "Dejar el resto así" else "No, solo este",
                 onClick = { terminar() },
                 variante = VarianteDeBoton.Fantasma,
                 habilitado = !saving,
@@ -2308,33 +2328,92 @@ const val TAG_DESTINO_DEL_LOTE: String = "lote:destino"
 internal data class RepartoDelLote(
     val oferta: OfertaDeLote,
     val marcados: Set<String>,
-    /** Cada lote ya pasado: categoría y cuántos. */
+    /** Cada lote ya pasado: categoría y cuántos (los que el server SÍ cambió). */
     val pasados: List<Pair<String, Int>> = emptyList(),
+    /** Los que el server omitió (patas de traspaso, aperturas, anulados): salieron de la lista sin pasarse. */
+    val omitidos: Int = 0,
+    /** De qué tipo es el destino: solo los marcados de ese tipo se mandan. */
+    val tipoDelDestino: TransactionType = oferta.movimiento.type,
 ) {
     val movimiento: FinancialEvent get() = oferta.movimiento
     val destino: String get() = oferta.categoria
     val quedan: List<FinancialEvent> get() = oferta.otros
     val terminado: Boolean get() = quedan.isEmpty()
+    val yaSePaso: Boolean get() = pasados.isNotEmpty() || omitidos > 0
 }
+
+private fun TransactionType.entra() = this == TransactionType.INCOME
 
 internal fun repartoInicial(o: OfertaDeLote): RepartoDelLote = RepartoDelLote(o, marcadosDeEntrada(o))
 
-internal fun RepartoDelLote.idsAMandar(): List<String> = idsDelLoteAMandar(oferta, marcados)
+/** Lo que de verdad se manda: marcado, del tipo del destino y que no esté ya en el destino. */
+internal fun RepartoDelLote.idsAMandar(): List<String> =
+    oferta.otros
+        .filter { it.id in marcados && it.type.entra() == tipoDelDestino.entra() && it.category != destino }
+        .map { it.id }
 
-internal fun RepartoDelLote.conDestino(categoria: String): RepartoDelLote = copy(oferta = oferta.copy(categoria = categoria))
+/** Cambiar el destino rehace la selección: los que quedan del tipo del destino. */
+internal fun RepartoDelLote.conDestino(categoria: String, tipo: TransactionType = tipoDelDestino): RepartoDelLote {
+    val nueva = oferta.copy(categoria = categoria)
+    return copy(
+        oferta = nueva,
+        tipoDelDestino = tipo,
+        marcados = nueva.otros.filter { it.type.entra() == tipo.entra() }.map { it.id }.toSet(),
+    )
+}
 
 internal fun RepartoDelLote.conMarcados(nuevos: Set<String>): RepartoDelLote = copy(marcados = nuevos)
 
-/** Tras pasar [ids] a [destino]: salen de la lista y, de los que quedan, se marcan de nuevo los del tipo del movimiento. */
-internal fun RepartoDelLote.tras(ids: List<String>): RepartoDelLote {
-    val salen = ids.toSet()
+/**
+ * Tras mandar [enviados] y contestar el server que cambió [cambiados]: todos los enviados salen de la
+ * lista, solo los cambiados cuentan como pasados, y de lo marcado quedan los que siguen pendientes
+ * (lo que el dueño desmarcó no se vuelve a marcar).
+ */
+internal fun RepartoDelLote.tras(enviados: List<String>, cambiados: List<String>): RepartoDelLote {
+    val salen = enviados.toSet()
+    val buenos = enviados.count { it in cambiados.toSet() }
     val nueva = oferta.copy(otros = oferta.otros.filter { it.id !in salen })
-    return RepartoDelLote(nueva, marcadosDeEntrada(nueva), pasados + (destino to ids.size))
+    return copy(
+        oferta = nueva,
+        marcados = marcados - salen,
+        pasados = if (buenos > 0) pasados + (destino to buenos) else pasados,
+        omitidos = omitidos + (enviados.size - buenos),
+    )
 }
 
 internal fun lineaDeLoPasado(paso: Pair<String, Int>): String = "Pasaste ${paso.second} a «${paso.first}»"
 
+internal fun lineaDeLosOmitidos(n: Int): String =
+    if (n == 1) "1 no se pudo cambiar" else "$n no se pudieron cambiar"
+
 /** El título: el de siempre al principio; después del primer lote, «Quedan 1 de «…»». */
 internal fun tituloDelReparto(r: RepartoDelLote): String =
-    if (r.pasados.isEmpty()) tituloDeLaOferta(r.oferta)
+    if (!r.yaSePaso) tituloDeLaOferta(r.oferta)
     else "Quedan ${r.quedan.size} de «${r.movimiento.description.trim().ifBlank { "este lugar" }}»"
+
+/** El selector ofrece categorías del tipo de lo marcado; con los dos tipos o nada marcado, las del destino. */
+internal fun tipoParaElSelector(r: RepartoDelLote): TransactionType {
+    val tipos = r.quedan.filter { it.id in r.marcados }.map { it.type.entra() }.toSet()
+    return when (tipos) {
+        setOf(true) -> TransactionType.INCOME
+        setOf(false) -> if (r.tipoDelDestino.entra()) TransactionType.EXPENSE else r.tipoDelDestino
+        else -> r.tipoDelDestino
+    }
+}
+
+/** Si hay marcados de los dos tipos, solo pasan los del tipo del destino y se dice. */
+internal fun avisoDeTiposMezclados(r: RepartoDelLote): String? {
+    val hayDeOtroTipo = r.quedan.any { it.id in r.marcados && it.type.entra() != r.tipoDelDestino.entra() }
+    if (!hayDeOtroTipo) return null
+    val deQue = if (r.tipoDelDestino.entra()) "ingresos" else "gastos"
+    return "Marcaste ingresos y gastos: «${r.destino}» es de $deQue. Solo pasan los $deQue."
+}
+
+internal fun textoDeCategoriaQueNoSeElige(nombre: String): String =
+    "«$nombre» la usa Movi sola y no se puede elegir. Escoge otra."
+
+/** Lo que dice el lector de pantalla del enlace «Todos» / «Ninguno» de un grupo. */
+internal fun descripcionDelEnlaceDelGrupo(g: GrupoDelLote, todosMarcados: Boolean): String {
+    val quienes = if (g.entra) "los que entraron" else "los que salieron"
+    return if (todosMarcados) "Desmarcar $quienes" else "Marcar todos $quienes"
+}
