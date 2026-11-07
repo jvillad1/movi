@@ -109,7 +109,8 @@ private fun montoParaOrdenar(pago: PagoDelPeriodo): Long? = when {
 fun urgenciaDelPago(pago: PagoDelPeriodo, diasPorVencer: Int = DIAS_POR_VENCER_EN_LA_COLA): UrgenciaDelPendiente? = when {
     // Vuelta 63: un abono planeado no vence ni apura: es un recordatorio que vive en Pagos.
     // Vuelta 72: una tarjeta pagada por debajo de su mínimo sigue en la cola (no está hecha).
-    pago.hecho || pago.esIngreso || pago.esAbono -> null
+    // Vuelta 141: la cuota que sale de una cuenta fuera de «Tu plata» tampoco apura: se ve en Pagos.
+    pago.hecho || pago.esIngreso || pago.esAbono || pago.saleDeFueraDeTuPlata -> null
     pago.diasParaVencer < 0 -> UrgenciaDelPendiente.VENCIDO
     pago.diasParaVencer == 0 -> UrgenciaDelPendiente.VENCE_HOY
     pago.diasParaVencer <= diasPorVencer -> UrgenciaDelPendiente.POR_VENCER

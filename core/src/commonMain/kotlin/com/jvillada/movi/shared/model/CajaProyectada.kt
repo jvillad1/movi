@@ -173,6 +173,9 @@ private fun montoDeLaFila(pago: PagoDelPeriodo): Long? {
     // Vuelta 63: el abono planeado a una deuda no es una salida que la caja dé por hecha: es una
     // intención. El día que se hace, el traspaso baja Tu plata y la caja arranca de ahí.
     if (pago.esAbono) return null
+    // Vuelta 141: la cuota que sale de una cuenta fuera de «Tu plata» (la AFC) no sale de Tu plata, que es
+    // de donde arranca la caja.
+    if (pago.saleDeFueraDeTuPlata) return null
     // Re-revisión: una tarjeta sin extracto pagada por debajo de su mínimo sale por lo que le falta.
     val monto = if (pago.montoEsSaldo) pago.faltaDelMinimo ?: pago.pagoMinimo ?: return null else pago.monto
     if (monto <= 0L) return null

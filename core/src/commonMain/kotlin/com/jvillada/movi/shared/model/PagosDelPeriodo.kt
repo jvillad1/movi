@@ -193,6 +193,19 @@ data class PagoDelPeriodo(
      * mensual lo dice («Cada 3 meses»). [FrecuenciaDelPago.MENSUAL] en todo lo demás.
      */
     val frecuencia: FrecuenciaDelPago = FrecuenciaDelPago.MENSUAL,
+    /**
+     * Vuelta 141 · la cuenta de la que sale la cuota de un crédito ([RecurringRule.sePagaDesde]), o `null`.
+     * Con ella la fila dice de dónde sale y Pagar la propone en «Sale de».
+     */
+    val sePagaDesde: String? = null,
+    /**
+     * **Vuelta 141 · la cuota sale de una cuenta fuera de «Tu plata»** (la AFC que paga la Hipoteca 1254;
+     * [RecurringRule.saleDeFueraDeTuPlata]). Se lista en Pagos y se anota como cualquier cuota, pero **no
+     * suma** en lo que te queda: ni en los fijos del Disponible, ni en «Falta por pagar», «Llevas $X
+     * pagados», la cola, la campana, «Próximo pago» o la caja. El mismo patrón que [esAbono]: aparte, no
+     * suma. Ver `LaCuotaQueSaleDeOtraCuenta.kt`.
+     */
+    val saleDeFueraDeTuPlata: Boolean = false,
 ) {
     /**
      * Vuelta 72 · un pago que **sí cuenta como hecho**. Lo de siempre es [pagado]; la fila de la tarjeta
@@ -485,6 +498,8 @@ private fun filaDelPago(
         ?.pagadoEnElPeriodo,
     cuentaDelPago = ocurrencia?.takeIf { it.occurred }?.cuentaDelPago,
     cuotaQueCambia = pago.rule.cuotaQueCambia,
+    sePagaDesde = pago.rule.sePagaDesde?.takeIf { it.isNotBlank() },
+    saleDeFueraDeTuPlata = pago.rule.saleDeFueraDeTuPlata == true,
 )
 
 /** El mínimo del extracto de [regla] si [vence] es su fecha de pago (y la regla es una tarjeta en pesos). */
@@ -544,7 +559,8 @@ fun epochDeFecha(iso: String): Long {
  */
 fun faltaPorPagar(checklist: List<PagoDelPeriodo>): Long =
     // Vuelta 63: un abono planeado tampoco — no es un fijo; se dice aparte (`abonosPlaneados`).
-    checklist.filter { !it.pagado && !it.montoEsSaldo && !it.esIngreso && !it.esAbono }.sumOf { it.monto } +
+    // Vuelta 141: una cuota que sale de una cuenta fuera de «Tu plata» (la AFC) tampoco.
+    checklist.filter { !it.pagado && !it.montoEsSaldo && !it.esIngreso && !it.esAbono && !it.saleDeFueraDeTuPlata }.sumOf { it.monto } +
         // Vuelta 72: el mínimo pendiente del extracto suma SIEMPRE —entero sin pagos, lo que falta con un
         // abono—, como lo resta la caja (re-revisión: antes sumaba solo al abonar, y la cifra subía al pagar).
         // Sin extracto, lo que falta del mínimo de una tarjeta pagada por debajo (la primera ronda).
@@ -571,14 +587,16 @@ fun pagosHechos(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
 fun yaPagadoEnElPeriodo(checklist: List<PagoDelPeriodo>): Long =
     // Vuelta 63: el abono hecho no es uno de los pagos del período («Llevas $X pagados» de «de $Y»).
     // Vuelta 72 (revisión): lo pagado en el período entero (dos abonos a la tarjeta), no solo el último.
-    pagosHechos(checklist).filter { it.moneda == "COP" && !it.esAbono }.sumOf { it.pagadoParaMostrar ?: if (it.montoEsSaldo) 0L else it.monto }
+    // Vuelta 141: ni la cuota pagada desde una cuenta fuera de «Tu plata» (no es de «de $Y»).
+    pagosHechos(checklist).filter { it.moneda == "COP" && !it.esAbono && !it.saleDeFueraDeTuPlata }.sumOf { it.pagadoParaMostrar ?: if (it.montoEsSaldo) 0L else it.monto }
 
 /**
  * Lo que falta pagar, en el orden en que sale del checklist. Un ingreso no se paga: no va acá. Un
  * abono planeado tampoco (vuelta 63): no es una deuda que venza, es plata que el dueño decide mover.
  */
 fun pagosPendientes(checklist: List<PagoDelPeriodo>): List<PagoDelPeriodo> =
-    checklist.filter { !it.hecho && !it.esIngreso && !it.esAbono }
+    // Vuelta 141: ni la cuota que sale de una cuenta fuera de «Tu plata»: sale en la lista, no apura.
+    checklist.filter { !it.hecho && !it.esIngreso && !it.esAbono && !it.saleDeFueraDeTuPlata }
 
 // ── Vuelta 70 · lo que viene del período siguiente ───────────────────────────
 
