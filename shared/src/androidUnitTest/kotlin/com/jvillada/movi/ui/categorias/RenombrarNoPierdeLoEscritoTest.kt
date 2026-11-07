@@ -58,7 +58,7 @@ class RenombrarNoPierdeLoEscritoTest {
         var intentos = 0
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getCategories(): List<CategoryUsage> = listOf(CategoryUsage(name = "Trasnporte", movements = 3))
-            override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult {
+            override suspend fun renameCategory(from: String, to: String, icono: String?, color: String?): CategoryRewriteResult {
                 intentos++
                 throw ApiException(422, "No se pudo renombrar ahora")
             }
@@ -67,8 +67,9 @@ class RenombrarNoPierdeLoEscritoTest {
         composeRule.waitUntil(5_000) { hay("Trasnporte") }
 
         tocar("Trasnporte")
-        composeRule.waitUntil(5_000) { hay("Cambia el nombre en todos tus movimientos") }
-        tocar("Renombrar")
+        // Vuelta 138: renombrar es la fila «Nombre», a la vista arriba de la hoja.
+        composeRule.waitUntil(5_000) { hay("Ícono y color") }
+        tocar("Nombre")
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true).fetchSemanticsNodes().size >= 2
         }
@@ -76,7 +77,7 @@ class RenombrarNoPierdeLoEscritoTest {
         val campos = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
         campos[campos.fetchSemanticsNodes().size - 1].performTextReplacement("Transporte público")
         composeRule.waitForIdle()
-        tocar("Renombrar")
+        tocar("Guardar")
 
         composeRule.waitUntil(5_000) { hay("No se pudo renombrar ahora") }
         assertEquals(1, intentos)

@@ -186,6 +186,11 @@ fun Campo(
     tag: String = TAG_CAMPO,
     /** Un ejemplo del valor: se pinta como «Ej: [ejemplo]» y gana sobre [guia]. */
     ejemplo: String? = null,
+    /**
+     * Vuelta 138: arranca con todo el texto seleccionado (renombrar una categoría: el nombre de hoy
+     * llega lleno y lo primero que se escribe lo reemplaza). Solo al montar; después, lo de siempre.
+     */
+    seleccionadoAlEmpezar: Boolean = false,
 ) {
     val textoGuia = textoGuiaDelCampo(guia, ejemplo)
     val interaccion = remember { MutableInteractionSource() }
@@ -218,6 +223,7 @@ fun Campo(
                     if (nuevo != valor) escritura.alCambiarElTexto()
                     alCambiar(nuevo)
                 }
+                if (seleccionadoAlEmpezar) LaunchedEffect(campo) { campo.seleccionarTodo() }
                 BasicTextField(
                     value = campo.valor,
                     onValueChange = campo::alCambiar,

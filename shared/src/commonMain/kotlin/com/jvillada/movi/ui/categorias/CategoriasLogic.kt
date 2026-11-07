@@ -308,6 +308,26 @@ fun avisoDeUnificacion(origen: CategoryUsage, destino: CategoryUsage): String {
     return base
 }
 
+/**
+ * Vuelta 138 · el subtítulo de la fila «Nombre» de la hoja: el nombre de hoy y, si es una del catálogo
+ * renombrada, de dónde viene («Hogar · antes «Vivienda», de Movi»).
+ */
+fun subtituloDelNombre(c: CategoryUsage): String =
+    c.nombreDeMovi?.let { "${c.name} · antes «$it», de Movi" } ?: c.name
+
+/**
+ * Vuelta 138 · el subtítulo de la fila «Tipo» de la hoja: el tipo que vale hoy y, si nadie lo fijó,
+ * que es automático («Gasto · automático»).
+ */
+fun subtituloDelTipo(c: CategoryUsage): String {
+    val tipo = etiquetaDeTipo(c)
+    return when {
+        c.pinnedType != null -> tipo
+        tipo == "Sin usar" -> etiquetaDeTipoFijado(null)
+        else -> "$tipo · automático"
+    }
+}
+
 /** El texto del selector de tipo, incluida la opción de no fijar nada. */
 fun etiquetaDeTipoFijado(pinned: String?): String = when (pinned) {
     TransactionType.EXPENSE.name -> "Gasto"

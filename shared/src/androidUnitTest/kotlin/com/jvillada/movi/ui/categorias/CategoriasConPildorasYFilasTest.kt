@@ -104,12 +104,16 @@ class CategoriasConPildorasYFilasTest {
     fun las_acciones_de_la_hoja_son_filas_y_el_tipo_se_elige_con_pildoras() {
         montar()
         tocar("Mercado propio")
-        composeRule.waitUntil(5_000) { hay("Cambia el nombre en todos tus movimientos") }
+        composeRule.waitUntil(5_000) { hay("Unificar en otra") }
 
-        listOf("Renombrar", "Unificar en otra", "Esconder").forEach { accion ->
+        // Vuelta 138: lo que se edita (Nombre, Ícono y color, Tipo) y las acciones son Filas del sistema.
+        listOf("Nombre", "Ícono y color", "Tipo", "Unificar en otra", "Esconder").forEach { accion ->
             val filas = composeRule.onAllNodes(hasTestTag(TAG_FILA) and hasText(accion)).fetchSemanticsNodes()
             assertEquals(1, filas.size, "«$accion» es una Fila del sistema")
         }
+        // El tipo va plegado detrás de su fila; abierto, se elige con píldoras.
+        tocar("Tipo")
+        composeRule.waitUntil(5_000) { hay("Automático") }
         assertEquals(true, filtroElegido("Automático"))
         assertEquals(false, filtroElegido("Gasto"))
     }

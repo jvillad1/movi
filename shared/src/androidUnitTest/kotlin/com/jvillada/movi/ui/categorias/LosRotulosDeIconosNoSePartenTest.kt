@@ -10,6 +10,8 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
@@ -86,6 +88,13 @@ class LosRotulosDeIconosNoSePartenTest {
         }
         composeRule.onNodeWithTag(tagDeFilaDeCategoria("Droguería"), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.OnClick)
+        // Vuelta 138: la cuadrícula va plegada detrás de la fila «Ícono y color» de la hoja.
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag(TAG_FILA_DE_LA_APARIENCIA_DE_LA_CATEGORIA)), useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onAllNodes(hasClickAction() and hasAnyAncestor(hasTestTag(TAG_FILA_DE_LA_APARIENCIA_DE_LA_CATEGORIA)), useUnmergedTree = true)
+            .onFirst().performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodes(hasTestTag(tagDeIconoDelCatalogo(ICONO_DE_CATEGORIA_RESPALDO)), useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
