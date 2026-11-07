@@ -4,6 +4,8 @@ import com.jvillada.movi.server.db.Apartados
 import com.jvillada.movi.server.db.Budgets
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.GastosDelEspacio
+import com.jvillada.movi.server.db.ReglasDeComercio
 import com.jvillada.movi.server.db.RecurringRules
 import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
@@ -39,7 +41,11 @@ import com.jvillada.movi.shared.model.categoriaQueSostieneReglasMensaje
 import com.jvillada.movi.shared.model.categoriaReservadaMensaje
 import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.esDelCatalogo
-import com.jvillada.movi.shared.model.tipoDelCatalogo
+import com.jvillada.movi.shared.model.categoriaDeLoQueMoviNoEntendioMensaje
+import com.jvillada.movi.shared.model.categoriaRetiradaMensaje
+import com.jvillada.movi.shared.model.delCatalogoPorSuNombre
+import com.jvillada.movi.shared.model.esLaCategoriaDeLoQueMoviNoEntendio
+import com.jvillada.movi.shared.model.nombreVigente
 import com.jvillada.movi.shared.model.nombreSostieneReglasDePlata
 import com.jvillada.movi.shared.model.isReservedCategory
 import io.ktor.http.HttpStatusCode
@@ -132,7 +138,8 @@ fun Route.categoryRoutes() {
         val uid = call.userId()
         val body = call.receive<RenameCategoryRequest>()
         val from = body.from.trim()
-        val to = body.to.trim()
+        // Vuelta 138: «vivienda» o «Educacion» nombran la del catálogo; se decide con su nombre de Movi.
+        val to = body.to.trim().let { escrito -> delCatalogoPorSuNombre(escrito) ?: escrito }
 
         if (from.isEmpty() || to.isEmpty()) {
             return@post call.respond(HttpStatusCode.BadRequest, CATEGORY_NAME_REQUIRED)
@@ -150,6 +157,11 @@ fun Route.categoryRoutes() {
         // de su nombre dependen las cifras: renombrarlas las saca de la regla en silencio.
         if (nombreSostieneReglasDePlata(from)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaQueSostieneReglasMensaje(from))
+        }
+        // Vuelta 138: «Otros» es lo que Movi no entendió; con otro nombre, cada «no supe» pasaría por
+        // una categoría de verdad (ver `esLaCategoriaDeLoQueMoviNoEntendio`).
+        if (esLaCategoriaDeLoQueMoviNoEntendio(from)) {
+            return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaDeLoQueMoviNoEntendioMensaje(from))
         }
         if (esCategoriaDelDesembolso(to)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, DESEMBOLSO_CATEGORY_NOT_MANUAL)
@@ -180,7 +192,11 @@ fun Route.categoryRoutes() {
             // El cliente ya detecta esta colisión antes de llamar y ofrece unificar; esto es la
             // guarda del server, no el camino normal.
             val vuelveAlDeMovi = vuelveAlNombreDeMovi(uid, from = from, to = to)
-            if (!vuelveAlDeMovi && categoryExists(uid, to)) RewriteOutcome.DestinoOcupado
+            // Un nombre del catálogo que el dueño ya retiró, y que no es el de esta categoría, no está
+            // libre: es la otra con otro nombre. El 409 dice en qué se convirtió.
+            val retirada = if (vuelveAlDeMovi) null else aliasDeCategorias(uid)[to]
+            if (retirada != null) RewriteOutcome.Retirada(retirada)
+            else if (!vuelveAlDeMovi && categoryExists(uid, to)) RewriteOutcome.DestinoOcupado
             else {
                 // Volver a «Vivienda»: la fila del alias se va primero, para que la reescritura no
                 // la lea como la preferencia del destino (está escondida, y el destino no lo está).
@@ -195,6 +211,8 @@ fun Route.categoryRoutes() {
         when (outcome) {
             RewriteOutcome.DestinoOcupado ->
                 call.respond(HttpStatusCode.Conflict, categoriaDestinoOcupadoMensaje(to))
+            is RewriteOutcome.Retirada ->
+                call.respond(HttpStatusCode.Conflict, categoriaRetiradaMensaje(to, outcome.vigente))
             is RewriteOutcome.Ok -> call.respond(outcome.result)
         }
     }
@@ -211,29 +229,35 @@ fun Route.categoryRoutes() {
         val uid = call.userId()
         val body = call.receive<MergeCategoryRequest>()
         val from = body.from.trim()
-        val into = body.into.trim()
+        // Vuelta 138: el destino con su nombre del catálogo («vivienda» → «Vivienda»); se resuelve el
+        // nombre vigente adentro de la transacción (unificar en «Vivienda» retirada es unificar en «Hogar»).
+        val intoEscrito = body.into.trim().let { escrito -> delCatalogoPorSuNombre(escrito) ?: escrito }
 
-        if (from.isEmpty() || into.isEmpty()) {
+        if (from.isEmpty() || intoEscrito.isEmpty()) {
             return@post call.respond(HttpStatusCode.BadRequest, CATEGORY_NAME_REQUIRED)
         }
-        if (into.length > CATEGORY_NAME_MAX_LENGTH) {
+        if (intoEscrito.length > CATEGORY_NAME_MAX_LENGTH) {
             return@post call.respond(HttpStatusCode.BadRequest, CATEGORY_NAME_TOO_LONG)
         }
         if (isReservedCategory(from)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaReservadaMensaje(from))
         }
-        if (isReservedCategory(into)) {
-            return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaReservadaMensaje(into))
+        if (isReservedCategory(intoEscrito)) {
+            return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaReservadaMensaje(intoEscrito))
         }
         // Ver la nota del renombrado: aquí también es origen prohibido, y «Desembolso de crédito»
         // tampoco recibe (unificar movimientos sueltos en ella inflaría «Entró»).
         if (nombreSostieneReglasDePlata(from)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaQueSostieneReglasMensaje(from))
         }
-        if (esCategoriaDelDesembolso(into)) {
+        // Vuelta 138: tampoco «Otros» como origen (ver el renombrado).
+        if (esLaCategoriaDeLoQueMoviNoEntendio(from)) {
+            return@post call.respond(HttpStatusCode.UnprocessableEntity, categoriaDeLoQueMoviNoEntendioMensaje(from))
+        }
+        if (esCategoriaDelDesembolso(intoEscrito)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, DESEMBOLSO_CATEGORY_NOT_MANUAL)
         }
-        if (from == into) {
+        if (from == intoEscrito) {
             return@post call.respond(HttpStatusCode.BadRequest, CATEGORY_MERGE_SAME)
         }
 
@@ -245,10 +269,11 @@ fun Route.categoryRoutes() {
         // La comprobación y la reescritura, en la MISMA transacción: preguntar afuera y escribir
         // adentro deja una ventana en la que el destino puede desaparecer entre medio.
         val result = dbQuery<CategoryRewriteResult?> {
-            if (!categoryExists(uid, into)) null
+            val into = nombreVigente(intoEscrito, aliasDeCategorias(uid))
+            if (from == into || !categoryExists(uid, into)) null
             else rewriteCategory(uid, from = from, to = into, hideSource = true)
         }
-        if (result == null) call.respond(HttpStatusCode.NotFound, categoriaDestinoInexistenteMensaje(into))
+        if (result == null) call.respond(HttpStatusCode.NotFound, categoriaDestinoInexistenteMensaje(intoEscrito))
         else call.respond(result)
     }
 
@@ -360,6 +385,8 @@ fun Route.categoryRoutes() {
 private sealed interface RewriteOutcome {
     /** Renombrar hacia un nombre que ya existe: eso es unificar, y lo decide el dueño. */
     data object DestinoOcupado : RewriteOutcome
+    /** Vuelta 138: el destino es un nombre del catálogo retirado; [vigente] es en qué se convirtió. */
+    data class Retirada(val vigente: String) : RewriteOutcome
     data class Ok(val result: CategoryRewriteResult) : RewriteOutcome
 }
 
@@ -375,8 +402,12 @@ internal fun Transaction.categoryExists(uid: String, name: String): Boolean {
     val enRecurrentes = RecurringRules.selectAll()
         .where { (RecurringRules.userId eq uid) and (RecurringRules.category eq name) }.limit(1).any()
     if (enRecurrentes) return true
+    if (CategoryPrefs.selectAll()
+            .where { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq name) }.limit(1).any()
+    ) return true
+    // Vuelta 138: el nombre nuevo de una del catálogo renombrada también existe (ver [categoryUsage]).
     return CategoryPrefs.selectAll()
-        .where { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq name) }.limit(1).any()
+        .where { (CategoryPrefs.userId eq uid) and (CategoryPrefs.renombradaA eq name) }.limit(1).any()
 }
 
 /**
@@ -473,6 +504,20 @@ internal fun Transaction.rewriteCategory(
     Apartados.update({ (Apartados.userId eq uid) and (Apartados.categoria eq from) }) {
         it[Apartados.categoria] = to
     }
+    // Vuelta 138: los gastos de los grupos del dueño (tu parte de lo que pagó otro) y las reglas de
+    // comercio del importador también llevan el nombre copiado: con el viejo, tu parte se separaba en
+    // «En qué se va» y en el presupuesto, y el extracto siguiente volvía a proponer el nombre viejo.
+    // Las bases de prueba que no tienen esas tablas no las tocan (`existenLasTablas`).
+    if (existenLasTablas(GastosDelEspacio)) {
+        GastosDelEspacio.update({ (GastosDelEspacio.userId eq uid) and (GastosDelEspacio.categoria eq from) }) {
+            it[GastosDelEspacio.categoria] = to
+        }
+    }
+    if (existenLasTablas(ReglasDeComercio)) {
+        ReglasDeComercio.update({ (ReglasDeComercio.userId eq uid) and (ReglasDeComercio.categoria eq from) }) {
+            it[ReglasDeComercio.categoria] = to
+        }
+    }
 
     // Preferencias: la del destino manda; si no tenía, hereda las del origen. La fila del origen
     // se borra siempre — para volver a "esconder el origen" hay una sola línea, la de abajo, y
@@ -483,14 +528,11 @@ internal fun Transaction.rewriteCategory(
     val prefDestino = CategoryPrefs.selectAll()
         .where { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq to) }
         .firstOrNull()
-    // Vuelta 138 · **el tipo viaja** al renombrar una del catálogo hacia un nombre que no lo es: el
-    // tipo de «Vivienda» lo decía el catálogo, y «Hogar» sin uso quedaría «Sin usar» (se ofrecería
-    // en los dos lados). Solo si el dueño no había fijado otro. Unificar no lo hace: el destino ya
-    // existe y tiene su propio tipo.
-    val tipoQueViaja = if (!hideSource && esDelCatalogo(from) && !esDelCatalogo(to)) tipoDelCatalogo(from) else null
+    // Vuelta 138: el tipo de una del catálogo renombrada NO se fija acá: «Hogar» sin tipo fijado
+    // resuelve «Automático» con el tipo del catálogo de «Vivienda» (`effectiveCategoryTypes` con
+    // `nombreDeMovi`). Fijarlo diría «Fijado por ti» sin que el dueño lo fijara.
     val tipoFijadoDestino = prefDestino?.get(CategoryPrefs.pinnedType)
         ?: prefOrigen?.get(CategoryPrefs.pinnedType)
-        ?: tipoQueViaja
     // Ola B: ícono y color viajan con la MISMA regla que el tipo fijado — el destino gana, y si
     // no tiene nada propio hereda lo del origen. Ambas operaciones (rename y merge) lo hacen
     // igual: a diferencia de "escondida" (que sí distingue rename de merge, ver abajo), no hay
@@ -780,6 +822,9 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
     // usado es un caso normal, y para eso tiene que estar en la lista.
     PREDEFINED_CATEGORIES.forEach { acc.getOrPut(it.name) { UsageAcc() } }
     prefs.keys.forEach { acc.getOrPut(it) { UsageAcc() } }
+    // Vuelta 138: el nombre nuevo de una del catálogo renombrada existe aunque no tenga uso ni
+    // preferencia propia (su tipo ya no se fija): es «Freelance» con otro nombre.
+    prefs.values.mapNotNull { it.renombradaA }.forEach { acc.getOrPut(it) { UsageAcc() } }
 
     // Vuelta 138: el nombre del catálogo que cada categoría renombrada tenía («Hogar» ← «Vivienda»).
     val nombreDeMoviDe = prefs.entries

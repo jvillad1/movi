@@ -198,17 +198,24 @@ fun effectiveCategoryTypes(
     name: String,
     pinnedType: String?,
     usedTypes: Set<TransactionType> = emptySet(),
+    /**
+     * Vuelta 138: si [name] es una del catálogo renombrada por el dueño («Hogar», que era «Vivienda»),
+     * ese nombre del catálogo. Sin tipo fijado, «Automático» suma el tipo del catálogo de ese nombre a
+     * lo usado: «Hogar» sin uso es de gasto, como «Vivienda», sin que nadie lo haya fijado.
+     */
+    nombreDeMovi: String? = null,
 ): Set<TransactionType> {
     val ambos = setOf(TransactionType.EXPENSE, TransactionType.INCOME)
     if (pinnedType != null) {
         if (pinnedType == CATEGORY_TYPE_BOTH) return ambos
         return setOfNotNull(runCatching { TransactionType.valueOf(pinnedType) }.getOrNull())
     }
+    fun tiposDe(c: Category): Set<TransactionType> =
+        if (c.type == CATEGORY_TYPE_BOTH) ambos else setOfNotNull(runCatching { TransactionType.valueOf(c.type) }.getOrNull())
     val delCatalogo = PREDEFINED_CATEGORIES.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }
-    if (delCatalogo != null) {
-        if (delCatalogo.type == CATEGORY_TYPE_BOTH) return ambos
-        return setOfNotNull(runCatching { TransactionType.valueOf(delCatalogo.type) }.getOrNull())
-    }
+    if (delCatalogo != null) return tiposDe(delCatalogo)
+    val deMovi = nombreDeMovi?.let { n -> PREDEFINED_CATEGORIES.firstOrNull { it.name.equals(n.trim(), ignoreCase = true) } }
+    if (deMovi != null) return tiposDe(deMovi) + usedTypes
     return usedTypes
 }
 
@@ -292,6 +299,31 @@ fun categoriaReservadaMensaje(name: String): String =
  */
 fun nombreSostieneReglasDePlata(name: String): Boolean =
     esCategoriaDeCuota(name) || esCategoriaDelDesembolso(name)
+
+/**
+ * Vuelta 138 · **«Otros» es donde Movi pone lo que no entendió** (`SIN_CATEGORIA` del parser de avisos,
+ * el «Otros» de respaldo del extracto). De ese nombre dependen [categoriaEntendida] —«Otros» nunca se
+ * confirma de un toque— y la memoria, que no lo aprende ([CATEGORIAS_QUE_NO_SE_APRENDEN]). Renombrarla o
+ * unificarla en otra convertiría cada «no supe» en una categoría de verdad: el aviso quedaría confirmable
+ * sin mirar y la memoria empezaría a aprenderla. No se renombra ni se unifica en otra (como origen).
+ *
+ * Solo «Otros»: «Otros ingresos» no cumple ese papel (los ingresos que Movi no entiende salen
+ * «Transferencia»; el extracto la propone como una más del catálogo, que se revisa fila por fila).
+ */
+fun esLaCategoriaDeLoQueMoviNoEntendio(name: String): Boolean =
+    name.isNotBlank() && categoriaQueNoDiceNada(name)
+
+/** Por qué «Otros» no se renombra ni se unifica en otra. Ver [esLaCategoriaDeLoQueMoviNoEntendio]. */
+fun categoriaDeLoQueMoviNoEntendioMensaje(name: String): String =
+    "«$name» es donde Movi pone lo que no entendió: un aviso en «$name» siempre te pide elegir la " +
+        "categoría. No se puede renombrar ni unificar en otra; si no la usas, escóndela."
+
+/**
+ * Vuelta 138 · renombrar hacia un nombre del catálogo que el dueño ya retiró («Vivienda», renombrada a
+ * «Hogar»): no es un nombre libre, es «Hogar» con otro nombre.
+ */
+fun categoriaRetiradaMensaje(retirada: String, vigente: String): String =
+    "«$retirada» ahora se llama «$vigente». Si quieres juntarlas, usa Unificar en «$vigente»."
 
 /**
  * ¿Este nombre es [DESEMBOLSO_CATEGORY]? Sin distinguir mayúsculas ni tildes (la misma normalización

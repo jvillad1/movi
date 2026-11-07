@@ -251,6 +251,21 @@ class MoviActuaTest {
         assertFalse(p.categoriaNueva)
     }
 
+    /** Revisión: el cruce con el alias usa la misma normalización que el de lo existente («educacion»). */
+    @Test
+    fun `una del catalogo renombrada se reconoce aunque el modelo la escriba sin tilde`() {
+        anotar("e-colegio", "Matrícula", "Colegio", 800_000, hoy.minusDays(1))
+        transaction {
+            com.jvillada.movi.server.db.CategoryPrefs.insert {
+                it[userId] = a.duenoA; it[name] = "Educación"; it[hidden] = true; it[renombradaA] = "Colegio"
+            }
+        }
+        val r = proponerDirecto(PROPONER_MOVIMIENTO, "monto" to "45000", "cuenta" to "Nu", "categoria" to "educacion")
+        val p = (r as ResultadoDePropuesta.Lista).accion
+        assertEquals("Colegio", p.categoria)
+        assertFalse(p.categoriaNueva)
+    }
+
     // ── «No» ─────────────────────────────────────────────────────────────────
 
     @Test

@@ -9,6 +9,8 @@ import com.jvillada.movi.server.db.CardPaymentDismissals
 import com.jvillada.movi.server.db.CategoryPrefs
 import com.jvillada.movi.server.db.Credits
 import com.jvillada.movi.server.db.Events
+import com.jvillada.movi.server.db.GastosDelEspacio
+import com.jvillada.movi.server.db.ReglasDeComercio
 import com.jvillada.movi.server.db.OccurrenceRejections
 import com.jvillada.movi.server.db.RecurringOccurrences
 import com.jvillada.movi.server.db.RecurringRules
@@ -102,12 +104,12 @@ class CategoryRoutesTest {
 
         transaction {
             SchemaUtils.drop(
-                Apartados, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
+                GastosDelEspacio, ReglasDeComercio, Apartados, Credits, SmsMessages, RecurringRules, VoidEvents, Events,
                 StatementImports, Budgets, Accounts, Users, CardPaymentDismissals, CategoryPrefs,
                 RecurringOccurrences, OccurrenceRejections,
             )
             SchemaUtils.create(
-                Apartados, Users, Accounts, StatementImports, Events, VoidEvents,
+                GastosDelEspacio, ReglasDeComercio, Apartados, Users, Accounts, StatementImports, Events, VoidEvents,
                 Budgets, RecurringRules, SmsMessages, Credits, CardPaymentDismissals, CategoryPrefs,
                 // El resumen del Inicio lee los sellos para el gasto variable («Disponible»).
                 RecurringOccurrences, OccurrenceRejections,
@@ -511,7 +513,9 @@ class CategoryRoutesTest {
         val lista = categorias()
         assertTrue(lista.none { it.nombre() == "Vivienda" }, "no aparece como escondida: es la misma con otro nombre")
         val hogar = lista.porNombre("Hogar")
-        assertEquals("EXPENSE", hogar.texto("pinnedType"), "el tipo del catálogo viaja")
+        // Revisión de la vuelta 138: el tipo NO se fija (diría «Fijado por ti»); «Automático» lo resuelve
+        // con el nombre de Movi que viaja en `nombreDeMovi` (ver `effectiveCategoryTypes`).
+        assertNull(hogar.texto("pinnedType"), "nada fijado que el dueño no fijó")
         assertEquals("Vivienda", hogar.texto("nombreDeMovi"))
         assertFalse(hogar.flag("hidden"))
     }
@@ -535,19 +539,23 @@ class CategoryRoutesTest {
         wireApp()
         assertEquals(HttpStatusCode.OK, rename("Freelance", "Trabajos").status)
         val trabajos = categorias().porNombre("Trabajos")
-        assertEquals("INCOME", trabajos.texto("pinnedType"))
+        assertNull(trabajos.texto("pinnedType"))
+        assertEquals("Freelance", trabajos.texto("nombreDeMovi"))
+        // Y existe: renombrar otra hacia «Trabajos» choca.
+        seedEvent("e-carro", "Carro")
+        assertEquals(HttpStatusCode.Conflict, rename("Carro", "Trabajos").status)
         assertTrue(categorias().none { it.nombre() == "Freelance" })
     }
 
     @Test
     fun `renombrar una del catalogo escondida la deja escondida y respeta el tipo que habia fijado`() = testApplication {
         wireApp()
-        seedEvent("e1", "Otros")
-        assertEquals(HttpStatusCode.OK, prefs("Otros", hidden = true, pinnedType = "BOTH").status)
-        assertEquals(HttpStatusCode.OK, rename("Otros", "Varios").status)
-        val varios = categorias().porNombre("Varios")
-        assertTrue(varios.flag("hidden"))
-        assertEquals("BOTH", varios.texto("pinnedType"))
+        seedEvent("e1", "Ropa")
+        assertEquals(HttpStatusCode.OK, prefs("Ropa", hidden = true, pinnedType = "BOTH").status)
+        assertEquals(HttpStatusCode.OK, rename("Ropa", "Vestuario").status)
+        val vestuario = categorias().porNombre("Vestuario")
+        assertTrue(vestuario.flag("hidden"))
+        assertEquals("BOTH", vestuario.texto("pinnedType"))
     }
 
     /** Falla sin el cambio: «Vivienda» es del catálogo y existe, así que era un 409 (o el 422 de antes). */
@@ -563,6 +571,7 @@ class CategoryRoutesTest {
         assertEquals(null, filaDePrefs("Vivienda")?.get(1), "sin alias")
         val lista = categorias()
         assertFalse(lista.porNombre("Vivienda").flag("hidden"), "deja de esconderla")
+        assertNull(lista.porNombre("Vivienda").texto("pinnedType"), "y no deja nada fijado")
         assertNull(lista.porNombre("Vivienda").texto("nombreDeMovi"))
         assertTrue(lista.none { it.nombre() == "Hogar" })
     }
@@ -602,7 +611,12 @@ class CategoryRoutesTest {
         seedEvent("e1", "Vivienda")
         seedEvent("e2", "Carro")
         assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
-        assertEquals(HttpStatusCode.Conflict, rename("Carro", "Vivienda").status)
+        val res = rename("Carro", "Vivienda")
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        // Revisión: el 409 dice en qué se convirtió, para ofrecer unificar ahí.
+        assertTrue("«Vivienda» ahora se llama «Hogar»" in res.bodyAsText(), res.bodyAsText())
+        // Con otra grafía, igual: «vivienda» nombra la del catálogo.
+        assertTrue("ahora se llama «Hogar»" in rename("Carro", "vivienda").bodyAsText())
         assertEquals("Carro", categoriaEnEventos("e2"))
     }
 
@@ -631,6 +645,78 @@ class CategoryRoutesTest {
         val largo = "x".repeat(CATEGORY_ICONO_MAX_LENGTH + 1)
         assertEquals(HttpStatusCode.BadRequest, renameConApariencia("Carro", "Auto", largo, "azul").status)
         assertEquals("Carro", categoriaEnEventos("e1"))
+    }
+
+    /**
+     * Revisión de la vuelta 138: «Otros» es donde Movi pone lo que no entendió. Con otro nombre,
+     * `categoriaEntendida` dejaba confirmar de un toque lo que Movi no supo y la memoria lo aprendía.
+     * Falla sin el arreglo: renombrar y unificar «Otros» daban 200.
+     */
+    @Test
+    fun `Otros no se renombra ni se unifica en otra`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Otros")
+        seedEvent("e2", "Carro")
+        val renombrar = rename("Otros", "Varios")
+        assertEquals(HttpStatusCode.UnprocessableEntity, renombrar.status)
+        assertTrue("donde Movi pone lo que no entendió" in renombrar.bodyAsText(), renombrar.bodyAsText())
+        assertEquals(HttpStatusCode.UnprocessableEntity, merge("Otros", "Carro").status)
+        assertEquals("Otros", categoriaEnEventos("e1"))
+        assertNull(filaDePrefs("Otros"))
+        // Hacia «Otros» sí se unifica (es el caso de «Otros ingresos»), y esconderla también se puede.
+        assertEquals(HttpStatusCode.OK, prefs("Otros", hidden = true).status)
+    }
+
+    /** Revisión: con la grafía de otro teclado, volver al nombre de Movi también funciona. */
+    @Test
+    fun `volver al nombre de Movi sin tilde ni mayuscula resuelve al del catalogo`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Educación")
+        assertEquals(HttpStatusCode.OK, rename("Educación", "Colegio").status)
+        val res = rename("Colegio", "educacion")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals("Educación", categoriaEnEventos("e1"))
+        assertNull(filaDePrefs("Educación")?.get(1))
+    }
+
+    @Test
+    fun `unificar en un nombre retirado unifica en el nombre de hoy`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        seedEvent("e2", "Arriendo casa")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        assertEquals(HttpStatusCode.OK, merge("Arriendo casa", "vivienda").status)
+        assertEquals("Hogar", categoriaEnEventos("e2"))
+    }
+
+    /** Revisión: tu parte de lo que pagó otro y las reglas del importador también cambian de nombre. */
+    @Test
+    fun `renombrar reescribe tambien los gastos de los grupos y las reglas de comercio`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        transaction {
+            GastosDelEspacio.insert {
+                it[id] = "g1"; it[GastosDelEspacio.userId] = this@CategoryRoutesTest.userId; it[espacioId] = "esp1"
+                it[pagadoPor] = "dst_caro"; it[monto] = 100_000; it[GastosDelEspacio.categoria] = "Vivienda"
+                it[descripcion] = "Arreglo"; it[fecha] = 0L; it[partes] = "[]"; it[createdAt] = 0L
+            }
+            GastosDelEspacio.insert {
+                it[id] = "g2"; it[GastosDelEspacio.userId] = otherUserId; it[espacioId] = "esp2"
+                it[pagadoPor] = "dst_x"; it[monto] = 100_000; it[GastosDelEspacio.categoria] = "Vivienda"
+                it[descripcion] = "Ajeno"; it[fecha] = 0L; it[partes] = "[]"; it[createdAt] = 0L
+            }
+            ReglasDeComercio.insert {
+                it[ReglasDeComercio.userId] = this@CategoryRoutesTest.userId; it[patron] = "ferreteria"
+                it[ReglasDeComercio.categoria] = "Vivienda"; it[actualizadaEn] = 0L
+            }
+        }
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        transaction {
+            val gastos = GastosDelEspacio.selectAll().associate { it[GastosDelEspacio.id] to it[GastosDelEspacio.categoria] }
+            assertEquals("Hogar", gastos["g1"])
+            assertEquals("Vivienda", gastos["g2"], "lo de otro usuario no se toca")
+            assertEquals("Hogar", ReglasDeComercio.selectAll().single()[ReglasDeComercio.categoria])
+        }
     }
 
     /**

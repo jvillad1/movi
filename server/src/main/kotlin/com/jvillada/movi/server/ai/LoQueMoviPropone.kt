@@ -237,7 +237,9 @@ private fun Transaction.categoriaDelDueno(uid: String, pedida: String?): Categor
     categoriaMalEscrita(escrita)?.let { no(it) }
     // Vuelta 138: el modelo conoce el catálogo de Movi; si el dueño renombró «Vivienda» a «Hogar» (o
     // la unificó en otra), se propone la suya y no una «nueva» con el nombre que retiró.
-    val limpia = com.jvillada.movi.shared.model.nombreVigente(escrita, aliasDeCategorias(uid))
+    // Con la misma normalización que el cruce de abajo: «educacion» nombra la del catálogo «Educación».
+    val delCatalogo = com.jvillada.movi.shared.model.delCatalogoPorSuNombre(escrita) ?: escrita
+    val limpia = com.jvillada.movi.shared.model.nombreVigente(delCatalogo, aliasDeCategorias(uid))
     val existentes = categoryUsage(uid, 0L, 0L).map { it.name }
     val existente = existentes.firstOrNull { normalizarParaBuscar(it) == normalizarParaBuscar(limpia) }
     val nombre = existente ?: limpia

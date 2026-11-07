@@ -60,6 +60,29 @@ fun aliasDeLasPreferencias(prefs: Map<String, CategoryPref>): Map<String, String
     }.toMap()
 
 /**
+ * La categoría del catálogo que [escrito] nombra, **sin distinguir tildes ni mayúsculas** («vivienda»,
+ * «Educacion» → «Vivienda», «Educación»), o `null`. Para lo que escribe una persona o un modelo hacia el
+ * catálogo (el destino de renombrar, lo que propone Movi AI), no para cruzar datos: ver [nombreVigente].
+ */
+fun delCatalogoPorSuNombre(escrito: String): String? {
+    val clave = normalizarParaBuscar(escrito.trim())
+    if (clave.isEmpty()) return null
+    return PREDEFINED_CATEGORIES.firstOrNull { normalizarParaBuscar(it.name) == clave }?.name
+}
+
+/**
+ * Vuelta 138: el nombre del catálogo que el dueño renombró a [nombre], según sus preferencias (el alias
+ * del cliente), o `null`. Lo que [effectiveCategoryTypes] recibe como `nombreDeMovi`.
+ */
+fun nombreDeMoviEnLasPreferencias(nombre: String, prefs: Map<String, CategoryPref>): String? {
+    val limpio = nombre.trim()
+    if (limpio.isEmpty()) return null
+    return prefs.entries.firstOrNull { (clave, pref) ->
+        pref.renombradaA?.trim().equals(limpio, ignoreCase = true) && esDelCatalogo(clave)
+    }?.key?.trim()
+}
+
+/**
  * ¿[nombre] es una categoría del catálogo de Movi? Exacto, como la guarda de siempre del server
  * (`PREDEFINED_CATEGORIES.any { it.name == from }`).
  */

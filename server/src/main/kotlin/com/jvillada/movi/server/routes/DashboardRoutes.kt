@@ -765,7 +765,8 @@ private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<
         .where { Budgets.userId eq uid }
         .forEach { anotar(it[Budgets.category].trim(), TransactionType.EXPENSE) }
 
-    val nombres = tiposPorNombre.keys + prefs.keys.filter { it.isNotEmpty() }
+    // Vuelta 138: y el nombre nuevo de una del catálogo renombrada, aunque no tenga uso todavía.
+    val nombres = tiposPorNombre.keys + prefs.keys.filter { it.isNotEmpty() } + prefs.values.mapNotNull { it.renombradaA }
     return nombres
         .map { nombre ->
             val pref = prefs[nombre]
