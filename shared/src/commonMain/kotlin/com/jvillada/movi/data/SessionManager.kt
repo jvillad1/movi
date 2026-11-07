@@ -416,6 +416,8 @@ object SessionManager {
         // arranca como en una instalación nueva, «Por fecha».
         VistaDeFacturasStore.clear()
         GruposPlegadosDeFacturas.olvidar()
+        // Vuelta 140: y cuánto tiempo miraba «En qué se va» («3 meses»).
+        com.jvillada.movi.ui.analisis.RangoDeEnQueSeVa.olvidar()
         // Y si la guía de primer uso ya se revisó en esta sesión: el siguiente usuario puede no tener
         // ninguna cuenta y tiene que verla.
         com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.olvidar()

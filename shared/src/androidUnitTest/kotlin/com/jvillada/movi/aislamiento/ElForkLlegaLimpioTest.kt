@@ -149,6 +149,8 @@ class ElForkLlegaLimpioTest {
         com.jvillada.movi.data.VistaDeFacturasStore.almacenDePrueba = mutableMapOf()
         com.jvillada.movi.data.VistaDeFacturasStore.elegir(com.jvillada.movi.data.VistaDeFacturas.POR_CATEGORIA)
         com.jvillada.movi.data.GruposPlegadosDeFacturas.alternar("2026-10", "categoria:vivienda", porDefecto = false)
+        // Vuelta 140: «3 meses» elegido en «En qué se va» en otra prueba.
+        com.jvillada.movi.ui.analisis.RangoDeEnQueSeVa.elegido = com.jvillada.movi.shared.model.RangoDelAnalisis.TRES_MESES
         AvisosEnHoy.sustitutoDePrueba = object : OfertaDeAvisos {
             override fun pedir() = Unit
             override fun descartar() = Unit
@@ -229,6 +231,7 @@ class ElForkLlegaLimpioTest {
         assertTrue("La búsqueda reciente no quedó anotada", com.jvillada.movi.data.BusquedasRecientesStore.recientes.isNotEmpty())
         assertEquals("La vista de las facturas no quedó elegida", com.jvillada.movi.data.VistaDeFacturas.POR_CATEGORIA, com.jvillada.movi.data.VistaDeFacturasStore.vista)
         assertEquals("El grupo no quedó plegado", 1, com.jvillada.movi.data.GruposPlegadosDeFacturas.cuantos)
+        assertEquals("El rango de «En qué se va» no quedó elegido", com.jvillada.movi.shared.model.RangoDelAnalisis.TRES_MESES, com.jvillada.movi.ui.analisis.RangoDeEnQueSeVa.elegido)
         assertTrue("La guía de primer uso no quedó abierta", com.jvillada.movi.ui.primeruso.GuiaDePrimerUso.enCurso)
         assertTrue("El uso no quedó esperando subir", com.jvillada.movi.observabilidad.Uso.pendientes.isNotEmpty())
     }
@@ -288,6 +291,7 @@ class ElForkLlegaLimpioTest {
         assertEquals("La vista de las facturas trae la resaca de otra prueba", com.jvillada.movi.data.VistaDeFacturas.POR_FECHA, com.jvillada.movi.data.VistaDeFacturasStore.vista)
         assertNull("El almacén de mentira de la vista de las facturas sigue enchufado", com.jvillada.movi.data.VistaDeFacturasStore.almacenDePrueba)
         assertEquals("Los grupos plegados de las facturas traen resaca", 0, com.jvillada.movi.data.GruposPlegadosDeFacturas.cuantos)
+        assertEquals("El rango de «En qué se va» trae la resaca de otra prueba", com.jvillada.movi.shared.model.RangoDelAnalisis.PERIODO, com.jvillada.movi.ui.analisis.RangoDeEnQueSeVa.elegido)
         assertFalse("«Ocultar los saldos» de otra prueba sigue guardado en el aparato", SaldosOcultosStore.leerGuardado())
         assertNull("El almacén de mentira de «Ocultar los saldos» sigue enchufado", SaldosOcultosStore.almacenDePrueba)
         assertFalse("La sesión de otra prueba sigue abierta", SessionManager.loggedIn)
