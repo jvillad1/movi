@@ -2,6 +2,8 @@ package com.jvillada.movi.server.ai
 
 import com.jvillada.movi.server.balance.accountTypesFor
 import com.jvillada.movi.server.db.Accounts
+import com.jvillada.movi.server.db.VoidEvents
+import com.jvillada.movi.server.routes.primerMovimientoReal
 import com.jvillada.movi.server.espacios.loCompartidoDelUsuario
 import com.jvillada.movi.server.reminders.loadEventsBetween
 import com.jvillada.movi.server.db.dbQuery
@@ -44,6 +46,12 @@ import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.isCashFlow
 import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.shared.model.normalizarParaBuscar
+import com.jvillada.movi.shared.model.PeriodSettings
+import com.jvillada.movi.shared.model.marcaDelTexto
+import com.jvillada.movi.shared.model.nombreDelPeriodo
+import com.jvillada.movi.shared.model.periodoActual
+import com.jvillada.movi.shared.model.periodoAnterior
+import com.jvillada.movi.shared.model.ventanaDe
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
 import java.time.LocalDate
@@ -63,6 +71,7 @@ import java.time.format.DateTimeParseException
  * |---|---|
  * | [BUSCAR_MOVIMIENTOS] | «¿qué compré en X?», «¿qué hubo entre estas dos fechas?» |
  * | [TOTALES_POR_CATEGORIA] | «¿cuánto gasté en Comida en agosto?», «¿gasté más que el mes pasado?» |
+ * | [TOTALES_POR_COMERCIO] | «¿cuánto me he gastado en Flypass?», «¿cuánto llevo en Rappi este año?» |
  * | [BUSCAR_DOCUMENTOS] | «¿qué dice la póliza del 2334?», «¿tengo el extracto de agosto?» |
  *
  * ### Tres reglas que no se negocian
@@ -94,6 +103,14 @@ data class LlamadaDeHerramienta(
 const val BUSCAR_MOVIMIENTOS = "buscar_movimientos"
 const val TOTALES_POR_CATEGORIA = "totales_por_categoria"
 const val BUSCAR_DOCUMENTOS = "buscar_documentos"
+
+/**
+ * Vuelta 142 (issue #697): **cuánto se gastó en un comercio**, por cómo lo nombra la persona. Antes
+ * no había con qué: la búsqueda corta en [TOPE_DE_RESULTADOS] y los totales no filtran por texto,
+ * así que a «¿cuánto me he gastado en Flypass?» el asistente contestaba que no tenía el total. Ver
+ * `LoGastadoEnUnComercio.kt`.
+ */
+const val TOTALES_POR_COMERCIO = "totales_por_comercio"
 
 /** Ola 4: la caja proyectada día a día; desde la vuelta 70, hasta el próximo salario. Ver `CajaRoutes.kt`. */
 const val PROYECTAR_CAJA = "proyectar_caja"
@@ -166,6 +183,7 @@ suspend fun ejecutarHerramienta(uid: String, llamada: LlamadaDeHerramienta): Str
     when (llamada.nombre) {
         BUSCAR_MOVIMIENTOS -> buscarMovimientos(uid, llamada.argumentos)
         TOTALES_POR_CATEGORIA -> totalesPorCategoria(uid, llamada.argumentos)
+        TOTALES_POR_COMERCIO -> totalesPorComercio(uid, llamada.argumentos)
         BUSCAR_DOCUMENTOS -> buscarDocumentos(uid, llamada.argumentos)
         PROYECTAR_CAJA -> textoDeLaCaja(cajaProyectadaDe(uid))
         SIMULAR_ABONO -> simularAbono(uid, llamada.argumentos)
@@ -221,9 +239,13 @@ private suspend fun buscarMovimientos(uid: String, args: Map<String, String>): S
         appendLine(":")
         muestra.forEach { appendLine("- ${renglon(it)}") }
         if (todas.size > muestra.size) {
+            // Vuelta 142: con un texto, la cifra total es la del comercio. Mandarlo a los totales por
+            // categoría —que no filtran por texto— lo dejaba sin forma de sumar (issue #697).
             appendLine(
                 "(y ${todas.size - muestra.size} más que no se listan; para una cifra total usa " +
-                    "$TOTALES_POR_CATEGORIA con las mismas fechas, que suma TODOS)",
+                    (texto?.let { "$TOTALES_POR_COMERCIO con comercio «$it» y las mismas fechas" }
+                        ?: "$TOTALES_POR_CATEGORIA con las mismas fechas") +
+                    ", que suma TODOS)",
             )
         }
     }.trim()
@@ -276,6 +298,140 @@ private suspend fun totalesPorCategoria(uid: String, args: Map<String, String>):
         }
     }.trim()
 }
+
+/**
+ * **Lo gastado en un comercio** (vuelta 142): la cuenta es [loGastadoEnUnComercio], pura; acá se
+ * resuelve el rango y se lee la base. El rango es, en este orden: `periodos` (los últimos N períodos
+ * del usuario, el en curso incluido), `desde`/`hasta` de calendario, o **toda la historia que Movi
+ * tiene** —desde su primer movimiento real, sin saldos iniciales ni ajustes (`primerMovimientoReal`, la
+ * regla de «desde que usas Movi»)—, y el texto lo dice.
+ */
+private suspend fun totalesPorComercio(uid: String, args: Map<String, String>): String {
+    val comercio = (args["comercio"] ?: args["texto"])?.trim()?.takeIf { it.isNotEmpty() }
+        ?: return "Dime qué comercio buscar en «comercio», como lo nombra el usuario («flypass», «rappi», «D1»)."
+    if (normalizarParaBuscar(comercio).length < LARGO_MINIMO_DEL_COMERCIO && marcaDelTexto(comercio) == null) {
+        return "«$comercio» es muy corto para buscarlo: pide al menos $LARGO_MINIMO_DEL_COMERCIO letras."
+    }
+    val settings = ajustesDePeriodoDe(uid)
+    val hoy = AppClock.today()
+    val hasta = fechaDe(args["hasta"]) ?: hoy
+    val finExclusivo = appDateToEpochMillis(hasta.plusDays(1))
+    val periodos = args["periodos"]?.filter { it.isDigit() }?.toIntOrNull()?.coerceIn(1, 120)
+    val desdePedido: Long? = when {
+        periodos != null -> {
+            var p = periodoActual(System.currentTimeMillis(), settings)
+            repeat(periodos - 1) { p = periodoAnterior(p, settings) }
+            ventanaDe(p, settings).first
+        }
+        else -> fechaDe(args["desde"])?.let(::appDateToEpochMillis)
+    }
+
+    val (eventos, tipos, nombres, primerMovimiento) = dbQuery {
+        val anulados = VoidEvents.selectAll().where { VoidEvents.userId eq uid }.map { it[VoidEvents.originalEventId] }
+        LoQueLeeElComercio(
+            loadEventsBetween(uid, desdePedido ?: 0L, finExclusivo) + loCompartidoDelUsuario(uid).tuParteDeOtros,
+            accountTypesFor(uid),
+            Accounts.selectAll().where { Accounts.userId eq uid }.associate { it[Accounts.id] to it[Accounts.name] },
+            // Revisión de la vuelta 142: «desde que usas Movi» es la regla de la curva del patrimonio,
+            // sin aperturas ni ajustes; no el evento más viejo, que puede ser un saldo inicial de años.
+            if (desdePedido == null) primerMovimientoReal(uid, anulados) else null,
+        )
+    }
+    val desde = desdePedido ?: primerMovimiento
+        ?: return "El usuario todavía no tiene movimientos en Movi."
+    val hastaTexto = hasta.toString()
+    val desdeTexto = epochMillisToAppDateString(desde)
+    val rango = when {
+        periodos == 1 -> "en este período del usuario (mira del $desdeTexto al $hastaTexto)"
+        periodos != null -> "en sus últimos $periodos períodos, el en curso incluido (mira del $desdeTexto al $hastaTexto)"
+        desdePedido != null -> "(mira del $desdeTexto al $hastaTexto)"
+        else -> "en toda la historia que Movi tiene (mira desde su primer movimiento en Movi, sin saldos iniciales ni " +
+            "ajustes, el $desdeTexto, hasta el $hastaTexto)"
+    }
+    val r = loGastadoEnUnComercio(eventos, comercio, tipos, nombres, settings, desde, finExclusivo)
+    return textoDeLoGastadoEnUnComercio(r, rango, settings, enCurso = periodoActual(System.currentTimeMillis(), settings))
+}
+
+private data class LoQueLeeElComercio(
+    val eventos: List<com.jvillada.movi.shared.model.FinancialEvent>,
+    val tipos: Map<String, AccountType>,
+    val nombres: Map<String, String>,
+    val primerMovimiento: Long?,
+)
+
+/**
+ * El texto para el modelo, aparte para probarlo sin base. **Con un solo comercio, el total arriba y
+ * dicho como la cifra de la respuesta**, para que no sume renglones (el verificador de cifras no
+ * aceptaría esa suma). **Con varios, primero cada uno** —pueden ser cosas distintas que comparten un
+ * pedazo del nombre— y el total general solo como la suma explícita de los de la lista.
+ */
+internal fun textoDeLoGastadoEnUnComercio(
+    r: LoGastadoEnUnComercio,
+    rango: String,
+    settings: PeriodSettings,
+    enCurso: PeriodoFinanciero? = null,
+): String = buildString {
+    if (r.pagos == 0 && r.enOtraMoneda.isEmpty()) {
+        append(
+            "Ningún gasto dice «${r.consulta}» $rango. Si es una persona o un comercio que guardó, consulta " +
+                "$CONSULTAR_PERSONA_O_COMERCIO; si lo llama distinto, vuelve a consultar con otra palabra. Dilo así: " +
+                "no hay gastos con ese nombre.",
+        )
+        return@buildString
+    }
+    appendLine(
+        "Gasto en lo que casa con «${r.consulta}» $rango, con la regla de «Gastos» de la app: sin anulados, sin " +
+            "«Por confirmar», sin pagos de tarjeta ni traspasos, y de un gasto compartido solo su parte.",
+    )
+    val varios = r.comercios.size > 1
+    if (!varios && r.pagos > 0) {
+        appendLine(
+            "TOTAL EN PESOS: ${r.total} en ${enPagos(r.pagos)}. Es la cifra para contestar «cuánto»: dila tal cual, " +
+                "no sumes renglones.",
+        )
+    }
+    if (varios) {
+        appendLine(
+            "CASA CON ${r.comercios.size} COMERCIOS DISTINTOS: di el de cada uno, no un total. Si el usuario confirma " +
+                "que son el mismo con otro nombre, usa la suma de abajo.",
+        )
+        r.comercios.take(TOPE_DE_COMERCIOS_QUE_CASAN).forEach { c ->
+            appendLine("- ${c.nombre}: ${c.total} en ${enPagos(c.pagos)}, del ${c.primerPago} al ${c.ultimoPago}")
+        }
+        if (r.comercios.size > TOPE_DE_COMERCIOS_QUE_CASAN) {
+            appendLine("(y ${r.comercios.size - TOPE_DE_COMERCIOS_QUE_CASAN} comercios más; consulta con un nombre más preciso)")
+            appendLine("Suma de los ${r.comercios.size}, solo si son el mismo: ${r.total} en ${enPagos(r.pagos)}.")
+        } else {
+            appendLine(
+                "Suma de los ${r.comercios.size}, solo si son el mismo: " +
+                    r.comercios.joinToString(" + ") { it.total.toString() } + " = ${r.total} en ${enPagos(r.pagos)}.",
+            )
+        }
+    }
+    // Las dos fechas, para que no se confundan: desde cuándo mira (arriba, en el rango) y desde cuándo hay pagos.
+    r.primerPago?.let { appendLine("- El primer pago que casa es del $it: antes de eso no hay pagos ahí en lo que Movi mira.") }
+    if (r.promedioPorPeriodo != null && r.periodos.size > 1) {
+        val enCursoIncluido = enCurso != null && r.periodos.last() == enCurso
+        appendLine(
+            "- Promedio por período del usuario${if (varios) " (de la suma)" else ""}: ${r.promedioPorPeriodo} (el total " +
+                "entre ${r.periodos.size} períodos, desde el del primer pago, «${nombreDelPeriodo(r.periodos.first(), settings)}», " +
+                "hasta «${nombreDelPeriodo(r.periodos.last(), settings)}», contando los que no tuvieron pagos" +
+                (if (enCursoIncluido) "; el último va en curso" else "") + ").",
+        )
+    }
+    if (r.recientes.isNotEmpty()) {
+        appendLine("- Los ${r.recientes.size} más recientes, del más nuevo al más viejo:")
+        r.recientes.forEachIndexed { i, p ->
+            appendLine("  ${i + 1}. ${p.fecha} · ${p.nombre} (${p.cuenta}): ${p.monto}")
+        }
+    }
+    if (r.enOtraMoneda.isNotEmpty()) {
+        appendLine("En otra moneda (aparte: nunca se suma a los pesos):")
+        r.enOtraMoneda.forEach { appendLine("- ${it.moneda}: ${it.total} en ${enPagos(it.pagos)}") }
+    }
+}.trim()
+
+private fun enPagos(n: Int) = if (n == 1) "1 pago" else "$n pagos"
 
 /**
  * **Lo que se movió sin ser gasto ni ingreso**, para poder contestar «¿cuánto le pagué a la tarjeta?»

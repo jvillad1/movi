@@ -538,7 +538,8 @@ private val HERRAMIENTAS_DE_LECTURA: List<Tool> = listOf(
             "Busca movimientos concretos del usuario: qué compró, dónde y cuándo. Úsala cuando la " +
                 "pregunta sea por hechos («¿qué compré en Zelo Group?», «¿qué hubo la semana " +
                 "pasada?»). Devuelve como máximo $TOPE_DE_RESULTADOS movimientos y avisa si hubo " +
-                "más; para una cifra total usa $TOTALES_POR_CATEGORIA, que suma todos. Sin fechas " +
+                "más; para una cifra total usa $TOTALES_POR_CATEGORIA, que suma todos (o, de un comercio, " +
+                "$TOTALES_POR_COMERCIO). Sin fechas " +
                 "mira los últimos $MESES_HACIA_ATRAS_POR_DEFECTO meses. Trae también los pagos de " +
                 "tarjeta y los traspasos entre sus cuentas, rotulados porque NO cuentan como gasto: " +
                 "úsala para «¿cuánto le pagué a la Master Black?» (filtra por cuenta o por texto).",
@@ -562,6 +563,33 @@ private val HERRAMIENTAS_DE_LECTURA: List<Tool> = listOf(
                 // Ninguno obligatorio: una pregunta suelta («¿qué he comprado en Rappi?») no trae
                 // fechas, y exigirlas obligaría al modelo a inventarlas.
                 .required(emptyList())
+                .build(),
+        )
+        .build(),
+    Tool.builder()
+        .name(TOTALES_POR_COMERCIO)
+        .description(
+            "Cuánto gastó el usuario en UN comercio o servicio, por cómo lo nombra él («flypass», «rappi», «D1»): " +
+                "el total en pesos de TODOS sus pagos, sin tope, con la regla de «Gastos» de la app; cuántos pagos " +
+                "son, desde cuándo, el promedio por período y los $RECIENTES_DE_UN_COMERCIO más recientes en orden. " +
+                "Úsala SIEMPRE para «¿cuánto me he gastado en X?», «¿cuánto llevo en X este año?», «¿cuánto gasto " +
+                "en X al mes?», en vez de $BUSCAR_MOVIMIENTOS. Si el nombre casa con varios comercios, trae el de " +
+                "cada uno; otra moneda viene aparte. Sin rango, toda la historia que Movi tiene, y lo dice.",
+        )
+        .inputSchema(
+            Tool.InputSchema.builder()
+                .properties(
+                    Tool.InputSchema.Properties.builder()
+                        .putAdditionalProperty("comercio", texto("El comercio como lo escribió el usuario; no distingue mayúsculas ni tildes."))
+                        .putAdditionalProperty(
+                            "periodos",
+                            texto("Solo dígitos: sus últimos N períodos con el en curso («1» = este período). Gana sobre las fechas."),
+                        )
+                        .putAdditionalProperty("desde", texto("Fecha de calendario AAAA-MM-DD, inclusive. Sin esto ni periodos: toda la historia."))
+                        .putAdditionalProperty("hasta", texto("Fecha de calendario AAAA-MM-DD, inclusive. Sin esto, hoy."))
+                        .build(),
+                )
+                .required(listOf("comercio"))
                 .build(),
         )
         .build(),
