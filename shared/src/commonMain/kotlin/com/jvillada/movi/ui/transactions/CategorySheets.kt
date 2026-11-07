@@ -83,6 +83,11 @@ import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.ui.fecha.timestampParaFecha
 import com.jvillada.movi.ui.components.*
 import com.jvillada.movi.ui.components.ds.Boton
+import com.jvillada.movi.ui.components.ds.Casilla
+import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.alAlternar
+import com.jvillada.movi.observabilidad.ToqueDeUso
+import androidx.compose.ui.semantics.Role
 import com.jvillada.movi.ui.components.ds.SangriaDeSeparador
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Separador
@@ -638,20 +643,29 @@ internal fun ContenidoDelMovimiento(
         }
     }
 
-    fun aplicarElLote(o: OfertaDeLote) {
+    /**
+     * Vuelta 139: cada lote es su propia llamada. Si queda alguno sin pasar la hoja sigue abierta con
+     * el [RepartoDelLote] ya actualizado ([alQuedar]); si no queda ninguno, se cierra. Si falla, se
+     * muestra el error y lo pasado antes ya quedó.
+     */
+    fun aplicarElLote(r: RepartoDelLote, alQuedar: (RepartoDelLote) -> Unit) {
         if (saving) return
+        val ids = r.idsAMandar()
+        if (ids.isEmpty()) return
         saving = true
         error = null
         coroutine.launch {
-            val result = runCatching { Repositories.wallets.recategorizarEnLote(o.otros.map { it.id }, o.categoria) }
+            val result = runCatching { Repositories.wallets.recategorizarEnLote(ids, r.destino) }
             saving = false
-            // Salga bien o mal, el movimiento que el dueño abrió YA quedó cambiado: la hoja se
-            // cierra igual y el error del lote se muestra en la pantalla de atrás. Dejarlo acá
-            // adentro obligaría a distinguir dos éxitos parciales en la misma hoja.
             result
                 .onSuccess {
-                    oferta = null
-                    onEventChanged(o.movimiento)
+                    val despues = r.tras(ids)
+                    if (despues.terminado) {
+                        oferta = null
+                        onEventChanged(r.movimiento)
+                    } else {
+                        alQuedar(despues)
+                    }
                 }
                 .onFailure { error = it.toUserMessage(); saving = false }
         }
@@ -813,55 +827,122 @@ internal fun ContenidoDelMovimiento(
             oferta = null
             onEventChanged(o.movimiento)
         }
+        var reparto by remember(o) { mutableStateOf(repartoInicial(o)) }
+        var eligiendoDestino by remember(o) { mutableStateOf(false) }
+        val oferta2 = reparto.oferta
+        val grupos = gruposDelLote(oferta2)
         MarcoDelMovimiento(lugar, onDismiss = terminar, dismissEnabled = !saving) {
+            // Vuelta 139: la lista se desplaza y los botones quedan fijos abajo, siempre a la vista
+            // (con 14 filas el principal quedaba al fondo, fuera de la pantalla).
             Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
                 SheetLabel("¿Y los parecidos?")
+                reparto.pasados.forEach { paso ->
+                    Text(
+                        lineaDeLoPasado(paso),
+                        style = Movi.textos.apoyo,
+                        color = Movi.colores.textoMedio,
+                        modifier = Modifier.padding(bottom = Espacio.xxs),
+                    )
+                }
                 Text(
-                    tituloDeLaOferta(o),
+                    tituloDelReparto(reparto),
                     style = Movi.textos.tituloMedio,
                     color = Movi.colores.texto,
                 )
                 Spacer(Modifier.height(Espacio.xs))
                 Text(
-                    "Movi los reconoce como el mismo lugar. Cámbialos también y no tienes que abrirlos uno por uno.",
+                    "Movi los reconoce como el mismo lugar. Marca los que quieras cambiar también y no tienes que abrirlos uno por uno.",
                     style = Movi.textos.cuerpo,
                     color = Movi.colores.textoMedio,
                 )
-                Spacer(Modifier.height(Espacio.m))
-                // Se listan todos los que se van a mover, con la categoría que tienen hoy: una
+                Spacer(Modifier.height(Espacio.s))
+                // «Ponerlos en: Hipoteca ›»: cada lote puede ir a otra categoría.
+                Fila(
+                    titulo = "Ponerlos en: ${reparto.destino}",
+                    onClick = { if (!saving) eligiendoDestino = !eligiendoDestino },
+                    modifier = Modifier.fillMaxWidth().testTag(TAG_DESTINO_DEL_LOTE),
+                )
+                if (eligiendoDestino) {
+                    SelectorDeCategoria(
+                        elegida = reparto.destino,
+                        onElegir = { nueva ->
+                            val limpia = nueva.trim()
+                            if (limpia.isNotEmpty() && !esCategoriaQueNoSeElige(limpia)) {
+                                reparto = reparto.conDestino(limpia)
+                                eligiendoDestino = false
+                            }
+                        },
+                        tipo = o.movimiento.type,
+                        usadas = UsedCategoriesCache.used,
+                        prefs = UsedCategoriesCache.prefs,
+                        usos = UsedCategoriesCache.usosRecientes,
+                    )
+                }
+                Spacer(Modifier.height(Espacio.s))
+                // Se listan todos los que se pueden mover, con la categoría que tienen hoy: una
                 // confirmación sobre cifras propias que no deja ver qué cambia no es una
                 // confirmación. Por eso el lote está topeado (ver MAXIMO_DE_PARECIDOS).
-                o.otros.forEach { otro ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = Espacio.xs)) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(tituloDelMovimiento(otro), style = Movi.textos.cuerpo, color = Movi.colores.texto, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                "${etiquetaDeFecha(fechaDeEpoch(otro.timestamp), hoyEnAppZone())} · ${otro.category}",
-                                style = Movi.textos.apoyo,
-                                color = Movi.colores.textoMedio,
-                            )
-                        }
-                        Cifra(abs(otro.amount), moneda = otro.currency, tono = TonoDeCifra.Apagado)
+                grupos.forEach { g ->
+                    val ids = g.filas.map { it.id }
+                    val todos = ids.all { it in reparto.marcados }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            if (grupos.size > 1) tituloDelGrupoDelLote(g) else "${g.filas.size} para elegir",
+                            style = Movi.textos.cuerpoFuerte,
+                            color = Movi.colores.texto,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Boton(
+                            texto = textoDelEnlaceDelGrupo(todos),
+                            onClick = { reparto = reparto.conMarcados(if (todos) reparto.marcados - ids.toSet() else reparto.marcados + ids) },
+                            variante = VarianteDeBoton.Fantasma,
+                            tamano = TamanoDeBoton.S,
+                            habilitado = !saving,
+                        )
                     }
+                    g.filas.forEach { otro ->
+                        val marcado = otro.id in reparto.marcados
+                        Fila(
+                            titulo = tituloDelMovimiento(otro),
+                            subtitulo = "${etiquetaDeFecha(fechaDeEpoch(otro.timestamp), hoyEnAppZone())} · ${otro.category}",
+                            inicio = { Casilla(marcada = marcado) },
+                            final = { Cifra(abs(otro.amount), moneda = otro.currency, tono = TonoDeCifra.Apagado) },
+                            chevron = false,
+                            modifier = Modifier.fillMaxWidth().alAlternar(
+                                valor = marcado,
+                                onCambiar = { si ->
+                                    reparto = reparto.conMarcados(if (si) reparto.marcados + otro.id else reparto.marcados - otro.id)
+                                },
+                                toque = ToqueDeUso("parecido-del-lote", dinamico = true),
+                                habilitado = !saving,
+                                rol = Role.Checkbox,
+                            ),
+                        )
+                    }
+                    Spacer(Modifier.height(Espacio.s))
                 }
-                Spacer(Modifier.height(Espacio.m))
-                Boton(
-                    texto = if (saving) "Cambiando…" else "Sí, ponlos en «${o.categoria}»",
-                    onClick = { aplicarElLote(o) },
-                    variante = VarianteDeBoton.Secundario,
-                    habilitado = !saving,
-                    anchoCompleto = true,
-                )
-                Spacer(Modifier.height(Espacio.xs))
-                Boton(
-                    texto = "No, solo este",
-                    onClick = { terminar() },
-                    variante = VarianteDeBoton.Fantasma,
-                    habilitado = !saving,
-                    anchoCompleto = true,
-                )
-                Spacer(Modifier.height(Espacio.l))
             }
+            Spacer(Modifier.height(Espacio.s))
+            val cuantos = reparto.idsAMandar().size
+            Boton(
+                texto = if (saving) "Cambiando…" else textoDelBotonDelLote(reparto.destino, cuantos),
+                onClick = { aplicarElLote(reparto) { reparto = it } },
+                variante = VarianteDeBoton.Secundario,
+                habilitado = !saving && cuantos > 0,
+                anchoCompleto = true,
+            )
+            Spacer(Modifier.height(Espacio.xs))
+            Boton(
+                texto = if (reparto.pasados.isEmpty()) "No, solo este" else "Dejar el resto así",
+                onClick = { terminar() },
+                variante = VarianteDeBoton.Fantasma,
+                habilitado = !saving,
+                anchoCompleto = true,
+            )
+            Spacer(Modifier.height(Espacio.l))
             BarraDeError(error)
         }
         return
@@ -2188,3 +2269,72 @@ internal fun tituloDeLaOferta(oferta: OfertaDeLote): String {
     return if (cuantos == 1) "Hay 1 movimiento más de «$nombre»"
     else "Hay $cuantos movimientos más de «$nombre»"
 }
+
+/** Vuelta 139 · los que se marcan de entrada: solo los del mismo tipo (gasto o ingreso) que el movimiento cambiado. */
+internal fun marcadosDeEntrada(oferta: OfertaDeLote): Set<String> =
+    oferta.otros.filter { it.type == oferta.movimiento.type }.map { it.id }.toSet()
+
+/** Un grupo de la lista de parecidos: todos los de un mismo tipo. */
+internal data class GrupoDelLote(val entra: Boolean, val filas: List<FinancialEvent>)
+
+/** Vuelta 139 · los grupos, sin vacíos y con el del tipo del movimiento cambiado primero. */
+internal fun gruposDelLote(oferta: OfertaDeLote): List<GrupoDelLote> {
+    val (entran, salen) = oferta.otros.partition { it.type == TransactionType.INCOME }
+    val grupos = listOf(GrupoDelLote(entra = false, filas = salen), GrupoDelLote(entra = true, filas = entran))
+        .filter { it.filas.isNotEmpty() }
+    val primeroElDelMovimiento = oferta.movimiento.type == TransactionType.INCOME
+    return grupos.sortedBy { if (it.entra == primeroElDelMovimiento) 0 else 1 }
+}
+
+internal fun tituloDelGrupoDelLote(g: GrupoDelLote): String =
+    (if (g.entra) "Entraron" else "Salieron") + " · ${g.filas.size}"
+
+internal fun textoDelEnlaceDelGrupo(todosMarcados: Boolean): String = if (todosMarcados) "Ninguno" else "Todos"
+
+/** «Poner 7 en «Tirze»»; con cero, el botón queda apagado y pide marcar. */
+internal fun textoDelBotonDelLote(categoria: String, cuantos: Int): String =
+    if (cuantos <= 0) "Marca los que quieras cambiar" else "Poner $cuantos en «$categoria»"
+
+/** Lo que de verdad se manda: solo los marcados, en el orden de la oferta. */
+internal fun idsDelLoteAMandar(oferta: OfertaDeLote, marcados: Set<String>): List<String> =
+    oferta.otros.map { it.id }.filter { it in marcados }
+
+const val TAG_DESTINO_DEL_LOTE: String = "lote:destino"
+
+/**
+ * **El reparto de los parecidos, lote a lote** (vuelta 139, ampliación): lo que queda por pasar
+ * ([oferta].otros), lo marcado, la categoría de destino ([oferta].categoria) y lo ya pasado.
+ */
+internal data class RepartoDelLote(
+    val oferta: OfertaDeLote,
+    val marcados: Set<String>,
+    /** Cada lote ya pasado: categoría y cuántos. */
+    val pasados: List<Pair<String, Int>> = emptyList(),
+) {
+    val movimiento: FinancialEvent get() = oferta.movimiento
+    val destino: String get() = oferta.categoria
+    val quedan: List<FinancialEvent> get() = oferta.otros
+    val terminado: Boolean get() = quedan.isEmpty()
+}
+
+internal fun repartoInicial(o: OfertaDeLote): RepartoDelLote = RepartoDelLote(o, marcadosDeEntrada(o))
+
+internal fun RepartoDelLote.idsAMandar(): List<String> = idsDelLoteAMandar(oferta, marcados)
+
+internal fun RepartoDelLote.conDestino(categoria: String): RepartoDelLote = copy(oferta = oferta.copy(categoria = categoria))
+
+internal fun RepartoDelLote.conMarcados(nuevos: Set<String>): RepartoDelLote = copy(marcados = nuevos)
+
+/** Tras pasar [ids] a [destino]: salen de la lista y, de los que quedan, se marcan de nuevo los del tipo del movimiento. */
+internal fun RepartoDelLote.tras(ids: List<String>): RepartoDelLote {
+    val salen = ids.toSet()
+    val nueva = oferta.copy(otros = oferta.otros.filter { it.id !in salen })
+    return RepartoDelLote(nueva, marcadosDeEntrada(nueva), pasados + (destino to ids.size))
+}
+
+internal fun lineaDeLoPasado(paso: Pair<String, Int>): String = "Pasaste ${paso.second} a «${paso.first}»"
+
+/** El título: el de siempre al principio; después del primer lote, «Quedan 1 de «…»». */
+internal fun tituloDelReparto(r: RepartoDelLote): String =
+    if (r.pasados.isEmpty()) tituloDeLaOferta(r.oferta)
+    else "Quedan ${r.quedan.size} de «${r.movimiento.description.trim().ifBlank { "este lugar" }}»"

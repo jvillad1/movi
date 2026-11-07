@@ -69,4 +69,62 @@ class OfertaDeLoteTest {
         )
         assertEquals("Hay 1 movimiento más de «este lugar»", tituloDeLaOferta(sinNombre))
     }
+
+    // ---- Vuelta 139 · elegir cuáles ----
+
+    private fun ingreso(id: String) = mov(id, "Transferencia recibida", "Otros ingresos").copy(type = TransactionType.INCOME)
+
+    private fun mixta(tipoDelCambiado: TransactionType = TransactionType.EXPENSE) = OfertaDeLote(
+        categoria = "Tirze",
+        movimiento = mov("e0", "Tirze", "Tirze").copy(type = tipoDelCambiado),
+        otros = listOf(ingreso("i1"), mov("g1", "T", "Otros"), ingreso("i2"), mov("g2", "T", "Otros")),
+    )
+
+    @Test
+    fun `la seleccion inicial marca solo los del mismo tipo`() {
+        assertEquals(setOf("g1", "g2"), marcadosDeEntrada(mixta()))
+        assertEquals(setOf("i1", "i2"), marcadosDeEntrada(mixta(TransactionType.INCOME)))
+    }
+
+    @Test
+    fun `los grupos van con el tipo del cambiado primero y sin vacios`() {
+        assertEquals(listOf("Salieron · 2", "Entraron · 2"), gruposDelLote(mixta()).map(::tituloDelGrupoDelLote))
+        assertEquals(listOf("Entraron · 2", "Salieron · 2"), gruposDelLote(mixta(TransactionType.INCOME)).map(::tituloDelGrupoDelLote))
+        val soloGastos = OfertaDeLote("T", mov("e0", "T", "T"), listOf(mov("g1", "T", "Otros")))
+        assertEquals(1, gruposDelLote(soloGastos).size)
+    }
+
+    @Test
+    fun `el texto del boton dice cuantos`() {
+        assertEquals("Marca los que quieras cambiar", textoDelBotonDelLote("Tirze", 0))
+        assertEquals("Poner 1 en «Tirze»", textoDelBotonDelLote("Tirze", 1))
+        assertEquals("Poner 7 en «Tirze»", textoDelBotonDelLote("Tirze", 7))
+    }
+
+    @Test
+    fun `solo se mandan los ids marcados`() {
+        assertEquals(listOf("i1", "g2"), idsDelLoteAMandar(mixta(), setOf("g2", "i1", "fuera")))
+        assertTrue(idsDelLoteAMandar(mixta(), emptySet()).isEmpty())
+    }
+
+    @Test
+    fun `el reparto pasa un lote y deja el resto con otra categoria de destino`() {
+        val oferta = OfertaDeLote("Hipoteca", mov("e0", "Cooperativa", "Hipoteca"), listOf(mov("a", "C", "Otros"), mov("b", "C", "Otros"), mov("c", "C", "Otros")))
+        var r = repartoInicial(oferta).conMarcados(setOf("a", "b"))
+        assertEquals(listOf("a", "b"), r.idsAMandar())
+        assertEquals("Hay 3 movimientos más de «Cooperativa»", tituloDelReparto(r))
+
+        r = r.tras(r.idsAMandar())
+        assertEquals(listOf("c"), r.quedan.map { it.id })
+        assertEquals(listOf("Hipoteca" to 2), r.pasados)
+        assertEquals("Pasaste 2 a «Hipoteca»", lineaDeLoPasado(r.pasados.first()))
+        assertEquals("Quedan 1 de «Cooperativa»", tituloDelReparto(r))
+        assertTrue(!r.terminado)
+
+        r = r.conDestino("Ocio")
+        assertEquals("Ocio", r.destino)
+        r = r.tras(r.idsAMandar())
+        assertTrue(r.terminado)
+        assertEquals(listOf("Hipoteca" to 2, "Ocio" to 1), r.pasados)
+    }
 }
