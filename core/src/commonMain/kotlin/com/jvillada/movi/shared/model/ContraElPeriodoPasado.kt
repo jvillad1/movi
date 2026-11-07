@@ -43,7 +43,12 @@ import kotlinx.serialization.Serializable
  * @property ventana `[inicio, fin)` en epoch ms, como [ventanaDe] (el último milisegundo incluido).
  * @property dias los días de esa franja: los N de hoy, o menos si el anterior era más corto.
  */
-data class AnteriorAMismaAltura(val ventana: LongRange, val dias: Int)
+data class AnteriorAMismaAltura(
+    val ventana: LongRange,
+    val dias: Int,
+    /** Vuelta 140: el período anterior **entero** (no solo sus primeros días), para [sePuedeCompararContraElAnterior]. */
+    val entero: LongRange = ventana,
+)
 
 /**
  * **La franja del período anterior a la misma altura que hoy** (ver el KDoc del archivo).
@@ -66,8 +71,24 @@ fun anteriorAMismaAltura(ahora: Long, settings: PeriodSettings): AnteriorAMismaA
     return AnteriorAMismaAltura(
         ventana = enEpoch(inicioDelAnterior) until enEpoch(corte),
         dias = inicioDelAnterior.daysUntil(corte),
+        entero = enEpoch(inicioDelAnterior) until enEpoch(finDelAnterior),
     )
 }
+
+/**
+ * **¿Se puede comparar contra el período (o los períodos) de antes?** (vuelta 140, issue #696) Una sola
+ * regla para «En qué se va», el panel de Actividad y el «vs. período pasado» del Inicio (server):
+ *
+ * - Movi tiene que haberlo visto entero: el primer movimiento del dueño ([primerMovimiento], cualquiera)
+ *   es anterior o igual a su arranque ([inicioDelAnterior], epoch ms). La guarda de siempre.
+ * - Y **ninguno de esos períodos puede estar vacío** ([movimientosPorPeriodo]: cuántos movimientos,
+ *   de cualquier tipo y sin anulados, tiene cada uno). Un período sin un solo movimiento entre dos con
+ *   movimientos es un hueco en la historia (el octubre de Caro, cuyos extractos no subió), no un mes
+ *   en que no gastó nada: compararle encima decía «$4,7M más que el período pasado ($0)» y ponía
+ *   flechas de subida en todo.
+ */
+fun sePuedeCompararContraElAnterior(primerMovimiento: Long?, inicioDelAnterior: Long, movimientosPorPeriodo: List<Int>): Boolean =
+    primerMovimiento != null && primerMovimiento <= inicioDelAnterior && movimientosPorPeriodo.all { it > 0 }
 
 private fun enEpoch(fecha: LocalDate): Long = fecha.atStartOfDayIn(AppTimeZone.zone).toEpochMilliseconds()
 

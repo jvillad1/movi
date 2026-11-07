@@ -251,6 +251,8 @@ fun App() {
                     // saltar a crear una cuenta o a otra pantalla, y dejarla abierta encima del destino nuevo sería
                     // una hoja huérfana sobre una pantalla que no la pidió.
                     quickAdd = null
+                    // Vuelta 140: «En qué se va» desde el Inicio arranca en «Este período» (ver [RangoDeEnQueSeVa]).
+                    com.jvillada.movi.ui.analisis.RangoDeEnQueSeVa.alAbrir(screen, backStack.lastOrNull())
                     // Entrar (o crear la cuenta) REEMPLAZA la pila en vez de apilar encima: ver
                     // [NavStack.shouldReplaceAll] para el «atrás» que devolvía al formulario de
                     // entrada, y para el prompt de la huella que se abría solo al aterrizar ahí.
