@@ -1,5 +1,6 @@
 package com.jvillada.movi.server.ai
 
+import com.jvillada.movi.server.routes.aliasDeCategorias
 import com.anthropic.core.JsonValue
 import com.anthropic.models.messages.Tool
 import com.jvillada.movi.server.balance.formatAmount
@@ -232,8 +233,11 @@ private fun nombres(cuentas: List<CuentaDelDueno>) =
 private data class Categoria(val nombre: String, val nueva: Boolean)
 
 private fun Transaction.categoriaDelDueno(uid: String, pedida: String?): Categoria {
-    val limpia = pedida?.trim()?.takeIf { it.isNotBlank() } ?: no("Falta la categoría.")
-    categoriaMalEscrita(limpia)?.let { no(it) }
+    val escrita = pedida?.trim()?.takeIf { it.isNotBlank() } ?: no("Falta la categoría.")
+    categoriaMalEscrita(escrita)?.let { no(it) }
+    // Vuelta 138: el modelo conoce el catálogo de Movi; si el dueño renombró «Vivienda» a «Hogar» (o
+    // la unificó en otra), se propone la suya y no una «nueva» con el nombre que retiró.
+    val limpia = com.jvillada.movi.shared.model.nombreVigente(escrita, aliasDeCategorias(uid))
     val existentes = categoryUsage(uid, 0L, 0L).map { it.name }
     val existente = existentes.firstOrNull { normalizarParaBuscar(it) == normalizarParaBuscar(limpia) }
     val nombre = existente ?: limpia
