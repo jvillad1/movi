@@ -448,6 +448,19 @@ data class FiltroDeMovimientos(
         return true
     }
 
+    /**
+     * **¿Este filtro pide días fuera de [periodo]?** (vuelta 140) Una fila o una barra de un rango
+     * («3 meses») trae sus bordes, que pasan del período que Movimientos muestra: entonces la lista no
+     * se recorta al período (como la búsqueda, que también atraviesa los períodos) y muestra todo lo
+     * que el filtro deja pasar. Una barra de un período solo cae adentro: lo de siempre.
+     */
+    fun cruzaElPeriodo(periodo: PeriodoFinanciero, settings: PeriodSettings): Boolean {
+        if (desde == null && hasta == null) return false
+        val inicio = inicioDelPeriodo(periodo, settings).toString()
+        val fin = inicioDelPeriodo(periodoSiguiente(periodo, settings), settings).minus(1, DateTimeUnit.DAY).toString()
+        return (desde != null && desde < inicio) || (hasta != null && hasta > fin)
+    }
+
     companion object {
         /** El filtro de una fila de la lista. */
         fun deLaFila(fila: FilaDelAnalisis, vista: VistaDelAnalisis): FiltroDeMovimientos = when (vista) {
@@ -455,6 +468,17 @@ data class FiltroDeMovimientos(
             VistaDelAnalisis.COMERCIO -> FiltroDeMovimientos(fila.nombre, comercio = fila.clave)
             VistaDelAnalisis.CUENTA -> FiltroDeMovimientos(fila.nombre, cuentaId = fila.clave)
         }
+
+        /**
+         * El filtro de una fila de un rango (vuelta 140): lo de [deLaFila] más los días del rango, y
+         * el rango en el rótulo («Comida · 28 ago – 29 nov»), así el chip de Movimientos dice qué se ve.
+         */
+        fun deLaFilaEnElRango(fila: FilaDelAnalisis, vista: VistaDelAnalisis, analisis: AnalisisDelPeriodo): FiltroDeMovimientos =
+            deLaFila(fila, vista).copy(
+                rotulo = "${fila.nombre} · ${nombreDelRango(analisis.desde, analisis.hasta)}",
+                desde = analisis.desde.toString(),
+                hasta = analisis.hasta.toString(),
+            )
 
         /** El filtro de una barra: sus días. */
         fun delTramo(tramo: TramoDelAnalisis, rotulo: String): FiltroDeMovimientos =

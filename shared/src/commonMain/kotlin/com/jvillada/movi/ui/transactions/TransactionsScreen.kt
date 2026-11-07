@@ -1279,7 +1279,9 @@ fun TransactionsScreen(
         // **Buscar atraviesa los períodos**, por cuarta vez en esta pantalla y por el mismo motivo
         // que las otras tres: escribir una consulta es pedir que algo aparezca, y encontrarlo solo
         // si además caía en el mes que estabas mirando es la peor forma de no encontrarlo.
-        if (searchQuery.isNotBlank()) filtrados
+        // Vuelta 140: un filtro de un rango de «En qué se va» («Comida · 28 ago – 29 nov») también:
+        // sus días pasan del período, y recortarlo dejaría la lista casi vacía.
+        if (searchQuery.isNotBlank() || filtro?.cruzaElPeriodo(periodoVisible, ajustesDelPeriodo) == true) filtrados
         else diasDelPeriodo(filtrados, periodoVisible, ajustesDelPeriodo)
     }
 
