@@ -270,6 +270,24 @@ internal fun org.jetbrains.exposed.sql.Transaction.deudaIdIfOwned(uid: String, d
 internal fun io.ktor.server.application.ApplicationCall.pideLosAbonos(): Boolean =
     request.queryParameters["conAbonos"] == "1"
 
+/**
+ * **Vuelta 141 · ¿el cliente sabe que una cuota puede salir de fuera de Tu plata?** Solo con
+ * `?conCuotaFuera=1` `/api/payments/upcoming` y `/api/payments/occurrences` traen la cuota de un crédito
+ * marcada con `RecurringRule.saleDeFueraDeTuPlata` (la que se paga desde la AFC). Un APK anterior no
+ * conoce la marca y la restaría como un fijo: «Te quedan» $9,1M abajo. Mismo patrón que [pideLosAbonos].
+ * Lo que el server calcula por su cuenta (el Disponible, la caja, Movi AI, el cierre) sí la lee, porque ya
+ * la sabe dejar fuera de los fijos.
+ */
+internal fun io.ktor.server.application.ApplicationCall.pideLaCuotaFuera(): Boolean =
+    request.queryParameters["conCuotaFuera"] == "1"
+
+/** Vuelta 141 · los ids de las reglas de cuota que salen de fuera de Tu plata (ver [pideLaCuotaFuera]). */
+internal suspend fun idsDeLasCuotasFuera(uid: String): Set<String> =
+    com.jvillada.movi.server.reminders.loadCreditRulePairs(uid)
+        .map { it.first }
+        .filter { it.saleDeFueraDeTuPlata == true }
+        .mapTo(mutableSetOf()) { it.id }
+
 /** Los ids de las reglas de abono de [uid] (ver [pideLosAbonos]). */
 internal suspend fun idsDeLosAbonos(uid: String): Set<String> = dbQuery {
     RecurringRules.selectAll()
@@ -769,9 +787,12 @@ fun Route.reminderRoutes() {
         val uid = call.userId()
         val conAbonos = call.pideLosAbonos()
         val conFrecuencias = call.pideLasFrecuencias()
+        // Vuelta 141: la cuota que sale de fuera de Tu plata, solo para quien sabe que no es un fijo.
+        val conCuotaFuera = call.pideLaCuotaFuera()
         call.respond(
             proximosPagos(uid, AppClock.today())
-                .filter { (conAbonos || !it.rule.esAbonoADeuda) && (conFrecuencias || it.rule.frecuencia == null) },
+                .filter { (conAbonos || !it.rule.esAbonoADeuda) && (conFrecuencias || it.rule.frecuencia == null) }
+                .filter { conCuotaFuera || it.rule.saleDeFueraDeTuPlata != true },
         )
     }
 
@@ -796,7 +817,9 @@ fun Route.reminderRoutes() {
         val abonos = if (call.pideLosAbonos()) emptySet() else idsDeLosAbonos(uid)
         // Vuelta 126: la ocurrencia de una no mensual, solo para quien sabe de frecuencias.
         val noMensuales = if (call.pideLasFrecuencias()) emptySet() else idsDeLasNoMensuales(uid)
-        call.respond(estados.filter { it.ruleId !in abonos && it.ruleId !in noMensuales })
+        // Vuelta 141: ni la cuota que sale de fuera de Tu plata, para quien no lo sabe (ver [pideLaCuotaFuera]).
+        val cuotasFuera = if (call.pideLaCuotaFuera()) emptySet() else idsDeLasCuotasFuera(uid)
+        call.respond(estados.filter { it.ruleId !in abonos && it.ruleId !in noMensuales && it.ruleId !in cuotasFuera })
     }
 
     /**

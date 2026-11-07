@@ -537,6 +537,11 @@ internal data class PagoDelConector(
     /** De una tarjeta sin mínimo: el monto es la deuda entera, no lo de este mes. */
     val montoEsLaDeuda: Boolean = false,
     val seCobraSola: Boolean = false,
+    /**
+     * Vuelta 141 · la cuota sale de una cuenta fuera de Tu plata (la AFC): se lista, pero no suma en
+     * `faltaPorPagar` ni en `pendientes`.
+     */
+    val noTocaTuPlata: Boolean = false,
 )
 
 @Serializable
@@ -570,6 +575,7 @@ internal fun pagoDelConector(p: PagoDelPeriodo): PagoDelConector = PagoDelConect
     pagoMinimo = p.pagoMinimo,
     montoEsLaDeuda = p.montoEsSaldo,
     seCobraSola = p.seCobraSola,
+    noTocaTuPlata = p.saleDeFueraDeTuPlata,
 )
 
 private suspend fun pagosDelPeriodo(uid: String, hoy: LocalDate): RespuestaDeHerramienta {

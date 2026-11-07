@@ -424,21 +424,30 @@ fun estadoDeLaFactura(
     if (pago.esAbono) {
         return EstadoDeLaFactura("$ABONO_PLANEADO · ${pastillaDelAbono(pago).replaceFirstChar { it.lowercase() }}", TonoDeSubtitulo.Normal)
     }
+    val tono = if (tonoDelVencimiento == TonoDePildora.Neutra) TonoDeSubtitulo.Normal else TonoDeSubtitulo.Aviso
+    // Vuelta 141: la cuota que sale de una cuenta fuera de Tu plata **nunca pierde la señal**: «Vence el 5 · no
+    // toca Tu plata» si cabe, y si no, con la fecha corta («5 dic · no toca Tu plata», «Vencida · …»). La hoja
+    // dice de qué cuenta sale, entero.
+    if (pago.saleDeFueraDeTuPlata) {
+        return EstadoDeLaFactura("${cuandoVenceCorto(pago)} · $NO_TOCA_TU_PLATA", tono, siCabe = "$vencimiento · $NO_TOCA_TU_PLATA")
+    }
     // Revisión de la 136 (M7): por vencer, la cadencia de una factura que no es de cada mes, si cabe.
     val cadencia = cadenciaDeLaFila(pago)?.takeIf { !pago.vencido }?.replaceFirstChar { it.lowercase() }
-    return EstadoDeLaFactura(
-        vencimiento,
-        if (tonoDelVencimiento == TonoDePildora.Neutra) TonoDeSubtitulo.Normal else TonoDeSubtitulo.Aviso,
-        // Vuelta 141: la cuota que sale de una cuenta fuera de Tu plata lo dice si cabe («Vence el 5 · no toca
-        // Tu plata»); la hoja dice de qué cuenta sale, entero.
-        siCabe = when {
-            pago.saleDeFueraDeTuPlata -> "$vencimiento · $NO_TOCA_TU_PLATA"
-            else -> cadencia?.let { "$vencimiento · $it" }
-        },
-    )
+    return EstadoDeLaFactura(vencimiento, tono, siCabe = cadencia?.let { "$vencimiento · $it" })
 }
 
-/** Vuelta 141 · lo que dice el estado de una cuota que sale de una cuenta fuera de Tu plata, si cabe. */
+/**
+ * Vuelta 141 · **cuándo vence, en corto**, para el estado de una cuota fuera de Tu plata que no cabe entero:
+ * «Vencida», «Hoy», «Mañana» o la fecha («5 dic»). Pura.
+ */
+internal fun cuandoVenceCorto(pago: PagoDelPeriodo): String = when {
+    pago.diasParaVencer < 0 -> "Vencida"
+    pago.diasParaVencer == 0 -> "Hoy"
+    pago.diasParaVencer == 1 -> "Mañana"
+    else -> fechaCortaDeFactura(pago.vence) ?: "En ${pago.diasParaVencer} días"
+}
+
+/** Vuelta 141 · lo que dice el estado de una cuota que sale de una cuenta fuera de Tu plata. */
 const val NO_TOCA_TU_PLATA: String = "no toca Tu plata"
 
 /** Vuelta 141 · el tag de «Sale de AFC Davibank 9497: no toca Tu plata» en la hoja de la factura. */

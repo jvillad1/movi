@@ -244,8 +244,8 @@ class LaCuotaDesdeLaAfcTest {
         application { testModule() }
         assertEquals(HttpStatusCode.OK, put(terminos("\"sePagaDesde\":\"$afc\"")).status)
 
-        // `/api/payments/upcoming` la trae, marcada.
-        val proximos = client.get("/api/payments/upcoming") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
+        // `/api/payments/upcoming?conCuotaFuera=1` la trae, marcada (el cliente nuevo).
+        val proximos = client.get("/api/payments/upcoming?conCuotaFuera=1") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
         assertEquals(HttpStatusCode.OK, proximos.status)
         val laCuota = json.decodeFromString(ListSerializer(UpcomingPayment.serializer()), proximos.bodyAsText())
             .single { it.rule.id == "$CREDIT_RULE_PREFIX$hipoteca" }
@@ -291,6 +291,54 @@ class LaCuotaDesdeLaAfcTest {
         // `pagadoDesdeFuera` (la plata salió de afuera).
         assertEquals(cuota, servidor().pagosDeDeudaFueraDelChecklist)
         assertEquals(quedaAntes, loQueQueda(), "anotar el pago desde la AFC no cambia «Te quedan»")
+    }
+
+    /**
+     * Revisión de la 141 (ALTA) · **un APK viejo** no conoce la marca: sin `?conCuotaFuera=1` la cuota no viene
+     * (ni en `/upcoming` ni en `/occurrences`), y su «Te quedan» —los fijos de lo que recibe, más lo que manda el
+     * resumen— cuadra antes y después de pagar desde la AFC. Sin el filtro, la fila venía y la restaba: $9,1M abajo.
+     */
+    @Test
+    fun `un cliente viejo no ve la cuota de la AFC y su Te quedan no se mueve`() = testApplication {
+        application { testModule() }
+        assertEquals(HttpStatusCode.OK, put(terminos("\"sePagaDesde\":\"$afc\"")).status)
+        suspend fun leer(ruta: String) = client.get(ruta) { header(HttpHeaders.Authorization, "Bearer ${token()}") }.bodyAsText()
+        val regla = "$CREDIT_RULE_PREFIX$hipoteca"
+        assertTrue(regla !in leer("/api/payments/upcoming"), "un APK viejo no ve la cuota de la AFC")
+        assertTrue(regla !in leer("/api/payments/upcoming?conAbonos=1&conFrecuencias=1"), "tampoco con los otros parámetros")
+        assertTrue(regla in leer("/api/payments/upcoming?conAbonos=1&conFrecuencias=1&conCuotaFuera=1"))
+        // La lista con la que `/occurrences` la saca (la misma regla del server).
+        assertEquals(setOf(regla), runBlocking { idsDeLasCuotasFuera(uid) })
+
+        /** Lo que vería un APK viejo: lo que el server le manda, sin la cuota de la AFC. */
+        fun loQueQuedaEnUnApkViejo(): Long {
+            val ajustes = transaction { ajustesDelPeriodoSinSuspender(uid) }
+            val fuera = runBlocking { idsDeLasCuotasFuera(uid) }
+            val lista = runBlocking {
+                checklistDelPeriodo(
+                    upcoming = proximosPagos(uid, hoy).filter { it.rule.saleDeFueraDeTuPlata != true },
+                    ocurrencias = ocurrenciasDelPeriodo(uid, hoy).filter { it.ruleId !in fuera },
+                    periodo = periodoDe(appDateToEpochMillis(hoy) + 12 * 3_600_000L, ajustes),
+                    settings = ajustes,
+                )
+            }
+            assertTrue(lista.none { it.ruleId == regla })
+            val s = servidor()
+            return s.plata.total - s.pagosDeDeudaFueraDelChecklist - fijosDelPeriodo(lista) - s.gastoVariablePorDia.values.sum()
+        }
+        val antes = loQueQuedaEnUnApkViejo()
+        assertEquals(5_000_000L, antes)
+        val pago = client.post("/api/payments/installment") {
+            header(HttpHeaders.Authorization, "Bearer ${token()}")
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"fromAccountId":"$afc","debtAccountId":"$hipoteca","amount":$cuota,
+                    "timestamp":${appDateToEpochMillis(LocalDate.of(2026, 10, 18)) + 12 * 3_600_000L},
+                    "transferId":"t_cuota","fromEventId":"ev_afc","toEventId":"ev_hip"}""",
+            )
+        }
+        assertTrue(pago.status.value in 200..201, pago.bodyAsText())
+        assertEquals(antes, loQueQuedaEnUnApkViejo(), "pagar desde la AFC tampoco le mueve «Te quedan» a un APK viejo")
     }
 
     @Test

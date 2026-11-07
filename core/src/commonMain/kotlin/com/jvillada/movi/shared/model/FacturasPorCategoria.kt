@@ -63,8 +63,12 @@ data class GrupoDeFacturas(
     /** El total del período de este grupo: lo que falta y lo pagado, como el «de $X» de la tarjeta amarilla. */
     val total: Long get() = falta + pagado
 
-    /** Ningún pago del grupo queda por hacer ([pagosPendientes] vacío): el encabezado dice «Pagado ✓». */
-    val todoPagado: Boolean get() = pagosPendientes(filas).isEmpty()
+    /**
+     * Ningún pago del grupo queda por hacer ([pagosPendientes] vacío): el encabezado dice «Pagado ✓». Vuelta 141:
+     * la cuota que sale de fuera de Tu plata sin pagar tampoco está hecha, aunque no esté en [pagosPendientes]
+     * (no suma): el grupo dice «Pendiente · no suma».
+     */
+    val todoPagado: Boolean get() = pagosPendientes(filas).isEmpty() && filas.none { it.saleDeFueraDeTuPlata && !it.hecho }
 
     /**
      * Algo del grupo sigue abierto, abonos planeados incluidos. Decide si arranca desplegado: lo que pide

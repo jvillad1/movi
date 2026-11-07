@@ -96,6 +96,20 @@ class LaCuotaQueSaleDeOtraCuentaTest {
     }
 
     @Test
+    fun `en Por categoria el grupo de creditos no dice pagado con la cuota de la AFC pendiente`() {
+        val creditos = facturasPorCategoria(checklist(fuera = true)).single { it.clase == ClaseDeGrupoDeFacturas.CREDITOS }
+        assertEquals(0L, creditos.falta, "no suma")
+        assertFalse(creditos.todoPagado, "pero tampoco está pagada: «Pendiente · no suma»")
+        val pagada = OccurrenceState(
+            "${CREDIT_RULE_PREFIX}acc_1254", "2026-11", "2026-11-05", occurred = true, eventId = "ev_afc",
+            derivadaDeUnMovimiento = true, montoDelPago = 9_145_256L,
+        )
+        val despues = facturasPorCategoria(checklist(fuera = true, ocurrencias = listOf(pagada)))
+            .single { it.clase == ClaseDeGrupoDeFacturas.CREDITOS }
+        assertTrue(despues.todoPagado, "pagada, sí")
+    }
+
+    @Test
     fun `con la cuenta dentro de Tu plata todo es como siempre`() {
         for (marca in listOf(null, false)) {
             val lista = checklist(fuera = marca)

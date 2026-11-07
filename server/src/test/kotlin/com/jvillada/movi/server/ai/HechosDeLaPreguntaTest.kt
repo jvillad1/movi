@@ -197,6 +197,27 @@ class HechosDeLaPreguntaTest {
         assertTrue("De esta cuenta sale la cuota de: «Hipotecario 2334» (\$2.613.714 al mes); «Hipoteca 1254» (\$9.147.408 al mes)" in texto, texto)
     }
 
+    /**
+     * Vuelta 141 · la Hipoteca 1254 se paga desde la AFC (`sePagaDesde`, fuera de Tu plata): los hechos dicen lo
+     * mismo que el contexto, de la hipoteca y de la AFC. Antes decían «sale de su bolsillo».
+     */
+    @Test
+    fun `la cuota que sale de la AFC se dice igual que en el contexto`() {
+        val afc = Account(id = "afc", name = "AFC Davibank 9497", type = AccountType.SAVINGS, balance = 30_000_000L, condicionadaA = "vivienda")
+        val desdeLaAfc = h1254.copy(loPaga = null, loPagaCuentaPropia = null, pagaDesdeFueraDeTuPlata = afc.name)
+        val conLaAfc = datos.copy(
+            cuentas = cuentas + afc,
+            periodo = periodo.copy(creditos = listOf(h2334, desdeLaAfc, v8761)),
+        )
+        val deLaHipoteca = assertNotNull(hechosParaLaPregunta("¿cuánto baja la Hipoteca 1254?", conLaAfc.paraLosHechos()))
+        assertTrue(
+            "- Quién paga la cuota: la paga él desde su cuenta «AFC Davibank 9497», que no es Tu plata: NO baja «Te quedan»" in deLaHipoteca,
+            deLaHipoteca,
+        )
+        val deLaAfc = assertNotNull(hechosParaLaPregunta("¿cuánto tengo en la AFC Davibank 9497?", conLaAfc.paraLosHechos()))
+        assertTrue("De esta cuenta sale la cuota de: «Hipoteca 1254» (\$9.147.408 al mes)" in deLaAfc, deLaAfc)
+    }
+
     @Test
     fun `un bien trae su valor, la deuda que lo financia y lo suyo de verdad`() {
         val texto = assertNotNull(hechos("¿cuánto vale la Casa Almendros de Zúñiga?"))
