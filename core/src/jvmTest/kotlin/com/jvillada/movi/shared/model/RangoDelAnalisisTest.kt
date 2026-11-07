@@ -155,12 +155,65 @@ class RangoDelAnalisisTest {
         assertEquals(LocalDate(2026, 8, 27), sin.hastaDelAnterior)
         assertTrue(pieDeLasFlechasDelRango(sin, RangoDelAnalisis.TRES_MESES).startsWith("Sin flechas"))
 
-        // Con un movimiento antes del 29-may, sí: el gasto de julio está dentro de la altura.
-        val cubierto = desdeJulio + mov("2026-05-01", 1L, OPENING_CATEGORY, TransactionType.INCOME)
+        // Con un movimiento antes del 29-may y alguno en cada período de antes, sí: el gasto de julio
+        // está dentro de la altura (los ingresos de junio y agosto no son gasto, pero llenan su período).
+        val cubierto = desdeJulio + listOf(
+            mov("2026-05-01", 1L, OPENING_CATEGORY, TransactionType.INCOME),
+            mov("2026-06-10", 1L, "Salario", TransactionType.INCOME),
+            mov("2026-08-10", 1L, "Salario", TransactionType.INCOME),
+        )
         val con = analisisDelRango(cubierto, ultimo, RangoDelAnalisis.TRES_MESES, caro, hoy, tipos)
         assertEquals(80_000L, con.anteriorAMismaAltura)
         assertNotNull(filasDelAnalisis(con, VistaDelAnalisis.CATEGORIA).single().contraElAnterior)
         assertTrue(pieDeLasFlechasDelRango(con, RangoDelAnalisis.TRES_MESES).startsWith("Las flechas comparan con los 3 meses anteriores"))
+    }
+
+    /**
+     * Revisión de la vuelta 140 · el caso de Caro: octubre vacío entre septiembre y noviembre. Antes,
+     * «$4,7M más que el período pasado ($0)» y flechas de subida en todo; ahora un hueco no compara.
+     */
+    @Test
+    fun `contra un periodo vacio entre dos con movimientos no hay comparacion y el pie dice por que`() {
+        val hoy = LocalDate(2026, 11, 6)
+        val eventos = caroDeVerdad()
+        val a = analisisDelPeriodo(eventos, periodoDe("2026-11-06"), caro, hoy, tipos)
+        assertNull(a.anteriorAMismaAltura)
+        assertTrue(a.anteriorConHueco)
+        assertTrue(filasDelAnalisis(a, VistaDelAnalisis.CATEGORIA).all { it.contraElAnterior == null })
+        assertEquals("Sin flechas: el período pasado (30 sep – 29 oct) no tiene movimientos.", pieSinFlechasDelPeriodo(a))
+        // El rango anterior de 3 meses, con un período vacío (y sin verse entero): sin flechas.
+        val rango = analisisDelRango(eventos, periodoDe("2026-11-06"), RangoDelAnalisis.TRES_MESES, caro, hoy, tipos)
+        assertNull(rango.anteriorAMismaAltura)
+        // Un período visto entero y con un movimiento sí compara (la regla de siempre).
+        val conUno = eventos + mov("2026-10-15", 1L, "Salario", TransactionType.INCOME)
+        val b = analisisDelPeriodo(conUno, periodoDe("2026-11-06"), caro, hoy, tipos)
+        assertEquals(0L, b.anteriorAMismaAltura)
+        assertFalse(b.anteriorConHueco)
+        assertNull(pieSinFlechasDelPeriodo(b))
+        // La regla, sola: la misma que usa el server.
+        assertFalse(sePuedeCompararContraElAnterior(1L, 10L, listOf(3, 0, 2)))
+        assertTrue(sePuedeCompararContraElAnterior(1L, 10L, listOf(3, 1, 2)))
+        assertFalse(sePuedeCompararContraElAnterior(11L, 10L, listOf(3, 1, 2)))
+        assertFalse(sePuedeCompararContraElAnterior(null, 10L, listOf(1)))
+    }
+
+    /** Revisión de la vuelta 140 · en «12 meses», la barra del mes en curso contra los mismos días del suyo de antes. */
+    @Test
+    fun `en 12 meses la barra del mes en curso compara con los mismos dias del mes de antes`() {
+        val hoy = LocalDate(2026, 11, 6) // el día 8 del período que arrancó el 30-oct
+        val eventos = buildList {
+            add(mov("2024-01-01", 1L, OPENING_CATEGORY, TransactionType.INCOME))
+            // Un movimiento en cada período del año anterior, para que se pueda comparar.
+            for (m in 0 until 11) add(mov(LocalDate(2024, 12, 15).let { LocalDate(it.year + (it.monthNumber - 1 + m) / 12, (it.monthNumber - 1 + m) % 12 + 1, 15) }.toString(), 1_000L))
+            add(mov("2025-10-31", 10_000L)) // el día 2 del período de hace un año: entra
+            add(mov("2025-11-20", 500_000L)) // el día 22: a esta altura todavía no había pasado
+            add(mov("2026-11-02", 7_000L))
+        }
+        val a = analisisDelRango(eventos, periodoDe("2026-11-06"), RangoDelAnalisis.DOCE_MESES, caro, hoy, tipos)
+        assertTrue(a.porMes)
+        assertEquals(10_000L, a.tramos.last().anterior)
+        // Un mes ya cerrado sí va contra el suyo entero.
+        assertEquals(1_000L, a.tramos.first().anterior)
     }
 
     // ── «Va empezando» ──────────────────────────────────────────────────────
@@ -197,18 +250,23 @@ class RangoDelAnalisisTest {
     }
 
     @Test
-    fun `el umbral es 10 gastos y 5 categorias, y sin historia antes no hay linea`() {
-        val hoy = LocalDate(2026, 11, 20)
+    fun `el umbral es 10 dias y 10 gastos o 5 categorias, y sin historia antes no hay linea`() {
+        // El 8-nov es el día 10 del período que arrancó el 30-oct.
+        val hoy = LocalDate(2026, 11, 8)
         val historia = listOf(mov("2026-09-05", 10_000L))
         fun conDelPeriodo(cuantos: Int, categorias: Int) = historia + (0 until cuantos).map { i ->
-            mov(LocalDate(2026, 11, 1).plusDays(i % 19).toString(), 1_000L, "Cat ${i % categorias}")
+            mov(LocalDate(2026, 11, 1).plusDays(i % 8).toString(), 1_000L, "Cat ${i % categorias}")
         }
-        fun linea(eventos: List<FinancialEvent>) =
-            periodoQueVaEmpezando(analisisDelPeriodo(eventos, periodoDe("2026-11-20"), caro, hoy, tipos), eventos, caro, hoy, tipos)
+        fun linea(eventos: List<FinancialEvent>, dia: LocalDate = hoy) =
+            periodoQueVaEmpezando(analisisDelPeriodo(eventos, periodoDe("2026-11-08"), caro, dia, tipos), eventos, caro, dia, tipos)
 
         assertNull(linea(conDelPeriodo(10, 5)), "10 gastos en 5 categorías ya dicen algo")
         assertNotNull(linea(conDelPeriodo(9, 5)), "9 gastos todavía no")
-        assertNotNull(linea(conDelPeriodo(20, 4)), "4 categorías todavía no")
+        val pocasCategorias = assertNotNull(linea(conDelPeriodo(50, 4)), "4 categorías todavía no")
+        // Nunca «llevas 50 movimientos»: va empezando por las categorías, y dice los días.
+        assertEquals("Este período va empezando: llevas 10 días. Tienes historia desde septiembre.", textoDelPeriodoQueVaEmpezando(pocasCategorias, 2026))
+        // El día 11 ya no va empezando, por poco que tenga.
+        assertNull(linea(conDelPeriodo(3, 3), LocalDate(2026, 11, 9)), "pasados 10 días un período no va empezando")
         assertNull(linea((0 until 3).map { mov("2026-11-0${it + 1}", 1_000L) }), "sin historia antes no hay a dónde mandarlo")
 
         // Un período ya cerrado no «va empezando».

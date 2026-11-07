@@ -91,11 +91,23 @@ fun pieDeLasFlechasDelRango(analisis: AnalisisDelPeriodo, rango: RangoDelAnalisi
     val desde = analisis.desdeDelAnterior
     val hasta = analisis.hastaDelAnterior
     val cuales = if (desde != null && hasta != null) " (${nombreDelRango(desde, hasta)})" else ""
-    return if (analisis.conComparacion) {
-        "Las flechas comparan con los ${rango.rotulo} anteriores$cuales, a la misma altura."
-    } else {
-        "Sin flechas: Movi no tiene completos los ${rango.rotulo} anteriores$cuales para comparar."
+    return when {
+        analisis.conComparacion -> "Las flechas comparan con los ${rango.rotulo} anteriores$cuales, a la misma altura."
+        analisis.anteriorConHueco -> "Sin flechas: en los ${rango.rotulo} anteriores$cuales hay un período sin movimientos."
+        else -> "Sin flechas: Movi no tiene completos los ${rango.rotulo} anteriores$cuales para comparar."
     }
+}
+
+/**
+ * Vuelta 140 · el pie de un período solo **cuando no hay flechas porque el anterior es un hueco**:
+ * «Sin flechas: el período pasado (30 sep – 29 oct) no tiene movimientos.» `null` en otro caso (con
+ * flechas, el pie de siempre; sin historia, no hace falta explicar).
+ */
+fun pieSinFlechasDelPeriodo(analisis: AnalisisDelPeriodo): String? {
+    if (analisis.esRango || !analisis.anteriorConHueco) return null
+    val desde = analisis.desdeDelAnterior ?: return null
+    val hasta = analisis.hastaDelAnterior ?: return null
+    return "Sin flechas: el período pasado (${nombreDelRango(desde, hasta)}) no tiene movimientos."
 }
 
 // ── «Este período va empezando» ─────────────────────────────────────────────
@@ -110,16 +122,24 @@ const val GASTOS_DE_UN_PERIODO_QUE_YA_DICE_ALGO: Int = 10
 const val CATEGORIAS_DE_UN_PERIODO_QUE_YA_DICE_ALGO: Int = 5
 
 /**
+ * Hasta cuántos días del período (contando hoy) puede «ir empezando» (revisión de la vuelta 140). Pasado
+ * eso, un período con pocas categorías no va empezando: es así. Elegido, no medido.
+ */
+const val DIAS_DE_UN_PERIODO_QUE_VA_EMPEZANDO: Int = 10
+
+/**
  * La línea «Este período va empezando…» con su acción.
  *
  * @property gastos cuántos gastos lleva el período.
+ * @property dias cuántos días lleva el período, contando hoy.
  * @property historiaDesde el día del primer gasto anterior al período.
  * @property rango el rango que la acción elige: el más corto que trae algo de esa historia.
  */
-data class PeriodoQueVaEmpezando(val gastos: Int, val historiaDesde: LocalDate, val rango: RangoDelAnalisis)
+data class PeriodoQueVaEmpezando(val gastos: Int, val historiaDesde: LocalDate, val rango: RangoDelAnalisis, val dias: Int = 0)
 
 /**
- * **¿El período en curso tiene poco y hay historia antes?** Poco es menos de
+ * **¿El período en curso va empezando y hay historia antes?** Lleva hasta
+ * [DIAS_DE_UN_PERIODO_QUE_VA_EMPEZANDO] días **y** tiene poco: menos de
  * [GASTOS_DE_UN_PERIODO_QUE_YA_DICE_ALGO] gastos o menos de [CATEGORIAS_DE_UN_PERIODO_QUE_YA_DICE_ALGO]
  * categorías. Solo en el período en curso mirado solo ([analisis] de un período que contiene [hoy]) y
  * solo si un rango de «En qué se va» trae algo de esa historia: «3 meses» si alcanza, si no «12
@@ -133,6 +153,7 @@ fun periodoQueVaEmpezando(
     tiposDeCuenta: Map<String, AccountType> = emptyMap(),
 ): PeriodoQueVaEmpezando? {
     if (analisis.esRango || hoy < analisis.desde || hoy > analisis.hasta) return null
+    if (analisis.diasTranscurridos > DIAS_DE_UN_PERIODO_QUE_VA_EMPEZANDO) return null
     val propios = analisis.gastos.filter { montoContado(it) > 0L }
     val categorias = propios.map { it.category }.distinct().size
     if (propios.size >= GASTOS_DE_UN_PERIODO_QUE_YA_DICE_ALGO && categorias >= CATEGORIAS_DE_UN_PERIODO_QUE_YA_DICE_ALGO) return null
@@ -145,18 +166,21 @@ fun periodoQueVaEmpezando(
     val rango = listOf(RangoDelAnalisis.TRES_MESES, RangoDelAnalisis.DOCE_MESES).firstOrNull { r ->
         ultimoAntes >= inicioDelPeriodo(periodosDelRango(analisis.periodo, r, settings).first(), settings)
     } ?: return null
-    return PeriodoQueVaEmpezando(propios.size, historiaDesde, rango)
+    return PeriodoQueVaEmpezando(propios.size, historiaDesde, rango, analisis.diasTranscurridos)
 }
 
 /**
  * «Este período va empezando: llevas 6 movimientos. Tienes historia desde julio.» El año del mes va
- * solo si no es el de [anioDeHoy].
+ * solo si no es el de [anioDeHoy]. Con [GASTOS_DE_UN_PERIODO_QUE_YA_DICE_ALGO] o más gastos (va
+ * empezando por las pocas categorías) dice los días, nunca «llevas 50 movimientos».
  */
 fun textoDelPeriodoQueVaEmpezando(v: PeriodoQueVaEmpezando, anioDeHoy: Int): String {
-    val llevas = when (v.gastos) {
-        0 -> "todavía no tienes gastos"
-        1 -> "llevas 1 movimiento"
-        else -> "llevas ${v.gastos} movimientos"
+    val llevas = when {
+        v.gastos == 0 -> "todavía no tienes gastos"
+        v.gastos == 1 -> "llevas 1 movimiento"
+        v.gastos < GASTOS_DE_UN_PERIODO_QUE_YA_DICE_ALGO -> "llevas ${v.gastos} movimientos"
+        v.dias == 1 -> "llevas 1 día"
+        else -> "llevas ${v.dias} días"
     }
     val mes = MESES_DEL_RANGO[v.historiaDesde.monthNumber - 1] +
         (if (v.historiaDesde.year != anioDeHoy) " de ${v.historiaDesde.year}" else "")

@@ -94,6 +94,8 @@ data class TramoDelAnalisis(
  * @property porMes las barras van de a un mes (un período, o dos quincenas): un rango de más de
  *   [DIAS_MAXIMOS_POR_SEMANA] días.
  * @property desdeDelAnterior,hastaDelAnterior el período (o el rango) con el que se compara, entero.
+ * @property anteriorConHueco no hay comparación porque el anterior (o uno de los períodos del rango
+ *   anterior) no tiene ni un movimiento: un hueco en la historia, no un período sin gastos.
  */
 data class AnalisisDelPeriodo(
     val periodo: PeriodoFinanciero,
@@ -111,6 +113,7 @@ data class AnalisisDelPeriodo(
     val porMes: Boolean = false,
     val desdeDelAnterior: LocalDate? = null,
     val hastaDelAnterior: LocalDate? = null,
+    val anteriorConHueco: Boolean = false,
 ) {
     /** ¿Hay contra qué comparar? */
     val conComparacion: Boolean get() = anteriorAMismaAltura != null
@@ -174,8 +177,16 @@ internal fun analisisEntre(
     // La guarda de siempre: el primer movimiento del dueño (cualquiera, no solo un gasto) tiene que
     // ser anterior al arranque del período anterior. Si no, ese período está a medio anotar. En un
     // rango, el arranque del rango anterior entero: un rango anterior a medio anotar no compara.
+    // Vuelta 140: y ninguno de los períodos de antes puede ser un hueco (sin un solo movimiento):
+    // [sePuedeCompararContraElAnterior], la misma regla del «vs. período pasado» del server.
     val primerMovimiento = eventos.minOfOrNull { it.timestamp }
-    val cubierto = primerMovimiento != null && primerMovimiento <= enEpoch(inicioDelAnterior)
+    val vistoEntero = primerMovimiento != null && primerMovimiento <= enEpoch(inicioDelAnterior)
+    val movimientosPorPeriodo = anteriores.map { a ->
+        val desde = enEpoch(inicioDelPeriodo(a, settings))
+        val hasta = enEpoch(inicioDelPeriodo(periodoSiguiente(a, settings), settings))
+        eventos.count { it.timestamp in desde until hasta }
+    }
+    val cubierto = sePuedeCompararContraElAnterior(primerMovimiento, enEpoch(inicioDelAnterior), movimientosPorPeriodo)
 
     val gastosDelPeriodo = mutableListOf<FinancialEvent>()
     val gastosDelAnteriorEnteros = mutableListOf<Pair<Int, FinancialEvent>>()
@@ -225,6 +236,7 @@ internal fun analisisEntre(
         porMes = porMes,
         desdeDelAnterior = inicioDelAnterior,
         hastaDelAnterior = finDelAnterior.minus(1, DateTimeUnit.DAY),
+        anteriorConHueco = vistoEntero && !cubierto,
     )
 }
 
@@ -293,7 +305,11 @@ private fun tramosPorMes(
         acumulado += gasto
         val anterior = delAnterior.getOrNull(j)?.takeIf { cubierto }?.let { g ->
             val (d, f) = bordes(g)
-            (inicioDelAnterior.daysUntil(d) until inicioDelAnterior.daysUntil(f)).sumOf { porDiaDelAnterior[it] }
+            // El mes en curso contra los mismos días del suyo de antes, como la cifra de arriba: si no,
+            // el 6 del mes la barra se compararía con el mes de antes entero.
+            val dias = if (hoy >= desde && hoy < fin) minOf(desde.daysUntil(hoy) + 1, d.daysUntil(f)) else d.daysUntil(f)
+            val primero = inicioDelAnterior.daysUntil(d)
+            (primero until primero + dias).sumOf { porDiaDelAnterior[it] }
         }
         if (anterior != null) acumuladoAnterior += anterior
         TramoDelAnalisis(
