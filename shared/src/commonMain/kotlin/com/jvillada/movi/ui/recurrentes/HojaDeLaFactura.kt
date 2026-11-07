@@ -88,6 +88,8 @@ internal data class LoDeLaFactura(
     val extracto: ExtractoDeLaTarjeta?,
     val noSuma: PorQueNoSuma?,
     val evidencia: String?,
+    /** Vuelta 141 · el nombre de la cuenta de la que sale la cuota ([PagoDelPeriodo.sePagaDesde]), si se sabe. */
+    val cuentaDeLaCuota: String? = null,
 ) {
     /**
      * Revisión de la 136 (duda 1): la propuesta se aleja del monto de la factura más del ±5 % ([montoQueSeParece];
@@ -117,6 +119,8 @@ internal fun loDeLaFactura(
     cuotasQueSeParecen: Map<String, GastoParecidoALaCuota>,
     extractosDeTarjetas: Map<String, ExtractoDeLaTarjeta>,
     enElTotal: Boolean,
+    /** Vuelta 141 · id → nombre de las cuentas, para decir de cuál sale la cuota. */
+    nombresDeCuentas: Map<String, String> = emptyMap(),
 ): LoDeLaFactura {
     val propuesta = propuestaDeLaFila(pago, descartadas)?.takeIf { pago.estado == EstadoDeLaFila.CON_DUDAS && !pago.hecho }
     return LoDeLaFactura(
@@ -131,6 +135,7 @@ internal fun loDeLaFactura(
         // Vuelta 86: solo las filas del período (las de «Falta por pagar»); lo de antes no suma en nada.
         noSuma = if (enElTotal) porQueNoSuma(pago) else null,
         evidencia = evidenciaDeLaFila(pago),
+        cuentaDeLaCuota = pago.sePagaDesde?.let { nombresDeCuentas[it] },
     )
 }
 
@@ -267,6 +272,13 @@ internal fun HojaDeLaFactura(
                 }
                 // Vuelta 63: el abono planeado dice que no es un fijo.
                 if (pago.esAbono && !pago.hecho) Detalle(com.jvillada.movi.ui.quickadd.textoDelAbonoPendiente(pago))
+                // Vuelta 141: la cuota que sale de una cuenta fuera de Tu plata (la AFC) dice de cuál, y que no la toca.
+                if (pago.saleDeFueraDeTuPlata) {
+                    Detalle(
+                        com.jvillada.movi.shared.model.lineaDeLaCuotaFueraDeTuPlata(lo.cuentaDeLaCuota),
+                        Modifier.testTag(TAG_FUERA_DE_TU_PLATA),
+                    )
+                }
                 // De dónde salió el «Pagado» (lo emparejado, el sello viejo) o cómo deshacer la cuota.
                 if (pago.hecho) (notaDelMenuDeLaFilaPagada(pago, lo.evidencia) ?: lo.evidencia)?.let { Detalle(it) }
             }

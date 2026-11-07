@@ -897,13 +897,13 @@ class WalletRepositoryImpl(
         client.post("$baseUrl/api/recurring-rules/$id/reanudar").exigirExito().body()
 
     override suspend fun getUpcomingPayments(): List<UpcomingPayment> =
-        client.get("$baseUrl/api/payments/upcoming?$CON_ABONOS&$CON_FRECUENCIAS").body()
+        client.get("$baseUrl/api/payments/upcoming?$CON_ABONOS&$CON_FRECUENCIAS&$CON_CUOTA_FUERA").body()
 
     override suspend fun getReminderChannels(): ReminderChannels =
         client.get("$baseUrl/api/reminders/channels").body()
 
     override suspend fun getOccurrenceStates(): List<OccurrenceState> =
-        client.get("$baseUrl/api/payments/occurrences?$CON_ABONOS&$CON_FRECUENCIAS").body()
+        client.get("$baseUrl/api/payments/occurrences?$CON_ABONOS&$CON_FRECUENCIAS&$CON_CUOTA_FUERA").body()
 
     // Mismo idioma que createCard: los rechazos de acá son legibles y el dueño los necesita leer
     // («ese movimiento está anulado», «ya está marcado como la ocurrencia de otro periodo»).
@@ -1704,6 +1704,12 @@ class WalletRepositoryImpl(
  * fijo. Sin este parámetro el server no las manda: un APK anterior las restaría como un pago fijo.
  */
 private const val CON_ABONOS = "conAbonos=1"
+
+/**
+ * Vuelta 141: esta app sabe que la cuota de un crédito puede salir de una cuenta fuera de Tu plata
+ * (`RecurringRule.saleDeFueraDeTuPlata`) y no la resta como un fijo. Sin este parámetro el server no la manda.
+ */
+private const val CON_CUOTA_FUERA = "conCuotaFuera=1"
 
 /**
  * Vuelta 126: esta app sabe que una regla puede vencer cada 2, 3 o 6 meses, cada año o una sola vez

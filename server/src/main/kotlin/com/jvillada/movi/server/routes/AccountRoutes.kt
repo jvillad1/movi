@@ -694,6 +694,10 @@ fun Route.accountRoutes() {
                 Credits.update({ (Credits.userId eq uid) and (Credits.debitoAutomaticoDesde eq id) }) {
                     it[Credits.debitoAutomaticoDesde] = null
                 }
+                // Vuelta 141: lo mismo con la cuenta de la que el dueño paga la cuota.
+                Credits.update({ (Credits.userId eq uid) and (Credits.sePagaDesde eq id) }) {
+                    it[Credits.sePagaDesde] = null
+                }
                 Accounts.deleteWhere { (Accounts.id eq id) and (Accounts.userId eq uid) }
                 true
             }

@@ -16,6 +16,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.hasSetTextAction
+import com.jvillada.movi.ui.fecha.epochAlMediodia
+import com.jvillada.movi.ui.fecha.hoyEnAppZone
 import com.jvillada.movi.data.RepositorioDePrueba
 import com.jvillada.movi.data.Repositories
 import com.jvillada.movi.shared.model.AiChatRequest
@@ -30,7 +32,6 @@ import com.jvillada.movi.theme.MoviTheme
 import com.jvillada.movi.ui.components.LocalWindowWidthClass
 import com.jvillada.movi.ui.components.WindowWidthClass
 import androidx.compose.ui.unit.dp
-import kotlinx.datetime.Clock
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -54,7 +55,9 @@ class VariasConversacionesEnPantallaTest {
 
     @get:Rule val composeRule = createComposeRule()
 
-    private val ahora = Clock.System.now().toEpochMilliseconds()
+    // El mediodía de hoy y no «ahora»: la «vieja» va una hora antes, y entre las 00:00 y la 01:00 de
+    // Bogotá esa hora caía en ayer y la fila decía «Ayer» (#704: fallaba en CI cerca de la medianoche).
+    private val ahora = epochAlMediodia(hoyEnAppZone())
 
     private val enCurso = ConversacionEnLaLista("cv_1", "¿Cómo voy este período?", ahora, ahora, 2)
     private val vieja = ConversacionEnLaLista("cv_2", "¿Cuánto gasté en restaurantes el mes…", ahora - 3_600_000, ahora - 3_600_000, 4)

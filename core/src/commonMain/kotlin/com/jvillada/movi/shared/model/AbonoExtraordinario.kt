@@ -199,7 +199,7 @@ fun simularAbonoUnico(credit: CreditSummary, abono: Long): SimulacionDeAbono? {
         cuota = cuotaDeEsteMes(terms, credit.ultimaCuotaPagada),
         seguroMensual = terms.insuranceMonthly,
         otrosCargosMensuales = terms.otrosCargosMensuales,
-        saleDeTuBolsillo = saleDeTuBolsillo(terms),
+        saleDeTuBolsillo = saleDeTuBolsillo(credit),
         abono = abono,
         sinIntereses = terms.sinIntereses,
         tipoDeCuota = terms.tipoDeCuota,

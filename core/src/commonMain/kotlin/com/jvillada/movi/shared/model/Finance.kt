@@ -214,6 +214,26 @@ data class CreditTerms(
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val debitoAutomaticoDesde: String? = null,
     /**
+     * **Vuelta 141 · de qué cuenta del dueño sale la cuota** (la paga él, a mano): el id de una cuenta
+     * de dinero o de inversión. `null` = no se dijo, como siempre.
+     *
+     * Si esa cuenta está fuera de «Tu plata» (la AFC condicionada a vivienda que paga la Hipoteca 1254;
+     * la regla es la del patrimonio, [laCuotaSaleDeFueraDeTuPlata]), la cuota sale en Pagos con «Anotar
+     * pago» pero **no cuenta** en «Te quedan», «Falta por pagar», la cola ni la caja: ver
+     * `LaCuotaQueSaleDeOtraCuenta.kt`. Si está en «Tu plata», todo como siempre, y Pagar la propone en
+     * «Sale de».
+     *
+     * **No es un débito automático** ([debitoAutomaticoDesde]): no dispara «¿Se cobró?». No convive con
+     * [payrollDeduction], [paidBy] ni [debitoAutomaticoDesde] (lo valida [validarCuentaDeLaCuota] en la
+     * hoja y en el server, 422).
+     *
+     * Viaja siempre, como [debitoAutomaticoDesde]: la hoja lo arma entero, así que quitar la cuenta manda
+     * el `null`. Un APK que no conoce el campo no manda la clave y el `PUT` conserva lo guardado. Columna
+     * nueva y nullable, `credit_terms.se_paga_desde`.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val sePagaDesde: String? = null,
+    /**
      * **A quién le gira la cuota**, si no la paga directo al banco: el tercero guardado al que manda
      * la plata (el papá, que paga la Libranza BBVA y la Hipoteca Davibank con lo que él le gira). Es
      * el mismo dato que [RecurringRule.destinoConocidoId] para una regla común, y lo usa lo mismo:
@@ -417,6 +437,13 @@ data class CreditSummary(
      * `GET /api/credits`, y solo en un crédito de cuota que cambia; `null` = no hay o no se sabe.
      */
     val ultimaCuotaPagada: CuotaPagada? = null,
+    /**
+     * **Vuelta 141 · el nombre de la cuenta de la que sale la cuota, si está fuera de «Tu plata»**
+     * ([CreditTerms.sePagaDesde] en la AFC, [cuentaDeLaCuotaFueraDeTuPlata]): la cuota va aparte, como la que
+     * paga otra persona ([saleDeTuBolsillo]). Lo pone `GET /api/credits`, que conoce las cuentas; `null` = la
+     * cuota no sale de afuera (o un server viejo).
+     */
+    val cuotaSePagaDesdeFuera: String? = null,
 )
 
 /**
@@ -1008,6 +1035,18 @@ data class RecurringRule(
      * octubre fue $Y)». `null` en todo lo demás (también un crédito de cuota fija): el wire de siempre.
      */
     val cuotaQueCambia: LaCuotaQueCambia? = null,
+    /**
+     * **Vuelta 141 · la cuenta de la que sale la cuota** (solo en la regla sintética `credit_<id>`):
+     * [CreditTerms.sePagaDesde]. `null` en todo lo demás: el wire de siempre. No va en [accountId] a
+     * propósito, por lo mismo que la cuenta del débito: el emparejador de las reglas reales lee ese campo.
+     */
+    val sePagaDesde: String? = null,
+    /**
+     * **Vuelta 141 · esa cuenta está fuera de «Tu plata»** ([laCuotaSaleDeFueraDeTuPlata]): la fila sale en
+     * Pagos pero no suma en lo que te queda. Lo pone el server, que conoce la cuenta. `null` = no (el wire
+     * de siempre). Ver `LaCuotaQueSaleDeOtraCuenta.kt`.
+     */
+    val saleDeFueraDeTuPlata: Boolean? = null,
 )
 
 /**

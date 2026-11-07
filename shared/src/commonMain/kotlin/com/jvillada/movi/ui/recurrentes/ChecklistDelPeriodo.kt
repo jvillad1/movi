@@ -339,6 +339,7 @@ fun SeccionChecklistDelPeriodo(
         cuotasQueSeParecen = if (onEsLaCuota != null) cuotasQueSeParecen else emptyMap(),
         extractosDeTarjetas = extractosDeTarjetas,
         enElTotal = enElTotal,
+        nombresDeCuentas = nombresDeCuentas,
     )
     // Vuelta 136: la factura cuya hoja está abierta (regla + vencimiento), o `null`. Revisión (M3): con
     // [hojaFuera], vive en el estado de quien monta la lista, no en este item.

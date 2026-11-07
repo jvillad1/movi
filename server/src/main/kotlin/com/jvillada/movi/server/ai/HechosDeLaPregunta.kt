@@ -232,6 +232,10 @@ internal fun hechosDelCredito(c: CreditoParaContexto): String = buildString {
 /** Quién paga, en palabras: la misma decisión que el renglón del contexto ([renglonDelCredito]). */
 private fun quienPaga(c: CreditoParaContexto): String = when {
     c.porNomina -> "la descuenta la nómina antes de que llegue el sueldo; NO sale de su cuenta"
+    // Vuelta 141: la misma frase que el renglón del contexto (`renglonDelCredito`).
+    c.pagaDesdeFueraDeTuPlata != null ->
+        "la paga él desde su cuenta «${c.pagaDesdeFueraDeTuPlata}», que no es Tu plata: NO baja «Te quedan» " +
+            "ni lo que falta por pagar, pero sí es plata suya"
     c.loPagaCuentaPropia != null ->
         "se paga con plata de su propia cuenta «${c.loPagaCuentaPropia}» (no es un seguro ni un tercero); " +
             "no sale de su plata del día a día, pero es plata suya"
@@ -261,7 +265,8 @@ private fun hechosDeLaCuenta(cuenta: Account, datos: DatosParaLosHechos): String
     }
     lineaDelApartadoDeLaCuenta(cuenta, datos.apartados, ::pesos)?.let { appendLine("- Tiene $it") }
     cuenta.condicionadaA?.let { appendLine("- NO es plata disponible: solo se puede usar para $it") }
-    val cuotasQuePaga = datos.periodo.creditos.filter { it.loPagaCuentaPropia == cuenta.name }
+    // Vuelta 141: también la que el dueño paga desde esta cuenta fuera de Tu plata (`sePagaDesde`).
+    val cuotasQuePaga = datos.periodo.creditos.filter { it.loPagaCuentaPropia == cuenta.name || it.pagaDesdeFueraDeTuPlata == cuenta.name }
     if (cuotasQuePaga.isNotEmpty()) {
         appendLine("- De esta cuenta sale la cuota de: " + cuotasQuePaga.joinToString("; ") { "«${it.cuenta}» (${if (it.tipoDeCuota != null) "unos " else ""}${pesos(it.cuota)} al mes)" })
     }

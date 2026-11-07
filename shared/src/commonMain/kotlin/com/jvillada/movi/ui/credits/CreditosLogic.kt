@@ -377,6 +377,21 @@ fun quienesPaganLoQueNoSaleDeTuBolsillo(terminos: List<CreditTerms>): List<Strin
         .forEach { add(it) }
 }
 
+/**
+ * Vuelta 141 · **las cuentas fuera de «Tu plata» de las que salen cuotas** de [creditos]
+ * (`CreditSummary.cuotaSePagaDesdeFuera`), sin repetir: «AFC Davibank 9497». Van aparte, como quien paga.
+ */
+fun cuentasFueraDeLasCuotas(creditos: List<com.jvillada.movi.shared.model.CreditSummary>): List<String> =
+    creditos.mapNotNull { c -> c.cuotaSePagaDesdeFuera?.trim()?.takeIf { it.isNotEmpty() && c.terms?.let { t -> com.jvillada.movi.shared.model.saleDeTuBolsillo(t) } != false } }
+        .distinct()
+
+/** «descuenta tu nómina», «paga Skandia», «pagan tu nómina y Skandia». */
+private fun quienPagaSinRotulo(quienes: List<String>): String = when {
+    quienes == listOf("tu nómina") -> "descuenta tu nómina"
+    quienes.size == 1 -> "paga ${quienes[0]}"
+    else -> "pagan ${enumerar(quienes)}"
+}
+
 /** «tu nómina», «tu nómina y Skandia», «tu nómina, Skandia y Papá». */
 private fun enumerar(quienes: List<String>): String = when (quienes.size) {
     1 -> quienes[0]
@@ -387,7 +402,10 @@ private fun enumerar(quienes: List<String>): String = when (quienes.size) {
  * El rótulo de la fila de los intereses del mes que no salen de su cuenta. Sin nadie conocido cae
  * en [ALCANCE_INTERES_AJENO] (un server viejo, o datos a medio cargar).
  */
-fun alcanceDelInteresAjeno(quienes: List<String>): String = when {
+fun alcanceDelInteresAjeno(quienes: List<String>, cuentasFuera: List<String> = emptyList()): String = when {
+    // Vuelta 141: la cuota que se paga desde una cuenta fuera de Tu plata (la AFC) también va aparte.
+    cuentasFuera.isNotEmpty() && quienes.isEmpty() -> "Se pagan desde ${enumerar(cuentasFuera)}"
+    cuentasFuera.isNotEmpty() -> "${alcanceDelInteresAjeno(quienes)} o salen de ${enumerar(cuentasFuera)}"
     quienes.isEmpty() -> ALCANCE_INTERES_AJENO
     quienes == listOf("tu nómina") -> "Los descuenta tu nómina"
     quienes.size == 1 -> "Los paga ${quienes[0]}"
@@ -395,7 +413,10 @@ fun alcanceDelInteresAjeno(quienes: List<String>): String = when {
 }
 
 /** Lo mismo para la fila de lo que falta por pagar en los que se terminan. */
-fun alcanceDeLaFaltaAjena(quienes: List<String>): String = when {
+fun alcanceDeLaFaltaAjena(quienes: List<String>, cuentasFuera: List<String> = emptyList()): String = when {
+    // Vuelta 141: ver [alcanceDelInteresAjeno].
+    cuentasFuera.isNotEmpty() && quienes.isEmpty() -> "En los que se pagan desde ${enumerar(cuentasFuera)} y se terminan"
+    cuentasFuera.isNotEmpty() -> "En los que ${quienPagaSinRotulo(quienes)} o salen de ${enumerar(cuentasFuera)}, y se terminan"
     quienes.isEmpty() -> ALCANCE_FALTA_AJENO
     quienes == listOf("tu nómina") -> "En los que descuenta tu nómina y se terminan"
     quienes.size == 1 -> "En los que paga ${quienes[0]} y se terminan"
