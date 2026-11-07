@@ -190,7 +190,8 @@ class UsedCategoriesCacheTest {
         UsedCategoriesCache.applyRename("Vivienda", "Hogar", icono = "casa", color = "ambar")
         assertEquals(CategoryPref(hidden = true, renombradaA = "Hogar"), UsedCategoriesCache.prefs["Vivienda"])
         assertEquals(
-            CategoryPref(pinnedType = TransactionType.EXPENSE.name, icono = "casa", color = "ambar"),
+            // Revisión: el tipo no se fija (lo resuelve `effectiveCategoryTypes` con el nombre de Movi).
+            CategoryPref(icono = "casa", color = "ambar"),
             UsedCategoriesCache.prefs["Hogar"],
         )
 

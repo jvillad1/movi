@@ -99,6 +99,11 @@ import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.categoriaQueSostieneReglasMensaje
 import com.jvillada.movi.shared.model.nombreSostieneReglasDePlata
 import com.jvillada.movi.shared.model.lineaDeRenombrarUnaDelCatalogo
+import com.jvillada.movi.shared.model.aliasDeLasPreferencias
+import com.jvillada.movi.shared.model.delCatalogoPorSuNombre
+import com.jvillada.movi.shared.model.esLaCategoriaDeLoQueMoviNoEntendio
+import com.jvillada.movi.shared.model.categoriaDeLoQueMoviNoEntendioMensaje
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.focus.FocusRequester
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
@@ -195,9 +200,10 @@ private suspend fun renombrarCategoria(
     nombreNuevo: String,
     conApariencia: Boolean = true,
 ): Result<CategoryRewriteResult> {
-    val apariencia = aparienciaDe(categoria.name, CategoryPref(icono = categoria.icono, color = categoria.color))
-    val icono = apariencia.icono.takeIf { conApariencia && categoria.icono == null }
-    val color = apariencia.color.takeIf { conApariencia && categoria.color == null }
+    // Solo la que Movi reconoció por algo que el nombre nuevo puede perder (ver [aparienciaQueViajaAlRenombrar]).
+    val apariencia = if (conApariencia) aparienciaQueViajaAlRenombrar(categoria) else null
+    val icono = apariencia?.icono?.takeIf { categoria.icono == null }
+    val color = apariencia?.color?.takeIf { categoria.color == null }
     return runCatching { Repositories.wallets.renameCategory(categoria.name, nombreNuevo, icono, color) }
         // `escondeElOrigen` = lo mismo que hizo el server: renombrar no esconde nada (salvo dejar
         // escondido el nombre del catálogo, con su alias), unificar sí (ver `rewriteCategory`).
@@ -976,6 +982,9 @@ private fun HojaBase(onDismiss: () -> Unit, content: @Composable ColumnScope.() 
     }
 }
 
+/** Vuelta 138 · lo que anuncia el lector de pantalla de una fila plegable de la hoja. */
+fun estadoDelPliegue(abierto: Boolean): String = if (abierto) "Abierto" else "Cerrado"
+
 /** Vuelta 138 · los testTags de la hoja de una categoría, para encontrar cada fila en una prueba. */
 const val TAG_FILA_DEL_NOMBRE_DE_LA_CATEGORIA: String = "categoria-hoja-nombre"
 const val TAG_FILA_DE_LA_APARIENCIA_DE_LA_CATEGORIA: String = "categoria-hoja-apariencia"
@@ -1019,7 +1028,13 @@ private fun HojaDetalle(
     //
     // Vuelta 138: se renombran todas, las del catálogo también (solo para este dueño); las únicas
     // que no son las que sostienen reglas de plata (la cuota y el desembolso de un crédito).
-    val sostieneReglas = nombreSostieneReglasDePlata(categoria.name)
+    // Vuelta 138 (revisión): «Otros» tampoco, por otra razón: es donde Movi pone lo que no entendió.
+    val porQueNoSeRenombra = when {
+        nombreSostieneReglasDePlata(categoria.name) -> categoriaQueSostieneReglasMensaje(categoria.name)
+        esLaCategoriaDeLoQueMoviNoEntendio(categoria.name) -> categoriaDeLoQueMoviNoEntendioMensaje(categoria.name)
+        else -> null
+    }
+    val sostieneReglas = porQueNoSeRenombra != null
     val puedeRenombrar = !sostieneReglas
     // Plegadas por defecto; se recuerdan por categoría mientras la hoja está abierta, así un toque
     // de ícono (que recarga la categoría) no vuelve a cerrar la cuadrícula.
@@ -1089,6 +1104,7 @@ private fun HojaDetalle(
                         final = { Chevron(abierto = aparienciaAbierta) },
                         onClick = { aparienciaAbierta = !aparienciaAbierta },
                         onClickLabel = if (aparienciaAbierta) "Plegar" else "Elegir ícono y color",
+                        modifier = Modifier.semantics { stateDescription = estadoDelPliegue(aparienciaAbierta) },
                     )
                 }
                 if (aparienciaAbierta) {
@@ -1108,17 +1124,18 @@ private fun HojaDetalle(
                         final = { Chevron(abierto = tipoAbierto) },
                         onClick = { tipoAbierto = !tipoAbierto },
                         onClickLabel = if (tipoAbierto) "Plegar" else "Elegir el tipo",
+                        modifier = Modifier.semantics { stateDescription = estadoDelPliegue(tipoAbierto) },
                     )
                 }
                 if (tipoAbierto) {
                     SeccionTipo(categoria = categoria, onFijarTipo = onFijarTipo)
                 }
             }
-            if (sostieneReglas) {
-                // La cuota y el desembolso de un crédito cuentan por su nombre exacto: el server
-                // rechaza renombrarlas o unificarlas, así que ni se ofrecen.
+            if (porQueNoSeRenombra != null) {
+                // La cuota y el desembolso de un crédito cuentan por su nombre exacto, y «Otros» es lo
+                // que Movi no entendió: el server rechaza renombrarlas o unificarlas, así que ni se ofrecen.
                 Text(
-                    categoriaQueSostieneReglasMensaje(categoria.name),
+                    porQueNoSeRenombra,
                     style = Movi.textos.apoyo,
                     color = Movi.colores.textoMedio,
                     modifier = Modifier.padding(top = Espacio.s),
@@ -1404,7 +1421,10 @@ private fun HojaRenombrar(
 ) {
     var nombre by remember { mutableStateOf(categoria.name) }
     val limpio = nombre.trim()
-    val colision = colisionAlRenombrar(categoria, limpio, existentes)
+    val alias = aliasDeLasPreferencias(UsedCategoriesCache.prefs)
+    val colision = colisionAlRenombrar(categoria, limpio, existentes, alias)
+    // «Vivienda», ya renombrada a «Hogar»: el aviso dice en qué se convirtió antes de ofrecer unificar.
+    val retirada = nombreRetiradoAlRenombrar(categoria, limpio, alias)
     val sinCambio = limpio == categoria.name
     val puedeGuardar = limpio.isNotEmpty() && !sinCambio && !guardando && colision?.reserved != true
     // Vuelta 138: el nombre llega lleno y seleccionado, con el foco puesto: renombrar es reemplazarlo.
@@ -1437,6 +1457,9 @@ private fun HojaRenombrar(
                 text = when {
                     colision?.reserved == true ->
                         "«${colision.name}» es una categoría reservada de Movi: no puedes usar ese nombre."
+                    colision != null && retirada != null ->
+                        "«${delCatalogoPorSuNombre(limpio) ?: limpio}» ahora se llama «$retirada». " +
+                            avisoDeUnificacion(categoria, colision)
                     colision != null -> avisoDeUnificacion(categoria, colision)
                     delCatalogo && limpio.isNotEmpty() -> lineaDeRenombrarUnaDelCatalogo(limpio)
                     else -> "El cambio se aplica a tus movimientos, a tu presupuesto y a tus " +

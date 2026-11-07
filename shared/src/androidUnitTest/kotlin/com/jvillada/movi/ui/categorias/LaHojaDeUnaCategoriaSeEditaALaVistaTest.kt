@@ -180,9 +180,9 @@ class LaHojaDeUnaCategoriaSeEditaALaVistaTest {
         composeRule.waitUntil(5_000) { pedidos.isNotEmpty() }
         // Manda la apariencia que se veía (la casa ámbar), para que el nombre nuevo no la cambie.
         assertEquals(listOf("Vivienda", "Hogar", "casa", "ambar"), pedidos.single())
-        // Y Agregar deja de ofrecer «Vivienda» y ofrece «Hogar» de gasto en su lugar.
+        // Y Agregar deja de ofrecer «Vivienda» y ofrece «Hogar» en su lugar, sin tipo fijado.
         assertEquals("Hogar", UsedCategoriesCache.prefs["Vivienda"]?.renombradaA)
-        assertEquals("EXPENSE", UsedCategoriesCache.prefs["Hogar"]?.pinnedType)
+        assertEquals(null, UsedCategoriesCache.prefs["Hogar"]?.pinnedType)
     }
 
     @Test
@@ -195,7 +195,8 @@ class LaHojaDeUnaCategoriaSeEditaALaVistaTest {
     @Test
     fun `una renombrada dice de donde viene y ofrece volver al nombre de Movi`() {
         val pedidos = mutableListOf<Pair<String, String>>()
-        val hogar = vivienda.copy(name = "Hogar", scope = CategoryScope.CUSTOM, pinnedType = "EXPENSE", nombreDeMovi = "Vivienda")
+        // Sin uso ni tipo fijado: «Automático» es el de «Vivienda».
+        val hogar = vivienda.copy(name = "Hogar", scope = CategoryScope.CUSTOM, usedTypes = emptyList(), nombreDeMovi = "Vivienda")
         Repositories.sustitutoDePrueba = object : RepositorioDePrueba() {
             override suspend fun getCategories(): List<CategoryUsage> = listOf(hogar)
             override suspend fun renameCategory(from: String, to: String, icono: String?, color: String?): CategoryRewriteResult {
@@ -207,6 +208,7 @@ class LaHojaDeUnaCategoriaSeEditaALaVistaTest {
         composeRule.waitUntil(5_000) { hay("Hogar") }
         tocar("Hogar")
         composeRule.waitUntil(5_000) { hay("antes «Vivienda», de Movi") }
+        assertTrue(hay("Gasto · automático"), "el tipo de su nombre de Movi, sin «Fijado por ti»")
         tocarTag(TAG_FILA_DE_VOLVER_AL_NOMBRE_DE_MOVI)
         composeRule.waitUntil(5_000) { pedidos.isNotEmpty() }
         assertEquals("Hogar" to "Vivienda", pedidos.single())
@@ -222,5 +224,49 @@ class LaHojaDeUnaCategoriaSeEditaALaVistaTest {
         assertTrue(composeRule.onAllNodesWithTag(TAG_FILA_DEL_NOMBRE_DE_LA_CATEGORIA, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertTrue(tocable(TAG_FILA_DEL_NOMBRE_DE_LA_CATEGORIA).fetchSemanticsNodes().isEmpty(), "la fila «Nombre» no se toca")
         assertFalse(hay("Unificar en otra"))
+    }
+
+    /** Revisión: «Otros» es lo que Movi no entendió; la hoja no ofrece renombrarla ni unificarla. */
+    @Test
+    fun `Otros no ofrece renombrar ni unificar y dice por que`() {
+        Repositories.sustitutoDePrueba = repositorio { listOf(CategoryUsage(name = "Otros", scope = CategoryScope.PREDEFINED, movements = 9)) }
+        composeRule.setContent { ConClaseDeAncho { CategoriasScreen(onNavigate = {}) } }
+        composeRule.waitUntil(5_000) { hay("Otros") }
+        tocar("Otros")
+        composeRule.waitUntil(5_000) { hay("donde Movi pone lo que no entendió") }
+        assertTrue(tocable(TAG_FILA_DEL_NOMBRE_DE_LA_CATEGORIA).fetchSemanticsNodes().isEmpty(), "la fila «Nombre» no se toca")
+        assertFalse(hay("Unificar en otra"))
+        assertTrue(hay("Esconder"), "esconderla sí se puede")
+    }
+
+    /** Revisión: las filas plegables dicen su estado al lector de pantalla. */
+    @Test
+    fun `las filas plegables anuncian si estan abiertas`() {
+        abrirLaHoja(repositorio())
+        fun estado(tag: String) = tocable(tag).onFirst().fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+        assertEquals("Cerrado", estado(TAG_FILA_DE_LA_APARIENCIA_DE_LA_CATEGORIA))
+        assertEquals("Cerrado", estado(TAG_FILA_DEL_TIPO_DE_LA_CATEGORIA))
+        tocarTag(TAG_FILA_DE_LA_APARIENCIA_DE_LA_CATEGORIA)
+        assertEquals("Abierto", estado(TAG_FILA_DE_LA_APARIENCIA_DE_LA_CATEGORIA))
+    }
+
+    /** Revisión: escribir un nombre del catálogo ya retirado ofrece unificar en el de hoy. */
+    @Test
+    fun `renombrar hacia un nombre retirado ofrece unificar en el de hoy`() {
+        UsedCategoriesCache.applyPref("Vivienda", com.jvillada.movi.shared.model.CategoryPref(hidden = true, renombradaA = "Hogar"))
+        val hogar = CategoryUsage(name = "Hogar", movements = 6, nombreDeMovi = "Vivienda")
+        val carro = CategoryUsage(name = "Carro", movements = 2)
+        Repositories.sustitutoDePrueba = repositorio { listOf(hogar, carro) }
+        composeRule.setContent { ConClaseDeAncho { CategoriasScreen(onNavigate = {}) } }
+        composeRule.waitUntil(5_000) { hay("Carro") }
+        tocar("Carro")
+        composeRule.waitUntil(5_000) { hay("Ícono y color") }
+        tocarTag(TAG_FILA_DEL_NOMBRE_DE_LA_CATEGORIA)
+        composeRule.waitUntil(5_000) { hay("Renombrar «Carro»") }
+        val campos = composeRule.onAllNodes(hasSetTextAction(), useUnmergedTree = true)
+        campos[campos.fetchSemanticsNodes().size - 1].performTextReplacement("vivienda")
+        composeRule.waitForIdle()
+        assertTrue(hay("«Vivienda» ahora se llama «Hogar»."))
+        assertTrue(hay("Unificar en «Hogar»"))
     }
 }

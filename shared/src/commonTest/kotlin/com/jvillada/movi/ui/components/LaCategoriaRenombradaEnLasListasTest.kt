@@ -20,7 +20,6 @@ class LaCategoriaRenombradaEnLasListasTest {
 
     private val prefs = mapOf(
         "Vivienda" to CategoryPref(hidden = true, renombradaA = "Hogar"),
-        "Hogar" to CategoryPref(pinnedType = TransactionType.EXPENSE.name),
     )
 
     @Test
@@ -31,7 +30,7 @@ class LaCategoriaRenombradaEnLasListasTest {
         // Una sola vez, aunque el uso también la traiga.
         val conUso = suggestCategoryMatches("", TransactionType.EXPENSE, mapOf("Hogar" to setOf(TransactionType.EXPENSE)), prefs)
         assertEquals(1, conUso.count { it == "Hogar" })
-        // Y no del lado de los ingresos: el tipo de «Vivienda» viajó.
+        // Y no del lado de los ingresos: sin nada fijado, «Automático» usa el tipo de «Vivienda».
         assertFalse("Hogar" in suggestCategoryMatches("", TransactionType.INCOME, prefs = prefs))
     }
 
@@ -45,7 +44,6 @@ class LaCategoriaRenombradaEnLasListasTest {
     fun `el valor inicial de Agregar es la primera del catalogo con su nombre`() {
         val comidaRenombrada = mapOf(
             "Comida" to CategoryPref(hidden = true, renombradaA = "Alimentación"),
-            "Alimentación" to CategoryPref(pinnedType = TransactionType.EXPENSE.name),
         )
         assertEquals("Alimentación", categoriaPorDefectoPara(TransactionType.EXPENSE, prefs = comidaRenombrada))
     }
@@ -53,5 +51,22 @@ class LaCategoriaRenombradaEnLasListasTest {
     @Test
     fun `el nombre de un pago que coincide con una del catalogo propone la renombrada`() {
         assertEquals("Hogar", categoriaSugeridaPorNombre("Vivienda", TransactionType.EXPENSE, prefs = prefs))
+    }
+
+    /**
+     * Revisión de la vuelta 138: escribir «Vivienda» en el selector no agrega una celda «Usar «Hogar»»
+     * con «La escondiste en Categorías» (no está escondida: tiene otro nombre), ni repite «Hogar».
+     */
+    @Test
+    fun `el selector no repite la renombrada ni dice que la escondiste`() {
+        val contenido = contenidoDelSelectorDeCategoria("Vivienda", TransactionType.EXPENSE, mapOf("Hogar" to setOf(TransactionType.EXPENSE)), prefs)
+        assertEquals(listOf("Hogar"), contenido.celdas.map { it.nombre })
+        assertTrue(contenido.celdas.none { it is CeldaDeCategoria.Usar })
+    }
+
+    @Test
+    fun `una renombrada sirve para el tipo de su nombre de Movi sin estar fijada`() {
+        assertTrue(categoriaSirveParaTipo("Hogar", TransactionType.EXPENSE, prefs = prefs))
+        assertFalse(categoriaSirveParaTipo("Hogar", TransactionType.INCOME, prefs = prefs))
     }
 }

@@ -314,14 +314,15 @@ object UsedCategoriesCache {
         //
         // Vuelta 138, el mismo espejo de lo nuevo del server: volver a «Vivienda» borra su alias
         // (la fila del destino era el alias, no una preferencia suya); renombrar una del catálogo
-        // fija su tipo en el nombre nuevo y deja la vieja escondida con el alias; los alias que
+        // deja la vieja escondida con el alias; los alias que
         // apuntaban al nombre viejo pasan al nuevo; y la apariencia que mandó la app queda si el
         // destino no tenía.
         val delCatalogo = PREDEFINED_CATEGORIES.firstOrNull { it.name == viejo }
         val prefOrigen = prefs[viejo]
         val prefDestino = prefs[nuevo]?.takeUnless { it.renombradaA != null && it.renombradaA.equals(viejo, ignoreCase = true) }
-        val tipoQueViaja = delCatalogo?.type?.takeIf { !escondeElOrigen && PREDEFINED_CATEGORIES.none { c -> c.name == nuevo } }
-        val tipoFijadoDestino = prefDestino?.pinnedType ?: prefOrigen?.pinnedType ?: tipoQueViaja
+        // El tipo de una del catálogo renombrada no se fija: lo resuelve `effectiveCategoryTypes` con su
+        // nombre de Movi (el alias de abajo), como en el server.
+        val tipoFijadoDestino = prefDestino?.pinnedType ?: prefOrigen?.pinnedType
         val iconoDestino = prefDestino?.icono ?: prefOrigen?.icono ?: icono
         val colorDestino = prefDestino?.color ?: prefOrigen?.color ?: color
         val escondidoDestino = !escondeElOrigen && prefOrigen?.hidden == true

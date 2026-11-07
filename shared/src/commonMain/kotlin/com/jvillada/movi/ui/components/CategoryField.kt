@@ -34,6 +34,7 @@ import com.jvillada.movi.shared.model.CategoryPref
 import com.jvillada.movi.shared.model.PREDEFINED_CATEGORIES
 import com.jvillada.movi.shared.model.aliasDeLasPreferencias
 import com.jvillada.movi.shared.model.nombreVigente
+import com.jvillada.movi.shared.model.nombreDeMoviEnLasPreferencias
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.effectiveCategoryTypes
 import com.jvillada.movi.shared.model.esCategoriaQueNoSeElige
@@ -133,7 +134,8 @@ internal fun seOfreceParaTipo(
     val pref = prefs.entries.firstOrNull { (key, _) -> normalizarParaBuscar(key.trim()) == normalizarParaBuscar(name.trim()) }?.value
     if (pref?.hidden == true) return false
     if (tipo == null) return true
-    val efectivos = effectiveCategoryTypes(name, pref?.pinnedType, tiposUsados)
+    // Vuelta 138: «Hogar», que era «Vivienda», es de gasto sin que nadie lo haya fijado.
+    val efectivos = effectiveCategoryTypes(name, pref?.pinnedType, tiposUsados, nombreDeMoviEnLasPreferencias(name, prefs))
     return efectivos.isEmpty() || tipo in efectivos
 }
 
@@ -247,8 +249,9 @@ fun categoriaSirveParaTipo(
     val pref = prefs.entries.firstOrNull { normalizarParaBuscar(it.key.trim()) == normalizarParaBuscar(limpio) }?.value
     if (pref?.hidden == true) return false
     val esDelCatalogo = PREDEFINED_CATEGORIES.any { it.name.equals(limpio, ignoreCase = true) }
-    if (!esDelCatalogo && pref?.pinnedType == null) return true
-    val tipos = effectiveCategoryTypes(limpio, pref?.pinnedType, usedCategories[limpio].orEmpty())
+    val deMovi = nombreDeMoviEnLasPreferencias(limpio, prefs)
+    if (!esDelCatalogo && pref?.pinnedType == null && deMovi == null) return true
+    val tipos = effectiveCategoryTypes(limpio, pref?.pinnedType, usedCategories[limpio].orEmpty(), deMovi)
     return tipos.isEmpty() || type in tipos
 }
 
@@ -406,7 +409,7 @@ fun ladoConocidoDeCategoria(
     // catálogo. Sin esto, «Otros» fijada en «Ambos» seguiría diciendo «Ya la tienes en Gastos»
     // al anotar un ingreso, contradiciendo lo que él mismo acababa de decidir.
     val pinned = prefs.entries.firstOrNull { normalizarParaBuscar(it.key.trim()) == q }?.value?.pinnedType
-    val tipos = effectiveCategoryTypes(nombre, pinned, tiposUsados)
+    val tipos = effectiveCategoryTypes(nombre, pinned, tiposUsados, nombreDeMoviEnLasPreferencias(nombre, prefs))
     val delOtroLado = tipos - setOfNotNull(type)
     return when {
         delOtroLado.isEmpty() -> null
