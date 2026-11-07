@@ -5727,8 +5727,12 @@ ni siquiera se le ofrecía renombrar («no permite editar categorías»). El pat
 - **Después, las acciones de siempre**, en su propia superficie: «Unificar en otra», «Esconder» / «Volver a
   sugerirla» y, en una del catálogo renombrada, «Volver a «Vivienda»».
 - **El título también renombra** (`alPresionar`, «Renombrar»): es el atajo de quien toca lo que quiere cambiar.
-- **Lo que no se puede, no se ofrece como control**: en «Cuota de crédito» y «Desembolso de crédito» la fila
-  «Nombre» va apagada y sin chevron, y debajo el porqué; no hay «Unificar».
+- **Lo que no se puede, no se ofrece como control**: en «Cuota de crédito», «Desembolso de crédito» y «Otros»
+  (donde Movi pone lo que no entendió) la fila «Nombre» va apagada y sin chevron, y debajo el porqué; no hay
+  «Unificar».
+- **Las filas plegables dicen su estado** al lector de pantalla (`stateDescription`: «Abierto» / «Cerrado»).
+- **Escribir un nombre del catálogo ya retirado** («Vivienda», que hoy es «Hogar») dice ««Vivienda» ahora se
+  llama «Hogar».» y ofrece «Unificar en «Hogar»».
 - **Renombrar** llega con el nombre lleno y seleccionado (`Campo(seleccionadoAlEmpezar = true)`, con el foco), un
   solo amarillo («Guardar», o «Unificar en «X»» si el nombre ya existe) y, en una del catálogo, la línea «Solo
   cambia para ti: tus movimientos, presupuestos y pagos fijos pasan a «X»».
