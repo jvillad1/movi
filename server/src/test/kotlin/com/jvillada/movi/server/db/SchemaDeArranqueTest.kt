@@ -77,6 +77,8 @@ class SchemaDeArranqueTest {
         "credit_terms" to "sin_intereses",
         // El débito automático de una cuota: toda consulta de créditos la nombra (`toCreditTerms`).
         "credit_terms" to "debito_automatico_desde",
+        // Vuelta 141 · de qué cuenta sale la cuota: `toCreditTerms` la nombra.
+        "credit_terms" to "se_paga_desde",
         // El interés de una cuota según el extracto, y de qué cuota: `toCreditTerms` los nombra.
         "credit_terms" to "interes_real",
         "credit_terms" to "interes_real_cuota",

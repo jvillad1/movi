@@ -621,6 +621,32 @@ class ContextoDelPeriodoTest {
     }
 
     /**
+     * **Vuelta 141 · la cuota que el dueño paga desde la AFC** (`CreditTerms.sePagaDesde`, una cuenta
+     * condicionada): el asistente dice de cuál sale y que no baja «Te quedan», y no la suma «de su bolsillo».
+     */
+    @Test
+    fun `la cuota que sale de la AFC se dice aparte y no de su bolsillo`() {
+        deuda("h1254", "Hipoteca 1254", 400_000_000L, tasa = 12.0, cuota = 4_500_000L)
+        deuda("v8761", "Vehículo 8761", 40_000_000L, tasa = 18.5, cuota = 1_500_000L)
+        transaction {
+            Accounts.insert {
+                it[id] = "afc"; it[userId] = dueno; it[name] = "AFC Davibank 9497"; it[type] = "SAVINGS"
+                it[balance] = 0L; it[conditionedTo] = "vivienda"
+            }
+            Credits.update({ Credits.accountId eq "h1254" }) { it[sePagaDesde] = "afc" }
+        }
+
+        val texto = contexto()
+
+        assertTrue(
+            "La cuota la paga él desde su cuenta «AFC Davibank 9497», que no es Tu plata: NO baja «Te quedan»" in texto,
+            texto,
+        )
+        assertTrue("Cuotas al mes: \$1500000 salen de su bolsillo; \$0 las paga la nómina o un tercero" in texto, texto)
+        assertTrue("\$4500000 las paga desde cuentas suyas que no son Tu plata" in texto, texto)
+    }
+
+    /**
      * Un crédito cuya cuota no cubre los intereses se dice con todas las letras: es lo más urgente
      * que un asesor puede ver, y la pantalla de Créditos ya lo dice.
      */
