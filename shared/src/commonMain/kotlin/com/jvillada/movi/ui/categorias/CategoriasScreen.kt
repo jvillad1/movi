@@ -2,6 +2,9 @@ package com.jvillada.movi.ui.categorias
 
 import com.jvillada.movi.ui.components.ds.EsqueletoDeFila
 import com.jvillada.movi.ui.components.ds.Fila
+import com.jvillada.movi.ui.components.ds.TonoDeFila
+import com.jvillada.movi.ui.components.ds.alPresionar
+import com.jvillada.movi.observabilidad.ToqueDeUso
 import com.jvillada.movi.ui.components.ds.Seccion
 import com.jvillada.movi.ui.components.ds.Chevron
 import com.jvillada.movi.ui.components.ds.PildoraDeFiltro
@@ -95,6 +98,13 @@ import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
 import com.jvillada.movi.shared.model.TransactionType
 import com.jvillada.movi.shared.model.categoriaQueSostieneReglasMensaje
 import com.jvillada.movi.shared.model.nombreSostieneReglasDePlata
+import com.jvillada.movi.shared.model.lineaDeRenombrarUnaDelCatalogo
+import com.jvillada.movi.shared.model.aliasDeLasPreferencias
+import com.jvillada.movi.shared.model.delCatalogoPorSuNombre
+import com.jvillada.movi.shared.model.esLaCategoriaDeLoQueMoviNoEntendio
+import com.jvillada.movi.shared.model.categoriaDeLoQueMoviNoEntendioMensaje
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.focus.FocusRequester
 import com.jvillada.movi.ui.LocalRefreshTick
 import com.jvillada.movi.ui.Screen
 import com.jvillada.movi.ui.components.MarcoDeHoja
@@ -177,6 +187,28 @@ private sealed class Hoja {
 private suspend fun unificarCategoria(origen: String, destino: String): Result<CategoryRewriteResult> =
     runCatching { Repositories.wallets.mergeCategory(origen, destino) }
         .onSuccess { r -> UsedCategoriesCache.applyRename(origen, r.name, escondeElOrigen = true) }
+
+/**
+ * Vuelta 138 · renombrar [categoria] a [nombreNuevo]: la llamada al server y el espejo en
+ * `UsedCategoriesCache`, en un solo lugar (la hoja de renombrar y «Volver a «Vivienda»» de la hoja de
+ * detalle). [conApariencia]: manda el ícono y el color que se ven hoy si el dueño no había elegido
+ * uno, para que el cambio de nombre no cambie la apariencia que Movi adivina por el nombre
+ * ([aparienciaDe]). Volver al nombre de Movi no lo necesita: ese nombre ya trae su ícono.
+ */
+private suspend fun renombrarCategoria(
+    categoria: CategoryUsage,
+    nombreNuevo: String,
+    conApariencia: Boolean = true,
+): Result<CategoryRewriteResult> {
+    // Solo la que Movi reconoció por algo que el nombre nuevo puede perder (ver [aparienciaQueViajaAlRenombrar]).
+    val apariencia = if (conApariencia) aparienciaQueViajaAlRenombrar(categoria) else null
+    val icono = apariencia?.icono?.takeIf { categoria.icono == null }
+    val color = apariencia?.color?.takeIf { categoria.color == null }
+    return runCatching { Repositories.wallets.renameCategory(categoria.name, nombreNuevo, icono, color) }
+        // `escondeElOrigen` = lo mismo que hizo el server: renombrar no esconde nada (salvo dejar
+        // escondido el nombre del catálogo, con su alias), unificar sí (ver `rewriteCategory`).
+        .onSuccess { r -> UsedCategoriesCache.applyRename(categoria.name, r.name, escondeElOrigen = false, icono = icono, color = color) }
+}
 
 /**
  * Esconder o mostrar [categoria]: mismo criterio que [unificarCategoria] — la hoja de detalle y la
@@ -463,6 +495,22 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                 onDismiss = { hoja = null },
                 onRenombrar = { hoja = Hoja.Renombrar(h.categoria) },
                 onUnificar = { hoja = Hoja.Unificar(h.categoria) },
+                onVolverAlNombreDeMovi = { deMovi ->
+                    if (!guardandoHoja) {
+                        guardandoHoja = true
+                        scope.launch {
+                            renombrarCategoria(h.categoria, deMovi, conApariencia = false)
+                                .onSuccess { r ->
+                                    confirmacion = "«${h.categoria.name}» vuelve a llamarse «${r.name}», como en Movi."
+                                    error = null
+                                    hoja = null
+                                    recargar()
+                                }
+                                .onFailure { error = it.toUserMessage(); confirmacion = null; hoja = null }
+                            guardandoHoja = false
+                        }
+                    }
+                },
                 onCambiarVisibilidad = { escondida ->
                     scope.launch {
                         ponerVisibilidad(h.categoria, escondida)
@@ -536,13 +584,8 @@ fun CategoriasScreen(onNavigate: (Screen) -> Unit) {
                     guardandoHoja = true
                     errorDeHoja = null
                     scope.launch {
-                        runCatching {
-                            if (esUnificacion) Repositories.wallets.mergeCategory(h.categoria.name, nuevoNombre)
-                            else Repositories.wallets.renameCategory(h.categoria.name, nuevoNombre)
-                        }.onSuccess { r ->
-                            // `escondeElOrigen` = lo mismo que hizo el server: unificar esconde la
-                            // de origen si venía del catálogo, renombrar no (ver `rewriteCategory`).
-                            UsedCategoriesCache.applyRename(h.categoria.name, r.name, escondeElOrigen = esUnificacion)
+                        (if (esUnificacion) unificarCategoria(h.categoria.name, nuevoNombre)
+                        else renombrarCategoria(h.categoria, nuevoNombre)).onSuccess { r ->
                             confirmacion = textoDeResultado(r.movements, r.budgets, r.recurringRules, r.budgetsMerged, r.name)
                             error = null
                             hoja = null
@@ -939,6 +982,26 @@ private fun HojaBase(onDismiss: () -> Unit, content: @Composable ColumnScope.() 
     }
 }
 
+/** Vuelta 138 · lo que anuncia el lector de pantalla de una fila plegable de la hoja. */
+fun estadoDelPliegue(abierto: Boolean): String = if (abierto) "Abierto" else "Cerrado"
+
+/** Vuelta 138 · los testTags de la hoja de una categoría, para encontrar cada fila en una prueba. */
+const val TAG_FILA_DEL_NOMBRE_DE_LA_CATEGORIA: String = "categoria-hoja-nombre"
+const val TAG_FILA_DE_LA_APARIENCIA_DE_LA_CATEGORIA: String = "categoria-hoja-apariencia"
+const val TAG_FILA_DEL_TIPO_DE_LA_CATEGORIA: String = "categoria-hoja-tipo"
+const val TAG_FILA_DE_UNIFICAR_LA_CATEGORIA: String = "categoria-hoja-unificar"
+const val TAG_FILA_DE_ESCONDER_LA_CATEGORIA: String = "categoria-hoja-esconder"
+const val TAG_FILA_DE_VOLVER_AL_NOMBRE_DE_MOVI: String = "categoria-hoja-volver"
+const val TAG_TITULO_DE_LA_HOJA_DE_CATEGORIA: String = "categoria-hoja-titulo"
+
+/**
+ * **La hoja de una categoría** (vuelta 138, el patrón «Editar» de la vuelta 98: a la vista, no al
+ * final). Arriba, el nombre y el uso; debajo, una [Superficie] de capa 2 con lo que se edita —«Nombre»,
+ * «Ícono y color» y «Tipo»—, que a 390×844 se ve sin bajar; y después las acciones de siempre,
+ * «Unificar en otra» y «Esconder». La cuadrícula de íconos y las pastillas del tipo van **plegadas**:
+ * abiertas eran las que tapaban todo y dejaban las acciones fuera de la vista (la foto del iPhone de
+ * Caro, «no permite editar categorías»).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HojaDetalle(
@@ -956,18 +1019,51 @@ private fun HojaDetalle(
      * request de principio a fin.
      */
     onCambiarApariencia: (icono: String?, color: String?) -> Unit,
+    /** Vuelta 138: «Volver a «Vivienda»», el renombrado al revés de una del catálogo. */
+    onVolverAlNombreDeMovi: (String) -> Unit = {},
 ) {
     // Las reservadas ya no llegan acá: `filtrarCategorias` las saca de la lista antes de que se
     // pueda tocar una fila (ver el pie de la pantalla, que explica por qué son menos de las que
     // tiene el server). Sin una reservada que dibujar, esta hoja no necesita su propia rama.
+    //
+    // Vuelta 138: se renombran todas, las del catálogo también (solo para este dueño); las únicas
+    // que no son las que sostienen reglas de plata (la cuota y el desembolso de un crédito).
+    // Vuelta 138 (revisión): «Otros» tampoco, por otra razón: es donde Movi pone lo que no entendió.
+    val porQueNoSeRenombra = when {
+        nombreSostieneReglasDePlata(categoria.name) -> categoriaQueSostieneReglasMensaje(categoria.name)
+        esLaCategoriaDeLoQueMoviNoEntendio(categoria.name) -> categoriaDeLoQueMoviNoEntendioMensaje(categoria.name)
+        else -> null
+    }
+    val sostieneReglas = porQueNoSeRenombra != null
+    val puedeRenombrar = !sostieneReglas
+    // Plegadas por defecto; se recuerdan por categoría mientras la hoja está abierta, así un toque
+    // de ícono (que recarga la categoría) no vuelve a cerrar la cuadrícula.
+    var aparienciaAbierta by remember(categoria.name) { mutableStateOf(false) }
+    var tipoAbierto by remember(categoria.name) { mutableStateOf(false) }
+    val apariencia = remember(categoria.name, categoria.icono, categoria.color) {
+        aparienciaDe(categoria.name, CategoryPref(icono = categoria.icono, color = categoria.color))
+    }
     HojaBase(onDismiss = onDismiss) {
         Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
+            // El título también renombra: es el atajo de quien toca lo que quiere cambiar.
             Text(
                 categoria.name,
                 style = Movi.textos.titular,
                 fontWeight = FontWeight.Medium,
                 color = Movi.colores.texto,
-                modifier = Modifier.padding(top = Espacio.xxs),
+                modifier = Modifier
+                    .padding(top = Espacio.xxs)
+                    .testTag(TAG_TITULO_DE_LA_HOJA_DE_CATEGORIA)
+                    .then(
+                        if (puedeRenombrar) {
+                            Modifier.alPresionar(
+                                onClick = onRenombrar,
+                                toque = ToqueDeUso("titulo-de-categoria", idFijo = "categorias:hoja:titulo"),
+                                rol = Role.Button,
+                                onClickLabel = "Renombrar",
+                            )
+                        } else Modifier,
+                    ),
             )
             Text(
                 resumenDeUso(categoria),
@@ -983,100 +1079,81 @@ private fun HojaDetalle(
                     modifier = Modifier.padding(top = Espacio.xxs),
                 )
             }
-            // El tipo se dice acá y no en la fila (Ola B · tarea 5) — y solo cuando ayuda: «Sin
-            // usar» no aporta nada que el dueño pueda hacer con eso.
-            etiquetaDeTipo(categoria).takeIf { it != "Sin usar" }?.let {
-                Text(
-                    it,
-                    color = Movi.colores.textoMedio,
-                    style = Movi.textos.apoyo,
-                    modifier = Modifier.padding(top = Espacio.xxs),
-                )
-            }
 
-            SeccionApariencia(
-                categoria = categoria,
-                onElegirIcono = { onCambiarApariencia(it, null) },
-                onElegirColor = { onCambiarApariencia(null, it) },
-                onVolverAlDeMovi = { onCambiarApariencia("", "") },
-            )
-
-            // ── Tipo ──────────────────────────────────────────────────────────
-            RotuloDeCampo("Tipo", modifier = Modifier.padding(top = Espacio.l))
-            // Vuelta de diseño 20: `PildoraDeFiltro` del ancho de su texto, que bajan a un segundo
-            // renglón si no entran. Repartidas a partes iguales, «Automático» no entraba entero a
-            // 390 dp y la opción armada a mano tenía que achicarse la letra.
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
-                verticalArrangement = Arrangement.spacedBy(Espacio.xs),
-                modifier = Modifier.fillMaxWidth(),
+            // ── Lo que se edita, a la vista ─────────────────────────────────────────
+            Superficie(
+                nivel = NivelDeSuperficie.Capa2,
+                relleno = RellenoDeSuperficie.Lista,
+                modifier = Modifier.fillMaxWidth().padding(top = Medida.dentroDeSeccion),
             ) {
-                val opciones = listOf(
-                    null,
-                    TransactionType.EXPENSE.name,
-                    TransactionType.INCOME.name,
-                    CATEGORY_TYPE_BOTH,
-                )
-                opciones.forEach { opcion ->
-                    PildoraDeFiltro(
-                        texto = etiquetaDeTipoFijado(opcion),
-                        seleccionada = categoria.pinnedType == opcion,
-                        onClick = { if (categoria.pinnedType != opcion) onFijarTipo(opcion) },
+                ConTag(TAG_FILA_DEL_NOMBRE_DE_LA_CATEGORIA) {
+                    Fila(
+                        titulo = "Nombre",
+                        subtitulo = subtituloDelNombre(categoria),
+                        lineasDelSubtitulo = 2,
+                        onClick = if (puedeRenombrar) onRenombrar else null,
+                        tonoDelTitulo = if (puedeRenombrar) TonoDeFila.Normal else TonoDeFila.Apagado,
                     )
                 }
+                Separador(SangriaDeSeparador.Margen)
+                ConTag(TAG_FILA_DE_LA_APARIENCIA_DE_LA_CATEGORIA) {
+                    Fila(
+                        titulo = "Ícono y color",
+                        subtitulo = "${rotuloDeIcono(apariencia.icono)} · ${rotuloDeColor(apariencia.color)}",
+                        inicio = { IconoDeCategoria(apariencia = apariencia) },
+                        final = { Chevron(abierto = aparienciaAbierta) },
+                        onClick = { aparienciaAbierta = !aparienciaAbierta },
+                        onClickLabel = if (aparienciaAbierta) "Plegar" else "Elegir ícono y color",
+                        modifier = Modifier.semantics { stateDescription = estadoDelPliegue(aparienciaAbierta) },
+                    )
+                }
+                if (aparienciaAbierta) {
+                    SeccionApariencia(
+                        categoria = categoria,
+                        apariencia = apariencia,
+                        onElegirIcono = { onCambiarApariencia(it, null) },
+                        onElegirColor = { onCambiarApariencia(null, it) },
+                        onVolverAlDeMovi = { onCambiarApariencia("", "") },
+                    )
+                }
+                Separador(SangriaDeSeparador.Margen)
+                ConTag(TAG_FILA_DEL_TIPO_DE_LA_CATEGORIA) {
+                    Fila(
+                        titulo = "Tipo",
+                        subtitulo = subtituloDelTipo(categoria),
+                        final = { Chevron(abierto = tipoAbierto) },
+                        onClick = { tipoAbierto = !tipoAbierto },
+                        onClickLabel = if (tipoAbierto) "Plegar" else "Elegir el tipo",
+                        modifier = Modifier.semantics { stateDescription = estadoDelPliegue(tipoAbierto) },
+                    )
+                }
+                if (tipoAbierto) {
+                    SeccionTipo(categoria = categoria, onFijarTipo = onFijarTipo)
+                }
             }
-            Text(
-                if (categoria.pinnedType == null)
-                    "«Automático» usa lo que dice el catálogo de Movi o, si es tuya, los tipos con " +
-                        "los que ya la usaste. Fija uno para decidirlo tú."
-                else "Fijado por ti: manda sobre el catálogo y sobre el uso.",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-                lineHeight = 15.sp,
-                modifier = Modifier.padding(top = Espacio.xs),
-            )
+            if (porQueNoSeRenombra != null) {
+                // La cuota y el desembolso de un crédito cuentan por su nombre exacto, y «Otros» es lo
+                // que Movi no entendió: el server rechaza renombrarlas o unificarlas, así que ni se ofrecen.
+                Text(
+                    porQueNoSeRenombra,
+                    style = Movi.textos.apoyo,
+                    color = Movi.colores.textoMedio,
+                    modifier = Modifier.padding(top = Espacio.s),
+                )
+            }
 
-            // Vuelta de diseño 20: las acciones son `Fila` del sistema en una `Superficie` de capa 2,
-            // como toda lista dentro de una hoja (eran columnas tocables armadas a mano entre líneas).
-            // Lo que solo explica va antes, como texto.
-            val sostieneReglas = nombreSostieneReglasDePlata(categoria.name)
-            if (sostieneReglas) {
-                // La cuota y el desembolso de un crédito cuentan por su nombre exacto: el server
-                // rechaza renombrarlas o unificarlas, así que ni se ofrecen.
-                Text(
-                    categoriaQueSostieneReglasMensaje(categoria.name),
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    modifier = Modifier.padding(top = Espacio.l),
-                )
-            } else if (categoria.scope != CategoryScope.CUSTOM) {
-                Text(
-                    "Las categorías del catálogo de Movi no se renombran: el catálogo es el " +
-                        "mismo para todos y volvería a sugerirte el nombre viejo. Si quieres " +
-                        "juntarla con otra, únela; si no la usas, escóndela.",
-                    style = Movi.textos.apoyo,
-                    color = Movi.colores.textoMedio,
-                    modifier = Modifier.padding(top = Espacio.l),
-                )
-            }
+            // ── Las acciones de siempre ──────────────────────────────────────────────
             Superficie(
                 nivel = NivelDeSuperficie.Capa2,
                 relleno = RellenoDeSuperficie.Lista,
                 modifier = Modifier.fillMaxWidth().padding(top = Medida.dentroDeSeccion, bottom = Espacio.l),
             ) {
                 if (!sostieneReglas) {
-                    if (categoria.scope == CategoryScope.CUSTOM) {
-                        AccionDeHoja(
-                            titulo = "Renombrar",
-                            detalle = "Cambia el nombre en todos tus movimientos, tu presupuesto y tus recurrentes.",
-                            onClick = onRenombrar,
-                        )
-                        Separador(SangriaDeSeparador.Margen)
-                    }
                     AccionDeHoja(
                         titulo = "Unificar en otra",
                         detalle = "Todo lo que dice «${categoria.name}» pasa a decir la que elijas. No se borra nada.",
                         onClick = onUnificar,
+                        tag = TAG_FILA_DE_UNIFICAR_LA_CATEGORIA,
                     )
                     Separador(SangriaDeSeparador.Margen)
                 }
@@ -1086,9 +1163,61 @@ private fun HojaDetalle(
                         "Vuelve a aparecer al escribir una categoría."
                     else "Deja de sugerirse al escribir. Tus movimientos viejos no se tocan.",
                     onClick = { onCambiarVisibilidad(!categoria.hidden) },
+                    tag = TAG_FILA_DE_ESCONDER_LA_CATEGORIA,
+                )
+                categoria.nombreDeMovi?.let { deMovi ->
+                    Separador(SangriaDeSeparador.Margen)
+                    AccionDeHoja(
+                        titulo = "Volver a «$deMovi»",
+                        detalle = "Tus movimientos, presupuestos y pagos fijos vuelven al nombre de Movi.",
+                        onClick = { onVolverAlNombreDeMovi(deMovi) },
+                        tag = TAG_FILA_DE_VOLVER_AL_NOMBRE_DE_MOVI,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * El tipo, desplegado: las pastillas de siempre y su explicación. Va plegado detrás de la fila «Tipo»
+ * (vuelta 138) para que las acciones de la hoja se vean sin bajar.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SeccionTipo(categoria: CategoryUsage, onFijarTipo: (String?) -> Unit) {
+    Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.m)) {
+        // Vuelta de diseño 20: `PildoraDeFiltro` del ancho de su texto, que bajan a un segundo
+        // renglón si no entran. Repartidas a partes iguales, «Automático» no entraba entero a
+        // 390 dp y la opción armada a mano tenía que achicarse la letra.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(Espacio.xs),
+            verticalArrangement = Arrangement.spacedBy(Espacio.xs),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            val opciones = listOf(
+                null,
+                TransactionType.EXPENSE.name,
+                TransactionType.INCOME.name,
+                CATEGORY_TYPE_BOTH,
+            )
+            opciones.forEach { opcion ->
+                PildoraDeFiltro(
+                    texto = etiquetaDeTipoFijado(opcion),
+                    seleccionada = categoria.pinnedType == opcion,
+                    onClick = { if (categoria.pinnedType != opcion) onFijarTipo(opcion) },
                 )
             }
         }
+        Text(
+            if (categoria.pinnedType == null)
+                "«Automático» usa lo que dice el catálogo de Movi o, si es tuya, los tipos con " +
+                    "los que ya la usaste. Fija uno para decidirlo tú."
+            else "Fijado por ti: manda sobre el catálogo y sobre el uso.",
+            style = Movi.textos.apoyo,
+            color = Movi.colores.textoMedio,
+            modifier = Modifier.padding(top = Espacio.xs),
+        )
     }
 }
 
@@ -1105,24 +1234,15 @@ private fun HojaDetalle(
 @Composable
 private fun SeccionApariencia(
     categoria: CategoryUsage,
+    apariencia: AparienciaDeCategoria,
     onElegirIcono: (String) -> Unit,
     onElegirColor: (String) -> Unit,
     onVolverAlDeMovi: () -> Unit,
 ) {
-    val apariencia = remember(categoria.name, categoria.icono, categoria.color) {
-        aparienciaDe(categoria.name, CategoryPref(icono = categoria.icono, color = categoria.color))
-    }
-    Column(modifier = Modifier.padding(top = Espacio.l)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Espacio.s)) {
-            IconoDeCategoria(apariencia = apariencia)
-            Text(
-                "${rotuloDeIcono(apariencia.icono)} · ${rotuloDeColor(apariencia.color)}",
-                style = Movi.textos.apoyo,
-                color = Movi.colores.textoMedio,
-            )
-        }
-
-        RotuloDeCampo("Ícono", modifier = Modifier.padding(top = Espacio.m))
+    // Vuelta 138: la vista previa (el ícono y «Casa · Ámbar») es la fila «Ícono y color» de arriba;
+    // esto es lo que se despliega debajo de ella.
+    Column(modifier = Modifier.padding(horizontal = Medida.margenDePantalla).padding(bottom = Espacio.m)) {
+        RotuloDeCampo("Ícono", modifier = Modifier.padding(top = Espacio.xs))
         CuadriculaDeApariencia(ICONOS_DEL_CATALOGO) { item, modifier ->
             CeldaDeIcono(item = item, elegido = item.clave == apariencia.icono, onClick = { onElegirIcono(item.clave) }, modifier = modifier)
         }
@@ -1261,14 +1381,25 @@ private fun CeldaDeColor(item: ColorDelCatalogo, elegido: Boolean, onClick: () -
  * [Chevron] (vuelta de diseño 20; era una columna tocable armada a mano).
  */
 @Composable
-private fun AccionDeHoja(titulo: String, detalle: String, onClick: () -> Unit) {
-    Fila(
-        titulo = titulo,
-        subtitulo = detalle,
-        lineasDelSubtitulo = 2,
-        final = { Chevron() },
-        onClick = onClick,
-    )
+private fun AccionDeHoja(titulo: String, detalle: String, onClick: () -> Unit, tag: String? = null) {
+    ConTag(tag) {
+        Fila(
+            titulo = titulo,
+            subtitulo = detalle,
+            lineasDelSubtitulo = 2,
+            final = { Chevron() },
+            onClick = onClick,
+        )
+    }
+}
+
+/**
+ * Vuelta 138: el `testTag` de una fila de la hoja va en una caja alrededor y no en la [Fila]: el tag
+ * de la fila es el del sistema ([com.jvillada.movi.ui.components.ds.TAG_FILA]) y uno encima lo pisaba.
+ */
+@Composable
+private fun ConTag(tag: String?, contenido: @Composable () -> Unit) {
+    if (tag == null) contenido() else Box(Modifier.testTag(tag)) { contenido() }
 }
 
 /**
@@ -1290,9 +1421,17 @@ private fun HojaRenombrar(
 ) {
     var nombre by remember { mutableStateOf(categoria.name) }
     val limpio = nombre.trim()
-    val colision = colisionAlRenombrar(categoria, limpio, existentes)
+    val alias = aliasDeLasPreferencias(UsedCategoriesCache.prefs)
+    val colision = colisionAlRenombrar(categoria, limpio, existentes, alias)
+    // «Vivienda», ya renombrada a «Hogar»: el aviso dice en qué se convirtió antes de ofrecer unificar.
+    val retirada = nombreRetiradoAlRenombrar(categoria, limpio, alias)
     val sinCambio = limpio == categoria.name
     val puedeGuardar = limpio.isNotEmpty() && !sinCambio && !guardando && colision?.reserved != true
+    // Vuelta 138: el nombre llega lleno y seleccionado, con el foco puesto: renombrar es reemplazarlo.
+    val foco = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
+    // Una del catálogo, o una que antes lo era: el cambio es solo de este dueño.
+    val delCatalogo = categoria.scope == CategoryScope.PREDEFINED || categoria.nombreDeMovi != null
 
     HojaBase(onDismiss = onDismiss) {
         Column(modifier = Modifier.desplazableConElTeclado().weight(1f, fill = false)) {
@@ -1304,19 +1443,30 @@ private fun HojaRenombrar(
             )
             // ⌘A (lo trae el [Campo]) pesa más acá que en otros campos: el nombre llega prellenado
             // con el actual, y renombrar es justamente reemplazarlo entero.
-            Campo(nombre, { nombre = it }, rotulo = "Nombre nuevo", guia = categoria.name, habilitado = !guardando)
+            Campo(
+                nombre,
+                { nombre = it },
+                rotulo = "Nombre nuevo",
+                guia = categoria.name,
+                habilitado = !guardando,
+                foco = foco,
+                seleccionadoAlEmpezar = true,
+            )
 
             Text(
                 text = when {
                     colision?.reserved == true ->
                         "«${colision.name}» es una categoría reservada de Movi: no puedes usar ese nombre."
+                    colision != null && retirada != null ->
+                        "«${delCatalogoPorSuNombre(limpio) ?: limpio}» ahora se llama «$retirada». " +
+                            avisoDeUnificacion(categoria, colision)
                     colision != null -> avisoDeUnificacion(categoria, colision)
+                    delCatalogo && limpio.isNotEmpty() -> lineaDeRenombrarUnaDelCatalogo(limpio)
                     else -> "El cambio se aplica a tus movimientos, a tu presupuesto y a tus " +
                         "recurrentes al mismo tiempo. No se borra nada."
                 },
                 style = Movi.textos.apoyo,
                 color = if (colision?.reserved == true) Movi.colores.sale else Movi.colores.textoMedio,
-                lineHeight = 15.sp,
                 modifier = Modifier.padding(top = Espacio.s),
             )
 
@@ -1324,7 +1474,7 @@ private fun HojaRenombrar(
             BotonDeHoja(
                 texto = when {
                     colision != null && colision.reserved != true -> "Unificar en «${colision.name}»"
-                    else -> "Renombrar"
+                    else -> "Guardar"
                 },
                 habilitado = puedeGuardar,
                 onClick = { onConfirmar(colision?.name ?: limpio, colision != null) },

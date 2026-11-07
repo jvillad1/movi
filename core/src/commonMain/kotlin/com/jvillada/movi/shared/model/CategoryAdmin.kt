@@ -138,6 +138,12 @@ data class CategoryUsage(
     val budgetLimit: Long = 0,
     /** ¿Cuántas reglas recurrentes llevan este nombre? */
     val recurringRules: Int = 0,
+    /**
+     * Vuelta 138: si esta categoría es una del catálogo **renombrada** por el dueño («Hogar», que era
+     * «Vivienda»), el nombre de Movi que tenía. La hoja dice «Antes «Vivienda», de Movi» y ofrece
+     * volver. `null` en todas las demás; un APK viejo la ignora.
+     */
+    val nombreDeMovi: String? = null,
 ) {
     /** ¿Tiene algo detrás — movimientos, presupuesto o recurrente? */
     val enUso: Boolean get() = movements > 0 || otherCurrencyMovements > 0 || budgets > 0 || recurringRules > 0
@@ -167,6 +173,12 @@ data class CategoryPref(
     val icono: String? = null,
     /** Color elegido a mano (clave de texto, p. ej. `"naranja"`). Misma regla que [icono]. */
     val color: String? = null,
+    /**
+     * Vuelta 138: si esta es una categoría del catálogo que el dueño renombró o unificó en otra, el
+     * nombre que tiene ahora («Vivienda» → «Hogar»). Todo lo que propone un nombre del catálogo lo
+     * pasa por [nombreVigente] con estas filas ([aliasDeLasPreferencias]).
+     */
+    val renombradaA: String? = null,
 )
 
 /**
@@ -186,23 +198,43 @@ fun effectiveCategoryTypes(
     name: String,
     pinnedType: String?,
     usedTypes: Set<TransactionType> = emptySet(),
+    /**
+     * Vuelta 138: si [name] es una del catálogo renombrada por el dueño («Hogar», que era «Vivienda»),
+     * ese nombre del catálogo. Sin tipo fijado, «Automático» suma el tipo del catálogo de ese nombre a
+     * lo usado: «Hogar» sin uso es de gasto, como «Vivienda», sin que nadie lo haya fijado.
+     */
+    nombreDeMovi: String? = null,
 ): Set<TransactionType> {
     val ambos = setOf(TransactionType.EXPENSE, TransactionType.INCOME)
     if (pinnedType != null) {
         if (pinnedType == CATEGORY_TYPE_BOTH) return ambos
         return setOfNotNull(runCatching { TransactionType.valueOf(pinnedType) }.getOrNull())
     }
+    fun tiposDe(c: Category): Set<TransactionType> =
+        if (c.type == CATEGORY_TYPE_BOTH) ambos else setOfNotNull(runCatching { TransactionType.valueOf(c.type) }.getOrNull())
     val delCatalogo = PREDEFINED_CATEGORIES.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }
-    if (delCatalogo != null) {
-        if (delCatalogo.type == CATEGORY_TYPE_BOTH) return ambos
-        return setOfNotNull(runCatching { TransactionType.valueOf(delCatalogo.type) }.getOrNull())
-    }
+    if (delCatalogo != null) return tiposDe(delCatalogo)
+    val deMovi = nombreDeMovi?.let { n -> PREDEFINED_CATEGORIES.firstOrNull { it.name.equals(n.trim(), ignoreCase = true) } }
+    if (deMovi != null) return tiposDe(deMovi) + usedTypes
     return usedTypes
 }
 
-/** Renombrar: la misma categoría con otro nombre. El destino **no** puede existir ya. */
+/**
+ * Renombrar: la misma categoría con otro nombre. El destino **no** puede existir ya (salvo volver una
+ * del catálogo a su nombre de Movi, ver `CategoryRoutes`).
+ *
+ * Vuelta 138 · [icono] y [color]: la apariencia **ya resuelta** que la app tenía a la vista, mandada
+ * cuando el dueño no había elegido una. Sin esto, el ícono que Movi adivina por el nombre
+ * (`aparienciaDe`) cambiaría al cambiar el nombre: «Vivienda» → «Hogar» perdería la casa. El server
+ * los guarda en el destino solo si no tiene propios. Sin las claves (un APK viejo), como antes.
+ */
 @Serializable
-data class RenameCategoryRequest(val from: String, val to: String)
+data class RenameCategoryRequest(
+    val from: String,
+    val to: String,
+    val icono: String? = null,
+    val color: String? = null,
+)
 
 /** Unificar: todo lo de [from] pasa a llamarse [into], que normalmente ya existe. */
 @Serializable
@@ -269,6 +301,31 @@ fun nombreSostieneReglasDePlata(name: String): Boolean =
     esCategoriaDeCuota(name) || esCategoriaDelDesembolso(name)
 
 /**
+ * Vuelta 138 · **«Otros» es donde Movi pone lo que no entendió** (`SIN_CATEGORIA` del parser de avisos,
+ * el «Otros» de respaldo del extracto). De ese nombre dependen [categoriaEntendida] —«Otros» nunca se
+ * confirma de un toque— y la memoria, que no lo aprende ([CATEGORIAS_QUE_NO_SE_APRENDEN]). Renombrarla o
+ * unificarla en otra convertiría cada «no supe» en una categoría de verdad: el aviso quedaría confirmable
+ * sin mirar y la memoria empezaría a aprenderla. No se renombra ni se unifica en otra (como origen).
+ *
+ * Solo «Otros»: «Otros ingresos» no cumple ese papel (los ingresos que Movi no entiende salen
+ * «Transferencia»; el extracto la propone como una más del catálogo, que se revisa fila por fila).
+ */
+fun esLaCategoriaDeLoQueMoviNoEntendio(name: String): Boolean =
+    name.isNotBlank() && categoriaQueNoDiceNada(name)
+
+/** Por qué «Otros» no se renombra ni se unifica en otra. Ver [esLaCategoriaDeLoQueMoviNoEntendio]. */
+fun categoriaDeLoQueMoviNoEntendioMensaje(name: String): String =
+    "«$name» es donde Movi pone lo que no entendió: un aviso en «$name» siempre te pide elegir la " +
+        "categoría. No se puede renombrar ni unificar en otra; si no la usas, escóndela."
+
+/**
+ * Vuelta 138 · renombrar hacia un nombre del catálogo que el dueño ya retiró («Vivienda», renombrada a
+ * «Hogar»): no es un nombre libre, es «Hogar» con otro nombre.
+ */
+fun categoriaRetiradaMensaje(retirada: String, vigente: String): String =
+    "«$retirada» ahora se llama «$vigente». Si quieres juntarlas, usa Unificar en «$vigente»."
+
+/**
  * ¿Este nombre es [DESEMBOLSO_CATEGORY]? Sin distinguir mayúsculas ni tildes (la misma normalización
  * con la que la app busca): todas las guardas de esta categoría —crear, recategorizar, renombrar,
  * unificar, importar un extracto— preguntan por acá, para que ninguna deje pasar un nombre que otra
@@ -293,11 +350,6 @@ fun categoriaQueSostieneReglasMensaje(name: String): String =
         "«$name» es la categoría de las cuotas de tus créditos, y de su nombre exacto dependen las " +
             "cifras de tu mes. No se puede renombrar ni unificar en otra."
     }
-
-const val CATEGORY_CATALOG_RENAME_BLOCKED: String =
-    "Las categorías del catálogo de Movi no se renombran: el catálogo es el mismo para todos y " +
-        "volvería a sugerirte el nombre viejo. Si quieres juntarla con otra, únela; si no la " +
-        "usas, escóndela."
 
 const val CATEGORY_NAME_REQUIRED: String = "Falta el nombre de la categoría."
 

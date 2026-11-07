@@ -233,7 +233,7 @@ open class NoOpRepository(
     override suspend fun deleteBudget(category: String) {}
     override suspend fun renameBudget(category: String, newCategory: String) = Budget(newCategory, 0)
     override suspend fun getCategories() = emptyList<com.jvillada.movi.shared.model.CategoryUsage>()
-    override suspend fun renameCategory(from: String, to: String) =
+    override suspend fun renameCategory(from: String, to: String, icono: String?, color: String?) =
         com.jvillada.movi.shared.model.CategoryRewriteResult(name = to)
     override suspend fun mergeCategory(from: String, into: String) =
         com.jvillada.movi.shared.model.CategoryRewriteResult(name = into)

@@ -344,6 +344,27 @@ internal fun colorPorHash(normalizado: String): String {
     return COLORES_DEL_HASH[(h % COLORES_DEL_HASH.size.toUInt()).toInt()]
 }
 
+/**
+ * Vuelta 138 · **la apariencia que viaja al renombrar** [categoria] (`RenameCategoryRequest.icono` /
+ * `color`), o `null` si no hace falta. Viaja la que se ve hoy cuando el dueño no eligió una y Movi la
+ * reconoció por algo que el nombre nuevo puede perder: una del catálogo, una que lo fue
+ * ([CategoryUsage.nombreDeMovi]) o un nombre que una regla reconoce («Uber viajes» → bus). Un nombre que
+ * ninguna regla reconoce tiene el ícono de respaldo: corregirle el tipeo («Trasnporte» → «Transporte»)
+ * no fija ese respaldo, y el nombre nuevo se ve como lo que es.
+ */
+fun aparienciaQueViajaAlRenombrar(categoria: com.jvillada.movi.shared.model.CategoryUsage): AparienciaDeCategoria? {
+    if (categoria.icono != null && categoria.color != null) return null
+    val reconocida = categoria.scope != com.jvillada.movi.shared.model.CategoryScope.CUSTOM ||
+        categoria.nombreDeMovi != null ||
+        !esDeRespaldo(normalizarParaBuscar(categoria.name))
+    if (!reconocida) return null
+    return aparienciaDe(categoria.name, CategoryPref(icono = categoria.icono, color = categoria.color))
+}
+
+/** ¿Ninguna regla reconoce este nombre (normalizado)? Entonces su apariencia es la de respaldo. */
+private fun esDeRespaldo(normalizado: String): Boolean =
+    POR_NOMBRE[normalizado] == null && porPalabraClave(normalizado) == null
+
 private fun aparienciaPorReglas(normalizado: String): AparienciaDeCategoria =
     POR_NOMBRE[normalizado]
         ?: porPalabraClave(normalizado)

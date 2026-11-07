@@ -823,10 +823,10 @@ class WalletRepositoryImpl(
     // Mismo idioma que renameBudget: 409 (el nombre ya existe) y 422 (reservada / del catálogo)
     // traen su propio texto del server, y ese texto es LO QUE LA PANTALLA MUESTRA — deserializar
     // a ciegas lo perdería y dejaría al dueño con un error mudo.
-    override suspend fun renameCategory(from: String, to: String): CategoryRewriteResult {
+    override suspend fun renameCategory(from: String, to: String, icono: String?, color: String?): CategoryRewriteResult {
         val response = client.post("$baseUrl/api/categories/rename") {
             contentType(ContentType.Application.Json)
-            setBody(RenameCategoryRequest(from = from, to = to))
+            setBody(RenameCategoryRequest(from = from, to = to, icono = icono, color = color))
         }
         if (!response.status.isSuccess()) {
             throw ApiException(response.status.value, runCatching { response.bodyAsText() }.getOrNull())
