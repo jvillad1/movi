@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,6 +86,7 @@ import com.jvillada.movi.shared.model.nombreDelRango
 import com.jvillada.movi.shared.model.periodoQueVaEmpezando
 import com.jvillada.movi.shared.model.periodosDelRango
 import com.jvillada.movi.shared.model.pieDeLasFlechasDelRango
+import com.jvillada.movi.shared.model.pieSinFlechasDelPeriodo
 import com.jvillada.movi.shared.model.textoDelHueco
 import com.jvillada.movi.shared.model.textoDelPeriodoQueVaEmpezando
 import com.jvillada.movi.ui.components.LocalAtajosDeAgregar
@@ -213,21 +215,23 @@ fun EnQueSeVaScreen(
         if (movimientos == null || ultimo == null || ajustes == null) null
         else analisisDelRango(movimientos, ultimo, rango, ajustes, hoy, tipos)
     }
-    // El período en curso solo, para el desglose y «va empezando» (lo mismo que se ve en «Este período»).
-    val delPeriodoEnCurso = remember(movimientos, periodoDeHoy, ajustes, hoy, tipos) {
-        if (movimientos == null || periodoDeHoy == null || ajustes == null) null
-        else analisisDelPeriodo(movimientos, periodoDeHoy, ajustes, hoy, tipos)
+    // El período que se ve con «Este período» (el en curso, o uno pasado con ‹), para saber si su vista
+    // tiene el renglón del desglose.
+    val delPeriodoElegido = remember(movimientos, p, ajustes, hoy, tipos) {
+        if (movimientos == null || p == null || ajustes == null) null
+        else analisisDelPeriodo(movimientos, p, ajustes, hoy, tipos)
     }
     val gastoVariable = resumen.valor?.gastoVariablePorDia
     val desglose = remember(analisis, gastoVariable, hoy) {
         analisis?.takeUnless { it.esRango }?.let { desgloseDelAnalisis(it, gastoVariable, hoy) }
     }
     // Vuelta 140: en un rango, el renglón del desglose (que es solo del período en curso) dice cuántos
-    // gastos y categorías junta el rango. Se pinta solo si el período en curso tiene desglose: así cambiar
-    // de rango no corre el gráfico (el renglón está o no está en los dos).
-    val renglonDelRango = remember(analisis, delPeriodoEnCurso, gastoVariable, hoy) {
-        if (analisis == null || !analisis.esRango || delPeriodoEnCurso == null) null
-        else if (desgloseDelAnalisis(delPeriodoEnCurso, gastoVariable, hoy) == null) null
+    // gastos y categorías junta el rango. Se pinta solo si la vista de período que se deja —la del
+    // período elegido con ‹ ›, que puede ser uno pasado sin desglose— lo tenía: así cambiar de rango no
+    // corre el gráfico (el renglón está o no está en los dos).
+    val renglonDelRango = remember(analisis, delPeriodoElegido, gastoVariable, hoy) {
+        if (analisis == null || !analisis.esRango || delPeriodoElegido == null) null
+        else if (desgloseDelAnalisis(delPeriodoElegido, gastoVariable, hoy) == null) null
         else textoDelRenglonDelRango(analisis)
     }
     val laVista = VistaDelAnalisis.entries[vista]
@@ -306,6 +310,7 @@ fun EnQueSeVaScreen(
                                 Spacer(Modifier.height(Medida.dentroDeSeccion))
                                 TarjetaDelGrafico(
                                     analisis = analisis,
+                                    rango = rango,
                                     acumulado = acumulado,
                                     onCambiarModo = { acumulado = it },
                                     onTocarTramo = { tramo -> abrirElTramo(tramo, analisis) },
@@ -378,10 +383,16 @@ fun EnQueSeVaScreen(
                                     }
                                 }
                             }
-                            if (analisis.conComparacion || analisis.esRango) item {
+                            // Vuelta 140: sin flechas porque el período pasado es un hueco, el pie dice por qué.
+                            val pie = when {
+                                analisis.esRango -> pieDeLasFlechasDelRango(analisis, rango)
+                                analisis.conComparacion -> pieDeLasFlechas(analisis)
+                                else -> pieSinFlechasDelPeriodo(analisis)
+                            }
+                            if (pie != null) item {
                                 Spacer(Modifier.height(Espacio.xs))
                                 Text(
-                                    if (analisis.esRango) pieDeLasFlechasDelRango(analisis, rango) else pieDeLasFlechas(analisis),
+                                    pie,
                                     style = Movi.textos.apoyo,
                                     color = Movi.colores.textoMedio,
                                 )
@@ -434,7 +445,7 @@ private fun SelectorDelPeriodo(
         if (puedeRetroceder) {
             BotonDeIcono(Icons.Rounded.KeyboardArrowLeft, "Período anterior", onClick = onAnterior)
         } else {
-            FlechaApagada(Icons.Rounded.KeyboardArrowLeft, "Período anterior")
+            FlechaApagada(Icons.Rounded.KeyboardArrowLeft, "Período anterior: $NO_DISPONIBLE_EN_UN_RANGO")
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
             // Vuelta 75: un solo nombre del período, el de toda la app. Vuelta 140: o el del rango.
@@ -448,18 +459,31 @@ private fun SelectorDelPeriodo(
         if (puedeAvanzar) {
             BotonDeIcono(Icons.Rounded.KeyboardArrowRight, "Período siguiente", onClick = onSiguiente)
         } else {
-            FlechaApagada(Icons.Rounded.KeyboardArrowRight, "Período siguiente")
+            FlechaApagada(
+                Icons.Rounded.KeyboardArrowRight,
+                if (puedeRetroceder) "Período siguiente: todavía no llega" else "Período siguiente: $NO_DISPONIBLE_EN_UN_RANGO",
+            )
         }
     }
 }
 
+/** Lo que dice el lector de pantalla de una flecha apagada en un rango (vuelta 140). */
+const val NO_DISPONIBLE_EN_UN_RANGO = "no disponible en un rango"
+
 /** Una flecha que no se puede tocar, en el mismo lugar y del mismo tamaño que la que sí. */
 @Composable
 private fun FlechaApagada(icono: androidx.compose.ui.graphics.vector.ImageVector, descripcion: String) {
-    Box(Modifier.size(Medida.objetivoTactil), contentAlignment = Alignment.Center) {
+    // Se anuncia apagada (no es solo gris): el lector dice por qué no se puede tocar.
+    Box(
+        Modifier.size(Medida.objetivoTactil).semantics(mergeDescendants = true) {
+            contentDescription = descripcion
+            disabled()
+        },
+        contentAlignment = Alignment.Center,
+    ) {
         Icon(
             icono,
-            contentDescription = descripcion,
+            contentDescription = null,
             tint = Movi.colores.textoApagado,
             modifier = Modifier.size(Icono.l),
         )
@@ -504,6 +528,7 @@ internal fun fraseDeLaComparacion(analisis: AnalisisDelPeriodo, rango: RangoDelA
     val elPasado = if (analisis.esRango) "los ${rango.rotulo} anteriores" else "el período pasado"
     val sinComparar = if (analisis.esRango) "Todavía no están completos los ${rango.rotulo} anteriores para comparar."
     else "Todavía no hay un período pasado completo para comparar."
+    if (analisis.anteriorConHueco && !analisis.esRango) return "El período pasado no tiene movimientos: no hay con qué comparar."
     val anterior = analisis.anteriorAMismaAltura ?: return sinComparar
     val flecha = contraElAnterior(analisis.total, anterior) ?: return sinComparar
     val cifra = formatMoneyCompact(anterior)
@@ -647,6 +672,7 @@ internal fun leyendaSinElegir(analisis: AnalisisDelPeriodo): String {
 @Composable
 private fun TarjetaDelGrafico(
     analisis: AnalisisDelPeriodo,
+    rango: RangoDelAnalisis,
     acumulado: Boolean,
     onCambiarModo: (Boolean) -> Unit,
     onTocarTramo: (TramoDelAnalisis) -> Unit,
@@ -672,6 +698,7 @@ private fun TarjetaDelGrafico(
         Spacer(Modifier.height(Espacio.xs))
         GraficoDelAnalisis(
             analisis = analisis,
+            rango = rango,
             acumulado = acumulado,
             elegido = elegido,
             alElegir = { elegido = it },
@@ -688,6 +715,7 @@ private fun TarjetaDelGrafico(
 @Composable
 private fun GraficoDelAnalisis(
     analisis: AnalisisDelPeriodo,
+    rango: RangoDelAnalisis,
     acumulado: Boolean,
     elegido: Int?,
     alElegir: (Int?) -> Unit,
@@ -705,9 +733,7 @@ private fun GraficoDelAnalisis(
     val tramos = analisis.tramos
     val barras = tramos.map { if (it.porVenir) null else if (acumulado) it.acumulado else it.gasto }
     val anteriores = tramos.map { if (acumulado) it.acumuladoAnterior else it.anterior }
-    val descripcion = "Gráfico del gasto ${textoDeLosTramos(analisis).lowercase()}" +
-        (if (acumulado) ", acumulado" else "") + ": ${formatMoneyCompact(analisis.total)} en ${if (analisis.esRango) "el rango" else "el período"}" +
-        (analisis.anteriorAMismaAltura?.let { ", el período pasado a esta altura ${formatMoneyCompact(it)}" } ?: "")
+    val descripcion = descripcionDelGrafico(analisis, rango, acumulado)
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
@@ -764,6 +790,18 @@ private fun GraficoDelAnalisis(
         }
     }
 }
+
+/**
+ * Lo que dice el lector de pantalla del gráfico: cómo van las barras, el total y, con comparación, contra
+ * qué se compara —en un rango, los mismos tantos meses de antes, no «el período pasado» (vuelta 140)—.
+ */
+internal fun descripcionDelGrafico(analisis: AnalisisDelPeriodo, rango: RangoDelAnalisis, acumulado: Boolean): String =
+    "Gráfico del gasto ${textoDeLosTramos(analisis).lowercase()}" +
+        (if (acumulado) ", acumulado" else "") + ": ${formatMoneyCompact(analisis.total)} en ${if (analisis.esRango) "el rango" else "el período"}" +
+        (analisis.anteriorAMismaAltura?.let {
+            val pasado = if (analisis.esRango) "los ${rango.rotulo} anteriores" else "el período pasado"
+            ", $pasado a esta altura ${formatMoneyCompact(it)}"
+        } ?: "")
 
 // ── La lista ────────────────────────────────────────────────────────────────
 
@@ -832,3 +870,4 @@ private fun EsqueletoDelAnalisis() {
         Spacer(Modifier.height(ALTO_DEL_GRAFICO))
     }
 }
+

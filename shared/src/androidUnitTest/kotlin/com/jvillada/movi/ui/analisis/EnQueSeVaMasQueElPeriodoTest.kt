@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -158,6 +159,11 @@ class EnQueSeVaMasQueElPeriodoTest {
         )
         // En el período no hay hueco que decir.
         assertTrue(!hay(TAG_HUECO_EN_LA_HISTORIA))
+        // Revisión de la vuelta 140: octubre (el período pasado) está vacío. Antes decía «$4,7M más que a
+        // esta altura del período pasado ($0)» con flechas de subida en todo.
+        assertTrue(composeRule.onAllNodesWithText("El período pasado no tiene movimientos: no hay con qué comparar.", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText("Sin flechas: el período pasado (30 sep – 29 oct) no tiene movimientos.", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(composeRule.onAllNodesWithText("más que a esta altura", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
 
         tocar("Ver 3 meses", substring = true)
         assertEquals(RangoDelAnalisis.TRES_MESES, RangoDeEnQueSeVa.elegido)
@@ -222,6 +228,33 @@ class EnQueSeVaMasQueElPeriodoTest {
         tocar("3 meses")
         // Del 28-ago: 10 gastos de la historia (las seis categorías) y los 6 del período (4 categorías).
         assertEquals("16 gastos en 10 categorías", textoDe(TAG_DESGLOSE_DEL_ANALISIS), "en el rango, el renglón dice cuántos gastos")
+    }
+
+    /**
+     * Revisión de la vuelta 140: mirando un período pasado (sin desglose, que es solo del en curso), elegir
+     * «3 meses» hacía aparecer el renglón del rango —decidido con el período en curso— y el gráfico bajaba
+     * unos 20 dp.
+     */
+    @Test
+    fun `desde un periodo pasado cambiar el rango tampoco corre el grafico`() {
+        montar(DashboardSummary(scope = Scope.SELF, gastoVariablePorDia = mapOf("2026-11-02" to 300_000L, "2026-11-04" to 90_000L)))
+        composeRule.waitUntil(timeoutMillis = 5_000) { hay(TAG_DESGLOSE_DEL_ANALISIS) }
+        composeRule.onNode(hasClickAction() and hasContentDescription("Período anterior"))
+            .performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        assertTrue(!hay(TAG_DESGLOSE_DEL_ANALISIS), "un período pasado no tiene desglose")
+        assertNadaSalta()
+    }
+
+    /** Revisión de la vuelta 140: en un rango las flechas no solo se ven grises, se anuncian apagadas. */
+    @Test
+    fun `en un rango las flechas se anuncian apagadas y dicen por que`() {
+        montar()
+        tocar("3 meses")
+        listOf("Período anterior: $NO_DISPONIBLE_EN_UN_RANGO", "Período siguiente: $NO_DISPONIBLE_EN_UN_RANGO").forEach { d ->
+            val nodo = composeRule.onNode(hasContentDescription(d)).fetchSemanticsNode()
+            assertTrue(nodo.config.contains(SemanticsProperties.Disabled), "$d: se anuncia desactivada")
+        }
     }
 
     private fun assertNadaSalta() {

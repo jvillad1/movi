@@ -6,6 +6,7 @@ import com.jvillada.movi.shared.model.RangoDelAnalisis
 import com.jvillada.movi.shared.model.SiElCorteCaeEnFinDeSemana
 import com.jvillada.movi.shared.model.periodoDeLaFecha
 import com.jvillada.movi.ui.Screen
+import kotlinx.datetime.atStartOfDayIn
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -26,9 +27,10 @@ class RangoDeEnQueSeVaTest {
         assertEquals(RangoDelAnalisis.PERIODO, rangoAlAbrir(Screen.EnQueSeVa("2026-10"), Screen.Transactions(), RangoDelAnalisis.TRES_MESES))
     }
 
+    /** Revisión de la vuelta 140: «Mira en qué se fue ›» de Pagos habla de este período; abría en el rango recordado. */
     @Test
-    fun `desde otra pantalla se respeta lo elegido en la sesion, y otra pantalla no lo toca`() {
-        assertEquals(RangoDelAnalisis.TRES_MESES, rangoAlAbrir(Screen.EnQueSeVa(), Screen.Plan(), RangoDelAnalisis.TRES_MESES))
+    fun `desde Pagos tambien arranca en Este periodo, y apilar otra pantalla no lo toca`() {
+        assertEquals(RangoDelAnalisis.PERIODO, rangoAlAbrir(Screen.EnQueSeVa(), Screen.Plan(), RangoDelAnalisis.TRES_MESES))
         assertEquals(RangoDelAnalisis.DOCE_MESES, rangoAlAbrir(Screen.Transactions(), Screen.EnQueSeVa(), RangoDelAnalisis.DOCE_MESES))
     }
 
@@ -39,5 +41,34 @@ class RangoDeEnQueSeVaTest {
         assertTrue(FiltroDeMovimientos("Comida", categoria = "Comida", desde = "2026-08-28", hasta = "2026-11-29").cruzaElPeriodo(enCurso, caro))
         assertFalse(FiltroDeMovimientos("2 nov", desde = "2026-11-02", hasta = "2026-11-02").cruzaElPeriodo(enCurso, caro))
         assertFalse(FiltroDeMovimientos("Comida", categoria = "Comida").cruzaElPeriodo(enCurso, caro))
+    }
+}
+
+/**
+ * Revisión de la vuelta 140 · lo que dice el lector de pantalla del gráfico de un rango: contra los 3
+ * meses anteriores, no contra «el período pasado».
+ */
+class LaDescripcionDelGraficoDeUnRangoTest {
+    @Test
+    fun `en un rango la descripcion habla del rango anterior`() {
+        val ajustes = PeriodSettings(cutoffDay = 1)
+        val hoy = kotlinx.datetime.LocalDate(2026, 10, 15)
+        fun mov(dia: String, monto: Long) = com.jvillada.movi.shared.model.FinancialEvent(
+            id = dia, accountId = "a", type = com.jvillada.movi.shared.model.TransactionType.EXPENSE, amount = monto,
+            category = "Comida", description = "x",
+            timestamp = kotlinx.datetime.LocalDate.parse(dia).atStartOfDayIn(com.jvillada.movi.shared.time.AppTimeZone.zone)
+                .toEpochMilliseconds() + 12 * 3_600_000L,
+            reconciliationStatus = com.jvillada.movi.shared.model.ReconciliationStatus.RECONCILED,
+        )
+        // Un movimiento en cada mes desde abril: los 3 anteriores a ago–oct (may–jul) están cubiertos.
+        val eventos = listOf("2026-04-01", "2026-05-10", "2026-06-10", "2026-07-10", "2026-08-10", "2026-09-10", "2026-10-02").map { mov(it, 10_000L) }
+        val rango = com.jvillada.movi.shared.model.analisisDelRango(
+            eventos, com.jvillada.movi.shared.model.PeriodoFinanciero(2026, 10), RangoDelAnalisis.TRES_MESES, ajustes, hoy,
+        )
+        val d = descripcionDelGrafico(rango, RangoDelAnalisis.TRES_MESES, acumulado = false)
+        assertTrue("los 3 meses anteriores a esta altura" in d, d)
+        assertFalse("período pasado" in d, d)
+        val periodo = com.jvillada.movi.shared.model.analisisDelPeriodo(eventos, com.jvillada.movi.shared.model.PeriodoFinanciero(2026, 10), ajustes, hoy)
+        assertTrue("el período pasado a esta altura" in descripcionDelGrafico(periodo, RangoDelAnalisis.PERIODO, acumulado = false))
     }
 }

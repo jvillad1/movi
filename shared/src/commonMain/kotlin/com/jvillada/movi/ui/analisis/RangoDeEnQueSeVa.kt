@@ -14,10 +14,11 @@ import com.jvillada.movi.ui.Screen
  * guarda con su clave (`Screen.EnQueSeVa()`) durante toda la sesión, y entonces el «Ver todas» del
  * Inicio la abriría en el rango de la última vez.
  *
- * **Quién arranca en «Este período»** ([alAbrir], que llama la cáscara al apilar una pantalla): el
- * Inicio (su «En qué se va» habla del período en curso) y quien pide un período por nombre (Actividad
- * mirando un período). Desde otro lado (Pagos) se respeta lo elegido. Volver a la pantalla no pasa por
- * acá: no se apila nada.
+ * **Abrirla siempre arranca en «Este período»** ([alAbrir], que llama la cáscara al apilar una
+ * pantalla): todas sus entradas hablan del período —el Inicio y su «Ver todas», la alerta «Mira en qué
+ * se fue ›» de Pagos (revisión de la vuelta 140: abría en el rango recordado), Actividad pidiendo un
+ * período—. Lo que se recuerda en la sesión es la vuelta: ir a Movimientos desde una fila y volver no
+ * apila nada, así que no pasa por acá y la pantalla sigue en «3 meses».
  *
  * Lo limpia `SessionManager.clear` (es una preferencia de quien se va).
  */
@@ -35,11 +36,10 @@ object RangoDeEnQueSeVa {
 }
 
 /**
- * **El rango con que se abre «En qué se va»** al apilar [destino] desde [origen]: «Este período» si se
- * abre desde el Inicio o pidiendo un período; si no, [recordado]. Cualquier otra pantalla no lo toca.
+ * **El rango con que se abre «En qué se va»** al apilar [destino] desde [origen]: «Este período»,
+ * venga de donde venga (ver el KDoc de [RangoDeEnQueSeVa]). Apilar cualquier otra pantalla no lo toca.
+ * [origen] queda en la firma para quien quiera distinguir una entrada en el futuro.
  */
-fun rangoAlAbrir(destino: Screen, origen: Screen?, recordado: RangoDelAnalisis): RangoDelAnalisis = when {
-    destino !is Screen.EnQueSeVa -> recordado
-    origen == Screen.Dashboard || destino.periodo != null -> RangoDelAnalisis.PERIODO
-    else -> recordado
-}
+@Suppress("UNUSED_PARAMETER")
+fun rangoAlAbrir(destino: Screen, origen: Screen?, recordado: RangoDelAnalisis): RangoDelAnalisis =
+    if (destino is Screen.EnQueSeVa) RangoDelAnalisis.PERIODO else recordado
