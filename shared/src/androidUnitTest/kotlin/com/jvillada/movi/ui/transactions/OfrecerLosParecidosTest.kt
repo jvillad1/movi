@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -46,7 +48,7 @@ import kotlin.test.assertNull
  * cambiarle cifras a sus espaldas.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(qualifiers = "w411dp-h731dp-xhdpi")
+@Config(qualifiers = "w390dp-h844dp-xhdpi")
 class OfrecerLosParecidosTest {
 
     @get:Rule val composeRule = createComposeRule()
@@ -67,10 +69,12 @@ class OfrecerLosParecidosTest {
     private fun parecido(id: String, categoria: String = "Otros") =
         gasto.copy(id = id, category = categoria, timestamp = gasto.timestamp - 86_400_000L)
 
+    private fun ingreso(id: String) = parecido(id).copy(type = TransactionType.INCOME, description = "Transferencia recibida")
+
     @After fun limpiar() { Repositories.sustitutoDePrueba = null }
 
     /** El repositorio de prueba anota qué lote se pidió, o `null` si no se pidió ninguno. */
-    private class RepoConParecidos(private val parecidos: List<FinancialEvent>) : RepositorioDePrueba() {
+    open class RepoConParecidos(private val parecidos: List<FinancialEvent>) : RepositorioDePrueba() {
         var lotePedido: Pair<List<String>, String>? = null
         val categoriasPedidas = mutableListOf<String>()
         override suspend fun getParecidos(id: String): List<FinancialEvent> = parecidos
@@ -139,7 +143,7 @@ class OfrecerLosParecidosTest {
         montar { cambiado = it }
 
         elegir("Comida")
-        tocar("Sí, ponlos en «Comida»")
+        tocar("Poner 2 en «Comida»")
 
         assertEquals(listOf("ev-2", "ev-3") to "Comida", repo.lotePedido)
         assertNotNull(cambiado, "después del lote la hoja se cierra con el movimiento ya cambiado")
@@ -207,5 +211,131 @@ class OfrecerLosParecidosTest {
         assertEquals(listOf("Comida"), repo.categoriasPedidas)
         assertEquals("Comida", cambiado?.category)
         composeRule.onAllNodesWithText("Usar «", substring = true, useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    // ---- Vuelta 139 · elegir cuáles de los parecidos ----
+
+    private fun casillas() = composeRule.onAllNodes(
+        androidx.compose.ui.test.isToggleable(), useUnmergedTree = true,
+    )
+
+    @Test
+    fun desmarcarUnaFilaMandaUnoMenos() {
+        val repo = RepoConParecidos(listOf(parecido("ev-2"), parecido("ev-3"), parecido("ev-4")))
+        Repositories.sustitutoDePrueba = repo
+        montar()
+
+        elegir("Comida")
+        composeRule.onNodeWithText("Poner 3 en «Comida»", useUnmergedTree = true).assertIsDisplayed()
+        casillas()[1].performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Poner 2 en «Comida»", useUnmergedTree = true).assertIsDisplayed()
+        tocar("Poner 2 en «Comida»")
+
+        assertEquals(listOf("ev-2", "ev-4") to "Comida", repo.lotePedido)
+    }
+
+    @Test
+    fun ningunoDejaElBotonApagadoYPideMarcar() {
+        val repo = RepoConParecidos(listOf(parecido("ev-2"), parecido("ev-3")))
+        Repositories.sustitutoDePrueba = repo
+        montar()
+
+        elegir("Comida")
+        tocar("Ninguno")
+
+        composeRule.onNodeWithText("Marca los que quieras cambiar", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onAllNodes(hasClickAction() and hasAnyDescendant(hasText("Marca los que quieras cambiar")), useUnmergedTree = true)
+            .onLast().assertIsNotEnabled()
+        assertNull(repo.lotePedido)
+    }
+
+    @Test
+    fun losDelOtroTipoNacenSinMarcar() {
+        val repo = RepoConParecidos(listOf(parecido("ev-2"), ingreso("ev-3")))
+        Repositories.sustitutoDePrueba = repo
+        montar()
+
+        elegir("Comida")
+        composeRule.onNodeWithText("Salieron · 1", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Entraron · 1", useUnmergedTree = true).assertIsDisplayed()
+        tocar("Poner 1 en «Comida»")
+
+        assertEquals(listOf("ev-2") to "Comida", repo.lotePedido)
+    }
+
+    @Test
+    fun conCatorceFilasElBotonPrincipalSeVeSinDesplazar() {
+        Repositories.sustitutoDePrueba = RepoConParecidos((1..14).map { parecido("ev-$it") })
+        montar()
+
+        elegir("Comida")
+
+        composeRule.onNodeWithText("Poner 14 en «Comida»", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("No, solo este", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    /** El caso de la foto: 3 parecidos, 2 a una categoría y el que queda a otra, en dos llamadas. */
+    @Test
+    fun seReparteEnDosLotesACategoriasDistintas() {
+        val llamadas = mutableListOf<Pair<List<String>, String>>()
+        val repo = object : RepoConParecidos(listOf(parecido("ev-2"), parecido("ev-3"), parecido("ev-4"))) {
+            override suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse {
+                llamadas += ids to category
+                return RecategorizarEnLoteResponse(cambiados = ids, omitidos = 0)
+            }
+        }
+        Repositories.sustitutoDePrueba = repo
+        var avisos = 0
+        montar { avisos++ }
+
+        elegir("Comida")
+        // Se desmarca el tercero y los dos primeros van a «Comida».
+        casillas()[2].performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        tocar("Poner 2 en «Comida»")
+
+        composeRule.onNodeWithText("Pasaste 2 a «Comida»", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Quedan 1 de «Mora Soccer»", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Dejar el resto así", useUnmergedTree = true).assertIsDisplayed()
+        assertEquals(1, avisos, "tras cada lote la lista de atrás se entera")
+
+        tocar("Ponerlos en: Comida")
+        elegir("Transporte")
+        tocar("Poner 1 en «Transporte»")
+
+        assertEquals(listOf(listOf("ev-2", "ev-3") to "Comida", listOf("ev-4") to "Transporte"), llamadas)
+        assertEquals(2, avisos)
+        composeRule.onAllNodesWithText("¿Y los parecidos?", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    /** El server omite sin aviso lo que no se recategoriza: eso no cuenta como pasado y se dice. */
+    @Test
+    fun loQueElServerOmiteNoCuentaComoPasado() {
+        val repo = object : RepoConParecidos(listOf(parecido("ev-2"), parecido("ev-3"), parecido("ev-4"))) {
+            override suspend fun recategorizarEnLote(ids: List<String>, category: String): RecategorizarEnLoteResponse =
+                RecategorizarEnLoteResponse(cambiados = listOf("ev-2"), omitidos = 1)
+        }
+        Repositories.sustitutoDePrueba = repo
+        montar()
+
+        elegir("Comida")
+        casillas()[2].performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.waitForIdle()
+        tocar("Poner 2 en «Comida»")
+
+        composeRule.onNodeWithText("Pasaste 1 a «Comida»", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText("1 no se pudo cambiar", useUnmergedTree = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun elEnlaceDelGrupoTieneNombreParaElLector() {
+        Repositories.sustitutoDePrueba = RepoConParecidos(listOf(parecido("ev-2"), ingreso("ev-3")))
+        montar()
+
+        elegir("Comida")
+
+        composeRule.onNodeWithContentDescription("Desmarcar los que salieron", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Marcar todos los que entraron", useUnmergedTree = true).assertIsDisplayed()
     }
 }
