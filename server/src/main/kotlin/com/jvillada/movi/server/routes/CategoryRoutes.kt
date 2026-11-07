@@ -9,12 +9,12 @@ import com.jvillada.movi.server.db.VoidEvents
 import com.jvillada.movi.server.db.dbQuery
 import com.jvillada.movi.server.db.toFinancialEvent
 import com.jvillada.movi.server.balance.accountTypesFor
+import com.jvillada.movi.server.espacios.existenLasTablas
 import com.jvillada.movi.server.plugins.userId
 import com.jvillada.movi.server.sms.memoriaDe
 import com.jvillada.movi.server.time.currentPeriodWindow
 import com.jvillada.movi.server.time.cutoffDayOf
 import com.jvillada.movi.server.time.ajustesDePeriodoDe
-import com.jvillada.movi.shared.model.CATEGORY_CATALOG_RENAME_BLOCKED
 import com.jvillada.movi.shared.model.CATEGORY_COLOR_MAX_LENGTH
 import com.jvillada.movi.shared.model.CATEGORY_COLOR_TOO_LONG
 import com.jvillada.movi.shared.model.CATEGORY_ICONO_MAX_LENGTH
@@ -38,6 +38,8 @@ import com.jvillada.movi.shared.model.categoriaDestinoOcupadoMensaje
 import com.jvillada.movi.shared.model.categoriaQueSostieneReglasMensaje
 import com.jvillada.movi.shared.model.categoriaReservadaMensaje
 import com.jvillada.movi.shared.model.esCategoriaDelDesembolso
+import com.jvillada.movi.shared.model.esDelCatalogo
+import com.jvillada.movi.shared.model.tipoDelCatalogo
 import com.jvillada.movi.shared.model.nombreSostieneReglasDePlata
 import com.jvillada.movi.shared.model.isReservedCategory
 import io.ktor.http.HttpStatusCode
@@ -115,10 +117,16 @@ fun Route.categoryRoutes() {
     }
 
     /**
-     * Renombrar — el arreglo del error de tipeo. Solo para categorías **propias**: las del
-     * catálogo son una constante de código compartida por todos los usuarios, así que renombrar
-     * una dejaría los movimientos con el nombre nuevo y el catálogo sugiriendo el viejo para
-     * siempre. Para esas está unificar (que además esconde la vieja).
+     * Renombrar — el arreglo del error de tipeo, y desde la vuelta 138 también **ponerle su nombre a
+     * una del catálogo** («Vivienda» → «Hogar»).
+     *
+     * El catálogo es una constante compartida por todos los usuarios y seguiría sugiriendo el nombre
+     * viejo; por eso renombrar una del catálogo deja, además de la reescritura de siempre, la fila
+     * del nombre viejo escondida y con su nombre nuevo (`category_prefs.renombrada_a`), y todo lo
+     * que propone categorías pasa por `nombreVigente` (`:core`). Es solo de este usuario.
+     *
+     * **Volver al nombre de Movi** («Hogar» → «Vivienda», el nombre del catálogo que esta misma
+     * categoría tenía) no es una colisión: es el mismo renombrado al revés, y borra el alias.
      */
     post("/api/categories/rename") {
         val uid = call.userId()
@@ -146,8 +154,16 @@ fun Route.categoryRoutes() {
         if (esCategoriaDelDesembolso(to)) {
             return@post call.respond(HttpStatusCode.UnprocessableEntity, DESEMBOLSO_CATEGORY_NOT_MANUAL)
         }
-        if (PREDEFINED_CATEGORIES.any { it.name == from }) {
-            return@post call.respond(HttpStatusCode.UnprocessableEntity, CATEGORY_CATALOG_RENAME_BLOCKED)
+        // Vuelta 138: la apariencia que la app tenía a la vista (ver [RenameCategoryRequest]). Los
+        // mismos topes que `PUT /api/categories/prefs`: sin esto, uno más largo que la columna
+        // reventaba el INSERT con un 500.
+        val iconoPedido = body.icono?.trim()?.takeIf { it.isNotEmpty() }
+        val colorPedido = body.color?.trim()?.takeIf { it.isNotEmpty() }
+        if (iconoPedido != null && iconoPedido.length > CATEGORY_ICONO_MAX_LENGTH) {
+            return@post call.respond(HttpStatusCode.BadRequest, CATEGORY_ICONO_TOO_LONG)
+        }
+        if (colorPedido != null && colorPedido.length > CATEGORY_COLOR_MAX_LENGTH) {
+            return@post call.respond(HttpStatusCode.BadRequest, CATEGORY_COLOR_TOO_LONG)
         }
         if (from == to) {
             // No-op válido: guardar sin cambiar el nombre no es un error.
@@ -163,8 +179,18 @@ fun Route.categoryRoutes() {
             // decidirlo: juntar dos categorías con historia no es lo mismo que corregir un tipeo.
             // El cliente ya detecta esta colisión antes de llamar y ofrece unificar; esto es la
             // guarda del server, no el camino normal.
-            if (categoryExists(uid, to)) RewriteOutcome.DestinoOcupado
-            else RewriteOutcome.Ok(rewriteCategory(uid, from = from, to = to, hideSource = false))
+            val vuelveAlDeMovi = vuelveAlNombreDeMovi(uid, from = from, to = to)
+            if (!vuelveAlDeMovi && categoryExists(uid, to)) RewriteOutcome.DestinoOcupado
+            else {
+                // Volver a «Vivienda»: la fila del alias se va primero, para que la reescritura no
+                // la lea como la preferencia del destino (está escondida, y el destino no lo está).
+                if (vuelveAlDeMovi) {
+                    CategoryPrefs.deleteWhere { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq to) }
+                }
+                val result = rewriteCategory(uid, from = from, to = to, hideSource = false)
+                ponerLaAparienciaSiNoTiene(uid, to, iconoPedido, colorPedido)
+                RewriteOutcome.Ok(result)
+            }
         }
         when (outcome) {
             RewriteOutcome.DestinoOcupado ->
@@ -293,6 +319,10 @@ fun Route.categoryRoutes() {
                 colorPedido.isBlank() -> null
                 else -> colorTrim
             }
+            // Vuelta 138: el alias de una del catálogo renombrada o unificada vive mientras siga
+            // escondida. Volver a sugerirla es pedir el nombre de Movi otra vez: el alias se va.
+            val renombradaA = existente?.get(CategoryPrefs.renombradaA)?.takeIf { body.hidden }
+            val unificadaEn = existente?.get(CategoryPrefs.unificadaEn)?.takeIf { body.hidden }
             CategoryPrefs.deleteWhere { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq name) }
             // Una fila que no dice nada distinto del default no se guarda: así esta tabla solo
             // tiene lo que el dueño cambió de verdad, y "volver al default" es borrar, no marcar.
@@ -304,6 +334,8 @@ fun Route.categoryRoutes() {
                     it[pinnedType] = pinned
                     it[icono]      = iconoNuevo
                     it[color]      = colorNuevo
+                    it[CategoryPrefs.renombradaA] = renombradaA
+                    it[CategoryPrefs.unificadaEn] = unificadaEn
                 }
             }
             iconoNuevo to colorNuevo
@@ -451,8 +483,14 @@ internal fun Transaction.rewriteCategory(
     val prefDestino = CategoryPrefs.selectAll()
         .where { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq to) }
         .firstOrNull()
+    // Vuelta 138 · **el tipo viaja** al renombrar una del catálogo hacia un nombre que no lo es: el
+    // tipo de «Vivienda» lo decía el catálogo, y «Hogar» sin uso quedaría «Sin usar» (se ofrecería
+    // en los dos lados). Solo si el dueño no había fijado otro. Unificar no lo hace: el destino ya
+    // existe y tiene su propio tipo.
+    val tipoQueViaja = if (!hideSource && esDelCatalogo(from) && !esDelCatalogo(to)) tipoDelCatalogo(from) else null
     val tipoFijadoDestino = prefDestino?.get(CategoryPrefs.pinnedType)
         ?: prefOrigen?.get(CategoryPrefs.pinnedType)
+        ?: tipoQueViaja
     // Ola B: ícono y color viajan con la MISMA regla que el tipo fijado — el destino gana, y si
     // no tiene nada propio hereda lo del origen. Ambas operaciones (rename y merge) lo hacen
     // igual: a diferencia de "escondida" (que sí distingue rename de merge, ver abajo), no hay
@@ -491,16 +529,54 @@ internal fun Transaction.rewriteCategory(
     // catálogo la sigue ofreciendo al escribir (es una constante de código, la misma para todos
     // los usuarios). Una categoría propia no necesita esto — sin datos ni preferencia, deja de
     // existir sola, y guardarle una fila la dejaría en la lista para siempre.
-    if (hideSource && PREDEFINED_CATEGORIES.any { it.name == from }) {
+    //
+    // Vuelta 138: la fila escondida guarda además a dónde fue (`unificada_en`), para que lo que Movi
+    // propone por su cuenta —el parser, las palabras clave, el extracto— diga el destino y no el
+    // nombre que el dueño retiró (ver `nombreVigente` en `:core`). No cambia ninguna cifra.
+    if (hideSource && esDelCatalogo(from)) {
         CategoryPrefs.insert {
-            it[userId]     = uid
-            it[name]       = from
-            it[hidden]     = true
-            it[pinnedType] = null
-            it[icono]      = null
-            it[color]      = null
+            it[userId]      = uid
+            it[name]        = from
+            it[hidden]      = true
+            it[pinnedType]  = null
+            it[icono]       = null
+            it[color]       = null
+            it[unificadaEn] = to
         }
     }
+    // Vuelta 138 · **renombrar una del catálogo** deja la fila de su nombre viejo escondida y con el
+    // nombre nuevo (`renombrada_a`): el catálogo no la vuelve a sugerir y todo lo que propone
+    // categorías la dice con el nombre del dueño. Volver a ese nombre la borra (ver la ruta).
+    if (!hideSource && esDelCatalogo(from)) {
+        CategoryPrefs.insert {
+            it[userId]      = uid
+            it[name]        = from
+            it[hidden]      = true
+            it[pinnedType]  = null
+            it[icono]       = null
+            it[color]       = null
+            it[renombradaA] = to
+        }
+    }
+    // Y los alias que apuntaban a [from] ahora apuntan a [to]: «Vivienda» → «Hogar» y después
+    // «Hogar» → «Casa» deja «Vivienda» → «Casa». Si [to] recibió una unificación, el renombrado
+    // viejo pasa a ser una unificación (la hoja de «Casa» ya no es la de «Vivienda» con otro
+    // nombre). La fila de [to] no se apunta a sí misma.
+    if (hideSource) {
+        CategoryPrefs.update({
+            (CategoryPrefs.userId eq uid) and (CategoryPrefs.renombradaA eq from) and (CategoryPrefs.name neq to)
+        }) {
+            it[CategoryPrefs.renombradaA] = null
+            it[CategoryPrefs.unificadaEn] = to
+        }
+    } else {
+        CategoryPrefs.update({
+            (CategoryPrefs.userId eq uid) and (CategoryPrefs.renombradaA eq from) and (CategoryPrefs.name neq to)
+        }) { it[CategoryPrefs.renombradaA] = to }
+    }
+    CategoryPrefs.update({
+        (CategoryPrefs.userId eq uid) and (CategoryPrefs.unificadaEn eq from) and (CategoryPrefs.name neq to)
+    }) { it[CategoryPrefs.unificadaEn] = to }
 
     return CategoryRewriteResult(
         name = to,
@@ -525,7 +601,14 @@ internal data class PreferenciaDeCategoria(
     val pinnedType: String?,
     val icono: String?,
     val color: String?,
-)
+    /** Vuelta 138: una del catálogo renombrada, su nombre nuevo (ver `CategoryPrefs.renombradaA`). */
+    val renombradaA: String? = null,
+    /** Vuelta 138: una del catálogo unificada en otra, el destino (ver `CategoryPrefs.unificadaEn`). */
+    val unificadaEn: String? = null,
+) {
+    /** El nombre al que pasó, por renombrar o por unificar: lo que lee [aliasDeCategorias]. */
+    val pasoA: String? get() = renombradaA ?: unificadaEn
+}
 
 /**
  * Todas las preferencias del usuario, por nombre de categoría — una sola consulta a
@@ -540,8 +623,65 @@ internal fun Transaction.preferenciasDeCategorias(uid: String): Map<String, Pref
                 pinnedType = it[CategoryPrefs.pinnedType],
                 icono = it[CategoryPrefs.icono],
                 color = it[CategoryPrefs.color],
+                renombradaA = it[CategoryPrefs.renombradaA]?.trim()?.takeIf { n -> n.isNotEmpty() },
+                unificadaEn = it[CategoryPrefs.unificadaEn]?.trim()?.takeIf { n -> n.isNotEmpty() },
             )
         }
+
+/**
+ * Vuelta 138 · **el alias de las categorías del catálogo de [uid]**: nombre del catálogo → el nombre
+ * que el dueño usa ahora (renombrada o unificada). La única lectura del alias en el server; todo lo
+ * que propone una categoría la pasa por `nombreVigente` (`:core`) con este mapa.
+ */
+internal fun Transaction.aliasDeCategorias(uid: String): Map<String, String> {
+    // En producción la tabla siempre existe (la crea el arranque); muchas bases de prueba de `:server`
+    // arman solo las tablas de su ruta. La pregunta se responde una vez por base (`existenLasTablas`).
+    if (!existenLasTablas(CategoryPrefs)) return emptyMap()
+    return preferenciasDeCategorias(uid).mapNotNull { (nombre, pref) -> pref.pasoA?.let { nombre to it } }.toMap()
+}
+
+/**
+ * ¿Renombrar [from] a [to] es **volver una del catálogo a su nombre de Movi**? Lo es si [to] es la
+ * fila escondida de una del catálogo cuyo alias apunta a [from] («Hogar» → «Vivienda», con
+ * «Vivienda» renombrada a «Hogar»). Solo un renombrado, no una unificación: la que recibió una
+ * unificación tiene su propia historia y volver la partiría.
+ */
+internal fun Transaction.vuelveAlNombreDeMovi(uid: String, from: String, to: String): Boolean {
+    if (!esDelCatalogo(to)) return false
+    val alias = CategoryPrefs.selectAll()
+        .where { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq to) }
+        .firstOrNull()?.get(CategoryPrefs.renombradaA)?.trim()
+    return alias != null && alias.equals(from, ignoreCase = true)
+}
+
+/**
+ * Vuelta 138: guarda en [nombre] el ícono y el color que la app tenía a la vista al renombrar, **solo
+ * si no tiene propios** (lo elegido por el dueño gana; lo que viajó con la reescritura, también).
+ */
+internal fun Transaction.ponerLaAparienciaSiNoTiene(uid: String, nombre: String, icono: String?, color: String?) {
+    if (icono == null && color == null) return
+    val fila = CategoryPrefs.selectAll()
+        .where { (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq nombre) }
+        .firstOrNull()
+    if (fila == null) {
+        CategoryPrefs.insert {
+            it[userId]     = uid
+            it[name]       = nombre
+            it[hidden]     = false
+            it[pinnedType] = null
+            it[CategoryPrefs.icono] = icono
+            it[CategoryPrefs.color] = color
+        }
+        return
+    }
+    val iconoNuevo = fila[CategoryPrefs.icono] ?: icono
+    val colorNuevo = fila[CategoryPrefs.color] ?: color
+    if (iconoNuevo == fila[CategoryPrefs.icono] && colorNuevo == fila[CategoryPrefs.color]) return
+    CategoryPrefs.update({ (CategoryPrefs.userId eq uid) and (CategoryPrefs.name eq nombre) }) {
+        it[CategoryPrefs.icono] = iconoNuevo
+        it[CategoryPrefs.color] = colorNuevo
+    }
+}
 
 /** Acumulador mutable del recorrido — solo vive dentro de [categoryUsage]. */
 private class UsageAcc {
@@ -641,7 +781,18 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
     PREDEFINED_CATEGORIES.forEach { acc.getOrPut(it.name) { UsageAcc() } }
     prefs.keys.forEach { acc.getOrPut(it) { UsageAcc() } }
 
-    return acc.map { (nombre, a) ->
+    // Vuelta 138: el nombre del catálogo que cada categoría renombrada tenía («Hogar» ← «Vivienda»).
+    val nombreDeMoviDe = prefs.entries
+        .mapNotNull { (nombre, pref) -> pref.renombradaA?.let { it to nombre } }
+        .toMap()
+
+    return acc.filterNot { (nombre, a) ->
+        // Una del catálogo renombrada no es una categoría escondida: es la misma con otro nombre, y
+        // se ve con el nombre nuevo. Solo vuelve a la lista si algo la sigue diciendo (un movimiento
+        // anotado con el nombre viejo desde un APK que no sabía del alias).
+        prefs[nombre]?.renombradaA != null &&
+            a.movimientos == 0 && a.otraMoneda == 0 && a.presupuestos == 0 && a.recurrentes == 0
+    }.map { (nombre, a) ->
         val pref = prefs[nombre]
         CategoryUsage(
             name = nombre,
@@ -663,6 +814,7 @@ internal fun Transaction.categoryUsage(uid: String, monthStart: Long, monthEnd: 
             budgets = a.presupuestos,
             budgetLimit = a.limitePresupuesto,
             recurringRules = a.recurrentes,
+            nombreDeMovi = nombreDeMoviDe[nombre],
         )
     }.sortedWith(
         // Lo más usado primero — la pregunta que trae al dueño acá es "¿qué sobra?", y lo que

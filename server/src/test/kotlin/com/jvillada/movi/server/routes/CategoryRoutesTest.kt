@@ -445,15 +445,232 @@ class CategoryRoutesTest {
         assertEquals("Transporte propio", categoriaDeRegla("r1"))
     }
 
-    @Test
-    fun `renombrar una del catalogo se rechaza — el catalogo volveria a sugerir el nombre viejo`() =
-        testApplication {
-            wireApp()
-            seedEvent("e1", "Comida")
-            val res = rename("Comida", "Alimentación")
-            assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
-            assertEquals("Comida", categoriaEnEventos("e1"))
+    // ── Vuelta 138: renombrar una del catálogo ────────────────────────────────
+
+    private fun seedApartado(id: String, categoria: String) = transaction {
+        Apartados.insert {
+            it[Apartados.id]        = id
+            it[Apartados.userId]    = this@CategoryRoutesTest.userId
+            it[Apartados.accountId] = this@CategoryRoutesTest.accountId
+            it[proposito]           = "Arreglos"
+            it[monto]               = 300_000
+            it[Apartados.categoria] = categoria
+            it[desde]               = 0L
+            it[createdAt]           = 0L
         }
+    }
+
+    private fun categoriaDeApartado(id: String): String? = transaction {
+        Apartados.selectAll().where { Apartados.id eq id }.firstOrNull()?.get(Apartados.categoria)
+    }
+
+    /** La fila de `category_prefs` de [name]: (escondida, renombrada_a, unificada_en, tipo fijado). */
+    private fun filaDePrefs(name: String): List<String?>? = transaction {
+        CategoryPrefs.selectAll()
+            .where { (CategoryPrefs.userId eq userId) and (CategoryPrefs.name eq name) }
+            .firstOrNull()
+            ?.let {
+                listOf(
+                    it[CategoryPrefs.hidden].toString(), it[CategoryPrefs.renombradaA],
+                    it[CategoryPrefs.unificadaEn], it[CategoryPrefs.pinnedType],
+                )
+            }
+    }
+
+    private suspend fun ApplicationTestBuilder.renameConApariencia(from: String, to: String, icono: String, color: String) =
+        client.post("/api/categories/rename") {
+            header(HttpHeaders.Authorization, "Bearer $token")
+            header(HttpHeaders.ContentType, "application/json")
+            setBody("""{"from":"$from","to":"$to","icono":"$icono","color":"$color"}""")
+        }
+
+    /**
+     * El pedido de Caro: «Vivienda» → «Hogar». Mueve todo como un renombrado de una propia, deja
+     * «Vivienda» escondida con el alias, y «Hogar» queda de gasto (el tipo de «Vivienda»). Falla sin el
+     * cambio: la ruta contestaba 422 `CATEGORY_CATALOG_RENAME_BLOCKED`.
+     */
+    @Test
+    fun `renombrar una del catalogo mueve todo y deja el nombre viejo escondido con el alias`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        seedEvent("e2", "Vivienda")
+        seedBudget("Vivienda", 2_000_000)
+        seedRule("r1", "Vivienda")
+        seedApartado("ap1", "Vivienda")
+
+        val res = rename("Vivienda", "Hogar")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+        assertEquals("Hogar", categoriaEnEventos("e1"))
+        assertEquals("Hogar", categoriaEnEventos("e2"))
+        assertEquals(2_000_000, limiteDe("Hogar"))
+        assertNull(limiteDe("Vivienda"))
+        assertEquals("Hogar", categoriaDeRegla("r1"))
+        assertEquals("Hogar", categoriaDeApartado("ap1"))
+
+        assertEquals(listOf("true", "Hogar", null, null), filaDePrefs("Vivienda"))
+        val lista = categorias()
+        assertTrue(lista.none { it.nombre() == "Vivienda" }, "no aparece como escondida: es la misma con otro nombre")
+        val hogar = lista.porNombre("Hogar")
+        assertEquals("EXPENSE", hogar.texto("pinnedType"), "el tipo del catálogo viaja")
+        assertEquals("Vivienda", hogar.texto("nombreDeMovi"))
+        assertFalse(hogar.flag("hidden"))
+    }
+
+    @Test
+    fun `el Inicio le dice al cliente a donde paso la del catalogo`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        // Para las listas del cliente (Agregar, el selector): «Vivienda» → «Hogar».
+        val resumen = Json.parseToJsonElement(
+            client.get("/api/dashboard/summary") { header(HttpHeaders.Authorization, "Bearer $token") }.bodyAsText(),
+        ).jsonObject
+        val vivienda = resumen["usedCategories"]!!.jsonArray.map { it.jsonObject }.porNombre("Vivienda")
+        assertTrue(vivienda.flag("hidden"))
+        assertEquals("Hogar", vivienda.texto("renombradaA"))
+    }
+
+    @Test
+    fun `una del catalogo sin uso tambien se renombra y queda con su tipo`() = testApplication {
+        wireApp()
+        assertEquals(HttpStatusCode.OK, rename("Freelance", "Trabajos").status)
+        val trabajos = categorias().porNombre("Trabajos")
+        assertEquals("INCOME", trabajos.texto("pinnedType"))
+        assertTrue(categorias().none { it.nombre() == "Freelance" })
+    }
+
+    @Test
+    fun `renombrar una del catalogo escondida la deja escondida y respeta el tipo que habia fijado`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Otros")
+        assertEquals(HttpStatusCode.OK, prefs("Otros", hidden = true, pinnedType = "BOTH").status)
+        assertEquals(HttpStatusCode.OK, rename("Otros", "Varios").status)
+        val varios = categorias().porNombre("Varios")
+        assertTrue(varios.flag("hidden"))
+        assertEquals("BOTH", varios.texto("pinnedType"))
+    }
+
+    /** Falla sin el cambio: «Vivienda» es del catálogo y existe, así que era un 409 (o el 422 de antes). */
+    @Test
+    fun `volver al nombre de Movi funciona y borra el alias`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        val res = rename("Hogar", "Vivienda")
+        assertEquals(HttpStatusCode.OK, res.status, res.bodyAsText())
+
+        assertEquals("Vivienda", categoriaEnEventos("e1"))
+        assertEquals(null, filaDePrefs("Vivienda")?.get(1), "sin alias")
+        val lista = categorias()
+        assertFalse(lista.porNombre("Vivienda").flag("hidden"), "deja de esconderla")
+        assertNull(lista.porNombre("Vivienda").texto("nombreDeMovi"))
+        assertTrue(lista.none { it.nombre() == "Hogar" })
+    }
+
+    @Test
+    fun `renombrar otra vez mueve el alias`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        assertEquals(HttpStatusCode.OK, rename("Hogar", "Casa").status)
+
+        assertEquals("Casa", categoriaEnEventos("e1"))
+        assertEquals(listOf("true", "Casa", null, null), filaDePrefs("Vivienda"))
+        assertEquals("Vivienda", categorias().porNombre("Casa").texto("nombreDeMovi"))
+        // Y desde «Casa» también se vuelve.
+        assertEquals(HttpStatusCode.OK, rename("Casa", "Vivienda").status)
+        assertEquals("Vivienda", categoriaEnEventos("e1"))
+    }
+
+    @Test
+    fun `renombrar una del catalogo a un nombre ocupado es 409 y no toca nada`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        seedEvent("e2", "Casa")
+        val res = rename("Vivienda", "Casa")
+        assertEquals(HttpStatusCode.Conflict, res.status)
+        assertEquals("Vivienda", categoriaEnEventos("e1"))
+        assertNull(filaDePrefs("Vivienda"))
+        // Ni hacia otra del catálogo.
+        assertEquals(HttpStatusCode.Conflict, rename("Vivienda", "Servicios").status)
+    }
+
+    /** Una propia que se llamó como una del catálogo no es «volver»: el alias tiene que apuntar a ella. */
+    @Test
+    fun `renombrar otra categoria a un nombre del catalogo retirado sigue siendo 409`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        seedEvent("e2", "Carro")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        assertEquals(HttpStatusCode.Conflict, rename("Carro", "Vivienda").status)
+        assertEquals("Carro", categoriaEnEventos("e2"))
+    }
+
+    @Test
+    fun `la apariencia que manda la app se guarda solo si el destino no tenia`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        assertEquals(HttpStatusCode.OK, renameConApariencia("Vivienda", "Hogar", "casa", "ambar").status)
+        val hogar = categorias().porNombre("Hogar")
+        assertEquals("casa", hogar.texto("icono"))
+        assertEquals("ambar", hogar.texto("color"))
+
+        // Una con ícono y color propios los conserva: lo que viaja con la reescritura gana.
+        seedEvent("e2", "Carro")
+        assertEquals(HttpStatusCode.OK, prefs("Carro", icono = "carro", color = "azul").status)
+        assertEquals(HttpStatusCode.OK, renameConApariencia("Carro", "Auto", "casa", "ambar").status)
+        val auto = categorias().porNombre("Auto")
+        assertEquals("carro", auto.texto("icono"))
+        assertEquals("azul", auto.texto("color"))
+    }
+
+    @Test
+    fun `un icono mas largo que la columna al renombrar se rechaza con 400`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Carro")
+        val largo = "x".repeat(CATEGORY_ICONO_MAX_LENGTH + 1)
+        assertEquals(HttpStatusCode.BadRequest, renameConApariencia("Carro", "Auto", largo, "azul").status)
+        assertEquals("Carro", categoriaEnEventos("e1"))
+    }
+
+    /**
+     * El hueco de unificar, cerrado con la misma función: la fila escondida dice a dónde fue. Las
+     * cifras no cambian (unificar hace lo de siempre).
+     */
+    @Test
+    fun `unificar una del catalogo deja dicho a donde fue`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Otros ingresos", type = "INCOME")
+        assertEquals(HttpStatusCode.OK, merge("Otros ingresos", "Otros").status)
+        assertEquals(listOf("true", null, "Otros", null), filaDePrefs("Otros ingresos"))
+        // Sigue en la lista como escondida (una unificación, no un renombrado) y sin «nombre de Movi».
+        val lista = categorias()
+        assertTrue(lista.porNombre("Otros ingresos").flag("hidden"))
+        assertNull(lista.porNombre("Otros").texto("nombreDeMovi"))
+    }
+
+    @Test
+    fun `unificar la renombrada en otra convierte el alias en unificacion`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Vivienda")
+        assertEquals(HttpStatusCode.OK, rename("Vivienda", "Hogar").status)
+        assertEquals(HttpStatusCode.OK, merge("Hogar", "Servicios").status)
+        assertEquals(listOf("true", null, "Servicios", null), filaDePrefs("Vivienda"))
+        assertNull(categorias().porNombre("Servicios").texto("nombreDeMovi"))
+    }
+
+    @Test
+    fun `volver a sugerir una del catalogo unificada le quita el alias`() = testApplication {
+        wireApp()
+        seedEvent("e1", "Otros ingresos", type = "INCOME")
+        assertEquals(HttpStatusCode.OK, merge("Otros ingresos", "Otros").status)
+        // Cambiarle el ícono mientras sigue escondida no le quita el alias…
+        assertEquals(HttpStatusCode.OK, prefs("Otros ingresos", hidden = true, icono = "dinero").status)
+        assertEquals("Otros", filaDePrefs("Otros ingresos")?.get(2))
+        // …volver a sugerirla, sí: es pedir el nombre de Movi otra vez.
+        assertEquals(HttpStatusCode.OK, prefs("Otros ingresos", hidden = false).status)
+        assertEquals(null, filaDePrefs("Otros ingresos")?.get(2))
+    }
 
     @Test
     fun `renombrar a un nombre que ya existe es 409 y no toca nada`() = testApplication {

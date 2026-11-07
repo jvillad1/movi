@@ -138,6 +138,12 @@ data class CategoryUsage(
     val budgetLimit: Long = 0,
     /** ¿Cuántas reglas recurrentes llevan este nombre? */
     val recurringRules: Int = 0,
+    /**
+     * Vuelta 138: si esta categoría es una del catálogo **renombrada** por el dueño («Hogar», que era
+     * «Vivienda»), el nombre de Movi que tenía. La hoja dice «Antes «Vivienda», de Movi» y ofrece
+     * volver. `null` en todas las demás; un APK viejo la ignora.
+     */
+    val nombreDeMovi: String? = null,
 ) {
     /** ¿Tiene algo detrás — movimientos, presupuesto o recurrente? */
     val enUso: Boolean get() = movements > 0 || otherCurrencyMovements > 0 || budgets > 0 || recurringRules > 0
@@ -167,6 +173,12 @@ data class CategoryPref(
     val icono: String? = null,
     /** Color elegido a mano (clave de texto, p. ej. `"naranja"`). Misma regla que [icono]. */
     val color: String? = null,
+    /**
+     * Vuelta 138: si esta es una categoría del catálogo que el dueño renombró o unificó en otra, el
+     * nombre que tiene ahora («Vivienda» → «Hogar»). Todo lo que propone un nombre del catálogo lo
+     * pasa por [nombreVigente] con estas filas ([aliasDeLasPreferencias]).
+     */
+    val renombradaA: String? = null,
 )
 
 /**
@@ -200,9 +212,22 @@ fun effectiveCategoryTypes(
     return usedTypes
 }
 
-/** Renombrar: la misma categoría con otro nombre. El destino **no** puede existir ya. */
+/**
+ * Renombrar: la misma categoría con otro nombre. El destino **no** puede existir ya (salvo volver una
+ * del catálogo a su nombre de Movi, ver `CategoryRoutes`).
+ *
+ * Vuelta 138 · [icono] y [color]: la apariencia **ya resuelta** que la app tenía a la vista, mandada
+ * cuando el dueño no había elegido una. Sin esto, el ícono que Movi adivina por el nombre
+ * (`aparienciaDe`) cambiaría al cambiar el nombre: «Vivienda» → «Hogar» perdería la casa. El server
+ * los guarda en el destino solo si no tiene propios. Sin las claves (un APK viejo), como antes.
+ */
 @Serializable
-data class RenameCategoryRequest(val from: String, val to: String)
+data class RenameCategoryRequest(
+    val from: String,
+    val to: String,
+    val icono: String? = null,
+    val color: String? = null,
+)
 
 /** Unificar: todo lo de [from] pasa a llamarse [into], que normalmente ya existe. */
 @Serializable
@@ -293,11 +318,6 @@ fun categoriaQueSostieneReglasMensaje(name: String): String =
         "«$name» es la categoría de las cuotas de tus créditos, y de su nombre exacto dependen las " +
             "cifras de tu mes. No se puede renombrar ni unificar en otra."
     }
-
-const val CATEGORY_CATALOG_RENAME_BLOCKED: String =
-    "Las categorías del catálogo de Movi no se renombran: el catálogo es el mismo para todos y " +
-        "volvería a sugerirte el nombre viejo. Si quieres juntarla con otra, únela; si no la " +
-        "usas, escóndela."
 
 const val CATEGORY_NAME_REQUIRED: String = "Falta el nombre de la categoría."
 

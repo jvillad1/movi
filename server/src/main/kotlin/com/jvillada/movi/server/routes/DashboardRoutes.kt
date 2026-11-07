@@ -777,6 +777,7 @@ private fun Transaction.usedCategories(uid: String, ahora: Long, voidedIds: Set<
                 icono = pref?.icono,
                 color = pref?.color,
                 usosRecientes = usosRecientesPorCategoria[nombre] ?: 0,
+                renombradaA = pref?.pasoA,
             )
         }
         .sortedBy { it.name.lowercase() }
