@@ -72,8 +72,13 @@ data class DeudaParaSalir(
     val capitalFijo: Long? = null,
     /** Vuelta 133 · cómo se mueve la cuota del crédito ([CreditTerms.tipoDeCuota]); `null` = fija. */
     val tipoDeCuota: TipoDeCuota? = null,
+    /**
+     * Vuelta 141 · la cuenta fuera de «Tu plata» de la que se paga la cuota ([CreditSummary.cuotaSePagaDesdeFuera],
+     * la AFC): va aparte, como [quienLaPaga] («Se paga desde AFC Davibank 9497»). `null` en lo demás.
+     */
+    val sePagaDesde: String? = null,
 ) {
-    val saleDeTuBolsillo: Boolean get() = quienLaPaga == null
+    val saleDeTuBolsillo: Boolean get() = quienLaPaga == null && sePagaDesde == null
 
     private val tasaMensual: Double? get() = when {
         sinIntereses -> 0.0
@@ -126,6 +131,9 @@ fun deudasParaSalir(creditos: List<CreditSummary>, tarjetas: List<CardSummary>):
                 else -> null
             },
             moneda = if (enOtraMoneda) (c.account.balancesByCurrency.keys.firstOrNull { it != "COP" } ?: c.account.currency) else "COP",
+            // Vuelta 141: la cuota que sale de una cuenta fuera de Tu plata va aparte (la misma regla que
+            // `saleDeTuBolsillo(credit)`).
+            sePagaDesde = c.cuotaSePagaDesdeFuera?.trim()?.takeIf { it.isNotEmpty() && t != null && saleDeTuBolsillo(t) },
             capitalFijo = t?.let { capitalFijoDe(it) },
             tipoDeCuota = t?.tipoDeCuota?.takeIf { it != TipoDeCuota.FIJA },
         )

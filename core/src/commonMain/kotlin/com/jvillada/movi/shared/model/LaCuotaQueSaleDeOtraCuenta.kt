@@ -97,6 +97,19 @@ fun laCuotaSaleDeFueraDeTuPlata(tipo: AccountType, condicionadaA: String?, esBie
 /** Lo mismo que la otra, para una cuenta ya armada. */
 fun laCuotaSaleDeFueraDeTuPlata(cuenta: Account): Boolean = !cuenta.esDeTuPlata()
 
+/**
+ * Vuelta 141 · **la cuenta fuera de «Tu plata» de la que sale la cuota de [terms]**, o `null` (no dice de cuál
+ * sale, la cuenta no está en [cuentas], o es de Tu plata). Con esto el server llena
+ * [CreditSummary.cuotaSePagaDesdeFuera], que hace que la cuota vaya aparte ([saleDeTuBolsillo]). Pura.
+ */
+fun cuentaDeLaCuotaFueraDeTuPlata(terms: CreditTerms?, cuentas: List<Account>): Account? {
+    val id = terms?.sePagaDesde?.takeIf { it.isNotBlank() } ?: return null
+    return cuentas.firstOrNull { it.id == id }?.takeIf(::laCuotaSaleDeFueraDeTuPlata)
+}
+
+/** «Se paga desde AFC Davibank 9497»: lo que se dice de una cuota aparte que sale de una cuenta fuera de Tu plata. */
+fun textoDeSePagaDesde(nombreDeLaCuenta: String): String = "Se paga desde $nombreDeLaCuenta"
+
 /** La línea de la fila de Pagos: «Sale de AFC Davibank 9497: no toca Tu plata». */
 fun lineaDeLaCuotaFueraDeTuPlata(nombreDeLaCuenta: String?): String =
     nombreDeLaCuenta?.trim()?.takeIf { it.isNotEmpty() }

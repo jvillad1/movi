@@ -202,7 +202,8 @@ internal data class CreditoParaContexto(
     /** «es la última que pagó» o «es la que pactó»: de dónde sale la cuota estimada. */
     val deDondeSaleLaCuota: String get() = if (cuotaEsLaUltimaPagada) "es la última que pagó" else "es la que pactó; todavía no hay un pago"
     /** ¿La cuota sale de su cuenta? La misma regla que la pantalla de Créditos ([saleDeTuBolsillo]). */
-    val saleDeSuBolsillo: Boolean get() = !porNomina && loPaga.isNullOrBlank()
+    // Vuelta 141: la que se paga desde una cuenta fuera de Tu plata (la AFC) va aparte, como la de un tercero.
+    val saleDeSuBolsillo: Boolean get() = !porNomina && loPaga.isNullOrBlank() && pagaDesdeFueraDeTuPlata == null
 
     /**
      * El plan del crédito con el saldo de hoy —interés del mes, cuánto baja, si se termina—, o
@@ -674,14 +675,16 @@ internal fun ContextoDelPeriodo.render(): String = buildString {
             appendLine(
                 "Intereses estimados de un mes (la cifra de Créditos): \$${interes.propio} los que paga él " +
                     "(\$${interes.creditosPropios} de sus créditos y \$${interes.tarjetas} de sus tarjetas), y " +
-                    "\$${interes.ajeno} en los créditos que paga la nómina o un tercero.",
+                    "\$${interes.ajeno} en los créditos que paga la nómina o un tercero" +
+                    // Vuelta 141: o que se pagan desde una cuenta que no es Tu plata (la AFC).
+                    (if (creditos.any { it.pagaDesdeFueraDeTuPlata != null }) " o que se pagan desde una cuenta que no es Tu plata." else "."),
             )
         }
         // Vuelta 141: la cuota que sale de una cuenta fuera de Tu plata (la AFC) va aparte, no «de su bolsillo».
         val fuera = creditos.filter { it.pagaDesdeFueraDeTuPlata != null }
         appendLine(
-            "Cuotas al mes: \$${creditos.filter { it.saleDeSuBolsillo && it.pagaDesdeFueraDeTuPlata == null }.sumOf { it.cuota }} salen de su bolsillo; " +
-                "\$${creditos.filterNot { it.saleDeSuBolsillo }.sumOf { it.cuota }} las paga la nómina o un tercero (no salen de su cuenta)" +
+            "Cuotas al mes: \$${creditos.filter { it.saleDeSuBolsillo }.sumOf { it.cuota }} salen de su bolsillo; " +
+                "\$${creditos.filter { !it.saleDeSuBolsillo && it.pagaDesdeFueraDeTuPlata == null }.sumOf { it.cuota }} las paga la nómina o un tercero (no salen de su cuenta)" +
                 (if (fuera.isEmpty()) "." else "; \$${fuera.sumOf { it.cuota }} las paga desde cuentas suyas que no son Tu plata (no bajan «Te quedan»)."),
         )
         appendLine()

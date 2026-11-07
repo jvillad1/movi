@@ -183,6 +183,21 @@ class LaCuotaDesdeLaAfcTest {
         assertNull(guardada())
     }
 
+    /** Vuelta 141 (decisión del 7-nov) · `GET /api/credits` dice de qué cuenta fuera de Tu plata sale la cuota. */
+    @Test
+    fun `GET credits marca la cuota que sale de la AFC y no la de Tu plata`() = testApplication {
+        application { testModule() }
+        suspend fun marca(): String? {
+            val res = client.get("/api/credits") { header(HttpHeaders.Authorization, "Bearer ${token()}") }
+            return json.decodeFromString(ListSerializer(CreditSummary.serializer()), res.bodyAsText())
+                .single { it.account.id == hipoteca }.cuotaSePagaDesdeFuera
+        }
+        put(terminos("\"sePagaDesde\":\"$afc\""))
+        assertEquals("AFC Davibank 9497", marca())
+        put(terminos("\"sePagaDesde\":\"$ahorros\""))
+        assertNull(marca(), "Bancolombia es Tu plata: la cuota es propia")
+    }
+
     @Test
     fun `no convive con la paga otro ni con la libranza`() = testApplication {
         application { testModule() }

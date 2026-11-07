@@ -437,6 +437,13 @@ data class CreditSummary(
      * `GET /api/credits`, y solo en un crédito de cuota que cambia; `null` = no hay o no se sabe.
      */
     val ultimaCuotaPagada: CuotaPagada? = null,
+    /**
+     * **Vuelta 141 · el nombre de la cuenta de la que sale la cuota, si está fuera de «Tu plata»**
+     * ([CreditTerms.sePagaDesde] en la AFC, [cuentaDeLaCuotaFueraDeTuPlata]): la cuota va aparte, como la que
+     * paga otra persona ([saleDeTuBolsillo]). Lo pone `GET /api/credits`, que conoce las cuentas; `null` = la
+     * cuota no sale de afuera (o un server viejo).
+     */
+    val cuotaSePagaDesdeFuera: String? = null,
 )
 
 /**

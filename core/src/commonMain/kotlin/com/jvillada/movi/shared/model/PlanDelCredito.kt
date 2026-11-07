@@ -304,6 +304,15 @@ fun saleDeTuBolsillo(terms: CreditTerms): Boolean =
     !terms.payrollDeduction && terms.paidBy.isNullOrBlank()
 
 /**
+ * **Vuelta 141 · [saleDeTuBolsillo] de un crédito ya cargado**: además de la libranza y «la paga otro», la
+ * cuota que se paga desde una cuenta fuera de «Tu plata» ([CreditSummary.cuotaSePagaDesdeFuera], la AFC) va
+ * aparte, como la que paga otra persona (decisión del dueño, 7-nov). Con `sePagaDesde` en una cuenta de Tu
+ * plata, `true` como siempre. La cuenta la resuelve quien la conoce con [cuentaDeLaCuotaFueraDeTuPlata].
+ */
+fun saleDeTuBolsillo(credit: CreditSummary): Boolean =
+    credit.terms?.let(::saleDeTuBolsillo) != false && credit.cuotaSePagaDesdeFuera.isNullOrBlank()
+
+/**
  * ¿Este préstamo debe plata que **no** está en el componente COP de su saldo?
  *
  * `account.balance` es el componente **COP** del saldo (ver `enrichWith`), así que un préstamo en
@@ -541,7 +550,8 @@ fun planDelCredito(
         cuota = cuotaDeEsteMes(terms, credit.ultimaCuotaPagada),
         seguroMensual = terms.insuranceMonthly,
         otrosCargosMensuales = terms.otrosCargosMensuales,
-        saleDeTuBolsillo = saleDeTuBolsillo(terms),
+        // Vuelta 141: con la cuenta de la cuota (fuera de Tu plata, va aparte).
+        saleDeTuBolsillo = saleDeTuBolsillo(credit),
         sinIntereses = terms.sinIntereses,
         interesRealDelMes = terms.interesRealVigente(hoy),
         tipoDeCuota = terms.tipoDeCuota,

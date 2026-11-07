@@ -402,7 +402,9 @@ private fun ContenidoDelPlan(
         Spacer(Modifier.height(Medida.entreSecciones))
         Seccion(titulo = "No salen de tu bolsillo", conteo = plan.ajenas.size)
         Text(
-            "Su cuota la paga otro, así que no compiten por tu abono.",
+            // Vuelta 141: también la que se paga desde una cuenta que no es Tu plata (la AFC).
+            if (plan.ajenas.any { it.sePagaDesde != null }) "Su cuota la paga otro o sale de una cuenta que no es Tu plata, así que no compiten por tu abono."
+            else "Su cuota la paga otro, así que no compiten por tu abono.",
             style = Movi.textos.apoyo,
             color = Movi.colores.textoMedio,
             modifier = Modifier.padding(bottom = Medida.dentroDeSeccion),

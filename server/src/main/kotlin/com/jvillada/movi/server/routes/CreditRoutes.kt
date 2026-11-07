@@ -875,6 +875,10 @@ internal suspend fun creditosDe(uid: String): List<CreditSummary> {
         pagosDeDeuda,
         periodo,
     )
+    // Vuelta 141: las cuentas del dueño, solo si algún crédito dice de cuál sale su cuota: la que sale de una
+    // fuera de Tu plata (la AFC) va aparte, como la que paga otro (`saleDeTuBolsillo(credit)`).
+    val cuentas = if (termsByAccount.values.none { !it.sePagaDesde.isNullOrBlank() }) emptyList()
+    else dbQuery { Accounts.selectAll().where { Accounts.userId eq uid }.map { it.toAccount() } }
     return loans.map { acc ->
         val terms = termsByAccount[acc.id]
         val eventos = eventsByAccount[acc.id] ?: emptyList()
@@ -882,6 +886,7 @@ internal suspend fun creditosDe(uid: String): List<CreditSummary> {
             cuotasPagadas = terms?.let { cuotasPagadasAlrededorDe(eventos, it, acc.name, hoy, periodo) },
             saldoFijadoEn = saldoFijadoEn(eventos),
             ultimaCuotaPagada = ultimas[acc.id],
+            cuotaSePagaDesdeFuera = com.jvillada.movi.shared.model.cuentaDeLaCuotaFueraDeTuPlata(terms, cuentas)?.name,
         )
     }
 }

@@ -644,6 +644,10 @@ class ContextoDelPeriodoTest {
         )
         assertTrue("Cuotas al mes: \$1500000 salen de su bolsillo; \$0 las paga la nómina o un tercero" in texto, texto)
         assertTrue("\$4500000 las paga desde cuentas suyas que no son Tu plata" in texto, texto)
+        // Decisión del 7-nov: su interés va aparte, como el de un tercero.
+        assertTrue("en los créditos que paga la nómina o un tercero o que se pagan desde una cuenta que no es Tu plata." in texto, texto)
+        val interesDelVehiculo = planDeUnaDeuda(40_000_000L, 18.5, 1_500_000L, null, null, saleDeTuBolsillo = true).interes
+        assertTrue("\$$interesDelVehiculo los que paga él (\$$interesDelVehiculo de sus créditos" in texto, texto)
     }
 
     /**

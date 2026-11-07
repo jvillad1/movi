@@ -158,6 +158,42 @@ class LaCuotaQueSaleDeOtraCuentaTest {
         assertTrue(gastoVariablePorDia(patas, emptyMap()) { "2026-11-05" }.isEmpty())
     }
 
+    // ── Decisión del dueño (7-nov): una cuota que sale de fuera de Tu plata va aparte, como la de un tercero ──
+
+    private fun credito(id: String, nombre: String, desde: String) = CreditTerms(
+        accountId = id, bank = "Davibank", principal = 400_000_000L, rateEa = 12.0, termMonths = 240,
+        installment = 9_145_256L, dayOfMonth = 5, startDate = "2020-01-05", sePagaDesde = desde,
+    ).let { t ->
+        val cuentas = listOf(afc, bancolombia)
+        CreditSummary(
+            account = Account(id, nombre, AccountType.LOAN, 300_000_000L), terms = t, paidPct = null,
+            // Lo que llena `GET /api/credits`, con la regla de :core.
+            cuotaSePagaDesdeFuera = cuentaDeLaCuotaFueraDeTuPlata(t, cuentas)?.name,
+        )
+    }
+
+    @Test
+    fun `la cuota que sale de la AFC va aparte en el interes del mes y en el plan de salida`() {
+        val desdeLaAfc = credito("acc_1254", "Hipoteca 1254", desde = afc.id)
+        val desdeBancolombia = credito("acc_2334", "Hipotecario 2334", desde = bancolombia.id)
+        assertEquals("AFC Davibank 9497", desdeLaAfc.cuotaSePagaDesdeFuera)
+        assertNull(desdeBancolombia.cuotaSePagaDesdeFuera, "Bancolombia es Tu plata")
+        assertFalse(saleDeTuBolsillo(desdeLaAfc))
+        assertTrue(saleDeTuBolsillo(desdeBancolombia))
+
+        val planAfc = planDelCredito(desdeLaAfc)!!
+        val planBanco = planDelCredito(desdeBancolombia)!!
+        val interes = interesDelMes(listOf(planAfc, planBanco), emptyList())
+        assertEquals(planAfc.interes, interes.creditosAjenos, "la de la AFC, aparte")
+        assertEquals(planBanco.interes, interes.creditosPropios, "la de Bancolombia, propia")
+
+        val plan = planDeSalida(deudasParaSalir(listOf(desdeLaAfc, desdeBancolombia), emptyList()), 500_000L, EstrategiaDeSalida.AVALANCHA)
+        assertEquals(listOf("acc_1254"), plan.ajenas.map { it.id }, "no compite por el abono")
+        assertEquals("AFC Davibank 9497", plan.ajenas.single().sePagaDesde)
+        assertEquals(listOf("acc_2334"), plan.enElCalculo.map { it.deuda.id })
+        assertEquals("Se paga desde AFC Davibank 9497", textoDeSePagaDesde(plan.ajenas.single().sePagaDesde!!))
+    }
+
     @Test
     fun `validar la cuenta de la cuota`() {
         val base = CreditTerms(

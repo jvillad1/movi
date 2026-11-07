@@ -690,7 +690,10 @@ internal fun textoDelPlanDeSalida(plan: PlanDeSalida, otra: PlanDeSalida, period
     }
     if (plan.ajenas.isNotEmpty()) {
         appendLine("APARTE, no compiten por el abono porque la cuota no sale de su bolsillo:")
-        plan.ajenas.forEach { d -> appendLine("- ${d.nombre} (saldo ${d.saldo}): la paga ${d.quienLaPaga}.") }
+        // Vuelta 141: la que sale de una cuenta fuera de Tu plata (la AFC) dice de cuál.
+        plan.ajenas.forEach { d ->
+            appendLine("- ${d.nombre} (saldo ${d.saldo}): " + (d.sePagaDesde?.let { "se paga desde su cuenta «$it», que no es Tu plata." } ?: "la paga ${d.quienLaPaga}."))
+        }
     }
     append("Es un cálculo con sus datos, no una recomendación financiera: dilo así.")
 }

@@ -361,6 +361,9 @@ private fun LoQueDiceElPrestamo(
         when {
             t.payrollDeduction -> Pildora("De tu nómina", TonoDePildora.Info)
             !t.paidBy.isNullOrBlank() -> Pildora("La paga ${t.paidBy}", TonoDePildora.Info)
+            // Vuelta 141: la que sale de una cuenta fuera de Tu plata (la AFC) va aparte, y lo dice.
+            !credit.cuotaSePagaDesdeFuera.isNullOrBlank() ->
+                Pildora(com.jvillada.movi.shared.model.textoDeSePagaDesde(credit.cuotaSePagaDesdeFuera.orEmpty()), TonoDePildora.Info)
         }
         Text(listOfNotNull(t.bank.takeIf { it.isNotBlank() }, tasa).joinToString(" · "), style = Movi.textos.apoyo, color = Movi.colores.textoMedio)
         Text(
