@@ -129,6 +129,10 @@ class LasPreguntasSugeridasTest {
     private fun periodoDeA(hoy: LocalDate) {
         val inicioDelMes = hoy.withDayOfMonth(1)
         anotar(a.duenoA, a.cuentaDeA, inicioDelMes.minusDays(45), 20_000_000, OPENING_CATEGORY, "Saldo inicial", tipo = "INCOME")
+        // Vuelta 140: un período sin ningún movimiento entre la historia y hoy es un hueco (no se
+        // compara contra él). Un ingreso chico en el período pasado lo deja «visto»: sin gastos a esta
+        // altura, que es lo que miden las comparaciones de abajo.
+        anotar(a.duenoA, a.cuentaDeA, inicioDelMes.minusDays(10), 1_000, "Intereses", "Abono intereses ahorros", tipo = "INCOME")
         anotar(a.duenoA, a.cuentaDeA, hoy, 10_000_000, "Salario", "Sueldo", tipo = "INCOME")
         anotar(a.duenoA, a.cuentaDeA, hoy, 200_000, "Comida", "Mercado")
         repeat(3) { anotar(a.duenoA, a.cuentaDeA, hoy, 40_000, "Café", "Juan Valdez") }
