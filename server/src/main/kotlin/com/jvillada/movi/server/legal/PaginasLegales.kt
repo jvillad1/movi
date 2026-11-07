@@ -146,7 +146,11 @@ nav { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--borde); d
                 "dice a Movi quién mandó el mensaje, Movi solo mira el texto: se descarta todo mensaje que no " +
                 "empiece por el nombre de un banco de una lista cerrada con un monto, o que llegue con el número " +
                 "de una persona, sin guardar su texto: solo se cuenta cuántos llegaron. Un mensaje de una persona " +
-                "que empiece como un aviso del banco sí se guarda, en «Por revisar», sin anotarse.</li>" +
+                "que empiece como un aviso del banco sí se guarda, en «Por revisar», sin anotarse. " +
+                // Vuelta 137: el atajo de notificaciones (`tipo` = `notificacion`), atado a las apps que eliges.
+                "Con el atajo de notificaciones, el texto de las notificaciones de las apps de banco que tú eliges " +
+                "en la automatización: se guardan las que traen un monto, en «Por revisar», y las demás se " +
+                "descartan sin guardar su texto.</li>" +
                 "</ul></li>")
             append("<li><strong>Papeles y extractos:</strong> los PDF e imágenes que subes o compartes con " +
                 "Movi y lo que se leyó de ellos. Se guardan cifrados (AES-256). Si pides que Movi recuerde " +

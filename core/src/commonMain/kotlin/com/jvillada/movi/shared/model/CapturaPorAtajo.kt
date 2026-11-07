@@ -33,17 +33,43 @@ const val RUTA_DE_LA_CAPTURA_POR_ATAJO: String = "/api/captura/atajo"
  */
 const val NOMBRE_DEL_ATAJO_DE_MENSAJES: String = "Movi - Avisar un mensaje"
 
+/**
+ * Vuelta 137 · **el atajo de las notificaciones de los bancos**: igual al de mensajes, pero manda `tipo` =
+ * [TIPO_DE_NOTIFICACION] y se ata **solo** a disparadores «Notificación» de las apps de banco que el dueño elige
+ * (en el iPhone, elegir la app hace el papel de la lista de paquetes de Android). **Sin tilde, a propósito**: es el
+ * nombre del archivo (vuelta 114), y uno fuera de ASCII depende de cómo cada navegador decodifique la cabecera.
+ */
+const val NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES: String = "Movi - Avisar una notificacion"
+
+/** El `tipo` que manda el atajo de mensajes (un SMS: la regla estricta de `seGuardaElSmsDelAtajo`). */
+const val TIPO_DE_MENSAJE: String = "mensaje"
+
+/** Vuelta 137 · el `tipo` que manda el atajo de notificaciones (ver [NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES]). */
+const val TIPO_DE_NOTIFICACION: String = "notificacion"
+
 /** El nombre del atajo que avisa un pago con Apple Pay (se arma a mano: es el nombre que la guía pide escribir). */
 const val NOMBRE_DEL_ATAJO_DE_APPLE_PAY: String = "Movi - Pago con Apple Pay"
 
 /** El archivo firmado del atajo de mensajes: en los recursos del server y en la descarga. */
 const val ARCHIVO_DEL_ATAJO_DE_MENSAJES: String = "$NOMBRE_DEL_ATAJO_DE_MENSAJES.shortcut"
 
+/** Vuelta 137 · el archivo firmado del atajo de notificaciones. */
+const val ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES: String = "$NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES.shortcut"
+
 /** El archivo del atajo de Apple Pay (si algún día se firma). */
 const val ARCHIVO_DEL_ATAJO_DE_APPLE_PAY: String = "$NOMBRE_DEL_ATAJO_DE_APPLE_PAY.shortcut"
 
 /** Donde el server sirve el atajo de mensajes ya firmado (si la firma salió): el archivo, con los espacios como `%20`. */
 const val RUTA_DEL_ATAJO_DE_MENSAJES: String = "/atajos/Movi%20-%20Avisar%20un%20mensaje.shortcut"
+
+/** Vuelta 137 · donde el server sirve el atajo de notificaciones ya firmado (si la firma salió). */
+const val RUTA_DEL_ATAJO_DE_NOTIFICACIONES: String = "/atajos/Movi%20-%20Avisar%20una%20notificacion.shortcut"
+
+/**
+ * Vuelta 137 · el mismo archivo con el nombre con tilde («notificación»), por si alguien escribe la dirección a
+ * mano: el server lo sirve igual, con el nombre ASCII en `Content-Disposition`.
+ */
+const val ARCHIVO_CON_TILDE_DEL_ATAJO_DE_NOTIFICACIONES: String = "Movi - Avisar una notificación.shortcut"
 
 /** Donde el server sirve el atajo de Apple Pay ya firmado (si la firma salió). */
 const val RUTA_DEL_ATAJO_DE_APPLE_PAY: String = "/atajos/Movi%20-%20Pago%20con%20Apple%20Pay.shortcut"
@@ -65,6 +91,12 @@ fun rutaDelArchivoDeAtajo(archivo: String): String = "/atajos/" + archivo.replac
  */
 const val ORIGEN_DEL_ATAJO: String = "Atajo"
 
+/**
+ * Vuelta 137 · **cómo empieza el rótulo de toda notificación que mandó un atajo**: «Atajo · Notificación · Nu»,
+ * «Atajo · Notificación · Davivienda», «Atajo · Notificación · tu banco» (ver `origenDeLaNotificacionPorAtajo`).
+ */
+const val ORIGEN_DE_UNA_NOTIFICACION_POR_ATAJO: String = "$ORIGEN_DEL_ATAJO · Notificación"
+
 /** El nombre del origen de un pago con Apple Pay, detrás de «Atajo · ». */
 const val APPLE_PAY: String = "Apple Pay"
 
@@ -84,7 +116,13 @@ fun esElAtajoDeApplePay(origen: String): Boolean =
  * Así se sabe que llegó por el iPhone (`esUnAtajo`, el tracking) y, quitándole el atajo
  * ([origenSinElAtajo]), es la notificación de Nu de siempre para el parser, el mismo pago y el banco mudo.
  */
-const val ORIGEN_DE_NU_POR_ATAJO: String = "$ORIGEN_DEL_ATAJO · Notificación · Nu"
+const val ORIGEN_DE_NU_POR_ATAJO: String = "$ORIGEN_DE_UNA_NOTIFICACION_POR_ATAJO · Nu"
+
+/**
+ * Vuelta 137 · el banco cuando el texto no lo dice: el mismo «tu banco» del SMS sin banco
+ * (`origenDelSmsDelAtajo` en el server).
+ */
+const val BANCO_SIN_NOMBRE_DEL_ATAJO: String = "tu banco"
 
 /** ¿El rótulo `bank` es el de una notificación que mandó el atajo («Atajo · Notificación · Nu»)? */
 fun esUnaNotificacionPorAtajo(origen: String): Boolean =
@@ -104,7 +142,7 @@ fun origenSinElAtajo(origen: String): String =
  * `GET /api/captura/codigo`: si hay un código vigente, desde cuándo y cuándo llegó el último aviso con
  * él. **Nunca el código**: ese se ve una sola vez, en [CodigoDeCapturaNuevo].
  *
- * [atajoDeMensajes] y [atajoDeApplePay] dicen si el server tiene el atajo firmado para instalarlo con un
+ * [atajoDeMensajes], [atajoDeNotificaciones] y [atajoDeApplePay] dicen si el server tiene el atajo firmado para instalarlo con un
  * toque (en [RUTA_DEL_ATAJO_DE_MENSAJES] y [RUTA_DEL_ATAJO_DE_APPLE_PAY]); si no, la guía muestra cómo
  * armarlo a mano.
  */
@@ -115,6 +153,8 @@ data class CodigoDeCaptura(
     val ultimoUso: Long? = null,
     val atajoDeMensajes: Boolean = false,
     val atajoDeApplePay: Boolean = false,
+    /** Vuelta 137 · si el server tiene firmado el atajo de notificaciones ([RUTA_DEL_ATAJO_DE_NOTIFICACIONES]). */
+    val atajoDeNotificaciones: Boolean = false,
 )
 
 /** `POST /api/captura/codigo`: el código nuevo, **en claro y una sola vez**. El anterior ya no sirve. */
@@ -216,6 +256,8 @@ enum class MotivoDelAtajoDescartado {
     /**
      * Vuelta 114 · un mensaje sin remitente que nombra un banco pero no tiene la forma de un aviso: no empieza
      * por el banco o no trae monto (una promoción, una clave dinámica). Ver `porQueNoSeGuardaElSmsDelAtajo`.
+     * Vuelta 137: también una notificación de la app de un banco sin un monto que Movi lea («tu tarjeta fue
+     * bloqueada», una clave).
      */
     SIN_FORMA_DE_AVISO,
     /** Llegó sin texto, o un pago sin ningún dato. */

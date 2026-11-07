@@ -118,6 +118,8 @@ class PaginasLegalesTest {
         // lo de una persona, sino lo que no empieza por el banco con un monto.
         assertTrue("se descarta todo mensaje que no empiece por el nombre de un banco" in html)
         assertFalse("o que viene del número de teléfono de una persona, se descarta" in html)
+        // Vuelta 137: el atajo de notificaciones solo manda las de las apps que el dueño elige.
+        assertTrue("las notificaciones de las apps de banco que tú eliges" in html)
         val borrar = PaginasLegales.borrarCuenta(ResponsableDeMovi.Datos(null, null))
         // Lo que borrar no alcanza (copias de los proveedores y respaldos), dicho en las dos páginas.
         assertTrue(PaginasLegales.LO_QUE_MOVI_NO_CONTROLA in borrar)

@@ -2,6 +2,10 @@ package com.jvillada.movi.server.routes
 
 import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_MENSAJES
+import com.jvillada.movi.shared.model.ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES
+import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES
+import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_NOTIFICACIONES
+import com.jvillada.movi.shared.model.TIPO_DE_NOTIFICACION
 import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_APPLE_PAY
 import com.jvillada.movi.shared.model.NOMBRE_DEL_ATAJO_DE_MENSAJES
 import com.jvillada.movi.shared.model.RUTA_DEL_ATAJO_DE_APPLE_PAY
@@ -27,7 +31,7 @@ class LosAtajosDelRepoTest {
 
     @Test
     fun `los dos atajos mandan a la ruta de produccion con el codigo en la cabecera`() {
-        listOf("movi-mensaje", "movi-apple-pay").forEach { nombre ->
+        listOf("movi-mensaje", "movi-notificacion", "movi-apple-pay").forEach { nombre ->
             val texto = plist(nombre)
             assertTrue(texto.startsWith("<?xml"), "$nombre es un plist XML")
             assertTrue(
@@ -42,6 +46,8 @@ class LosAtajosDelRepoTest {
             assertTrue(Regex("""captura/atajo\?""").find(texto) == null)
         }
         assertTrue("<string>mensaje</string>" in plist("movi-mensaje"))
+        assertTrue("<string>$TIPO_DE_NOTIFICACION</string>" in plist("movi-notificacion"))
+        assertFalse("<string>mensaje</string>" in plist("movi-notificacion"))
         assertTrue("<string>transaccion</string>" in plist("movi-apple-pay"))
     }
 
@@ -55,6 +61,31 @@ class LosAtajosDelRepoTest {
         // Ni el de la vuelta 111 con el nombre viejo ni el de Apple Pay (que no se firma).
         assertFalse(File(recursos, "movi-mensaje.shortcut").exists())
         assertFalse(File(recursos, ARCHIVO_DEL_ATAJO_DE_APPLE_PAY).exists())
+    }
+
+    /**
+     * Vuelta 137 · el atajo de notificaciones: firmado, con el nombre de la constante (ASCII, sin la tilde de
+     * «notificación»), el mismo del script, y manda `tipo` = `notificacion`.
+     */
+    @Test
+    fun `el atajo de notificaciones esta firmado, se llama como la constante y manda tipo notificacion`() {
+        val firmado = File(recursos, ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES)
+        assertTrue(firmado.exists(), "el firmado se llama «$ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES»")
+        assertTrue(firmado.readBytes().copyOfRange(0, 4).contentEquals("AEA1".toByteArray()))
+        assertEquals("Movi - Avisar una notificacion", NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES)
+        assertEquals("$NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES.shortcut", ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES)
+        assertEquals(rutaDelArchivoDeAtajo(ARCHIVO_DEL_ATAJO_DE_NOTIFICACIONES), RUTA_DEL_ATAJO_DE_NOTIFICACIONES)
+        assertTrue(NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES.all { it.code in 0x20..0x7E } && '/' !in NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES)
+        val script = listOf(File("../scripts/generar-atajos.py"), File("scripts/generar-atajos.py")).first { it.exists() }.readText()
+        assertEquals(
+            NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES,
+            Regex("""^NOMBRE_DE_NOTIFICACIONES = "([^"]+)"$""", RegexOption.MULTILINE).find(script)?.groupValues?.get(1),
+        )
+        val texto = plist("movi-notificacion")
+        assertTrue("<string>$NOMBRE_DEL_ATAJO_DE_NOTIFICACIONES. Manda a Movi" in texto)
+        // El cuerpo: «tipo» = «notificacion» y «texto» = la entrada del atajo.
+        assertTrue(Regex("""<string>tipo</string>[\s\S]{0,400}?<string>notificacion</string>""").containsMatchIn(texto))
+        assertTrue("<string>texto</string>" in texto && "ExtensionInput" in texto)
     }
 
     /**
