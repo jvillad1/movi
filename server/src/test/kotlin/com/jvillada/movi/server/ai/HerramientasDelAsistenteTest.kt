@@ -467,11 +467,30 @@ class HerramientasDelAsistenteTest {
         val texto = preguntar(TOTALES_POR_COMERCIO, "comercio" to "peajepass")
 
         assertTrue("TOTAL EN PESOS: ${montos.sum()} en 43 pagos" in texto, texto)
-        assertTrue("toda la historia que Movi tiene: desde su primer movimiento, el 2026-07-01" in texto, texto)
+        assertTrue("sin saldos iniciales ni ajustes, el 2026-07-01" in texto, texto)
         assertTrue("- USD: 15 en 1 pago" in texto, texto)
         val recientes = texto.lines().dropWhile { "más recientes" !in it }.drop(1).take(3)
         assertEquals(listOf("2026-09-23", "2026-09-21", "2026-09-19"), recientes.map { it.trim().substringAfter(". ").take(10) }, texto)
         assertFalse("80000" in texto, "lo anulado no suma ni se nombra:\n$texto")
+    }
+
+    /**
+     * Revisión de la vuelta 142: sin rango mira desde el primer movimiento REAL (un saldo inicial de
+     * hace un año no cuenta), y el promedio arranca en el período del primer pago, no antes.
+     */
+    @Test
+    fun `sin rango mira desde el primer movimiento real y promedia desde el primer pago`() {
+        anotar("e-apertura", "Saldo inicial", com.jvillada.movi.shared.model.OPENING_CATEGORY, 1_000_000, "2025-01-15", tipo = TransactionType.INCOME)
+        anotar("e-almuerzo", "Almuerzo", "Comida", 25_000, "2026-05-10")
+        anotar("e-p1", "PAGO ELECTRONICO PEAJEPASS", "Transporte", 10_000, "2026-08-10")
+        anotar("e-p2", "PAGO ELECTRONICO PEAJEPASS", "Transporte", 20_000, "2026-09-10")
+
+        val texto = preguntar(TOTALES_POR_COMERCIO, "comercio" to "peajepass")
+
+        assertTrue("sin saldos iniciales ni ajustes, el 2026-05-10" in texto, texto)
+        assertFalse("2025-01-15" in texto, texto)
+        assertTrue("El primer pago que casa es del 2026-08-10" in texto, texto)
+        assertTrue("desde el del primer pago, «Agosto" in texto, texto)
     }
 
     @Test

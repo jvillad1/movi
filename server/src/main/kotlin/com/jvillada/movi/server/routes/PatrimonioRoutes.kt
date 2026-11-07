@@ -164,9 +164,10 @@ private val CATEGORIAS_DE_AJUSTE = listOf(ADJUSTMENT_CATEGORY, OPENING_CATEGORY)
 /**
  * **El primer movimiento real** de [uid] (vuelta 60): el más viejo, sin anulados, que no es una
  * apertura ni un ajuste de saldo. Es el arranque de «Tus períodos» (sus períodos vacíos del principio
- * son los de antes del primer movimiento de flujo), no el primer punto de la curva.
+ * son los de antes del primer movimiento de flujo), no el primer punto de la curva. Vuelta 142: también
+ * el arranque de `totales_por_comercio` sin rango.
  */
-private fun Transaction.primerMovimientoReal(uid: String, voidedIds: List<String>): Long? {
+internal fun Transaction.primerMovimientoReal(uid: String, voidedIds: List<String>): Long? {
     val primero = Events.timestamp.min()
     return Events.select(primero)
         .where {

@@ -9,11 +9,13 @@ import com.jvillada.movi.shared.model.PresentacionDelMovimiento
 import com.jvillada.movi.shared.model.claveDelComercio
 import com.jvillada.movi.shared.model.comoSePresenta
 import com.jvillada.movi.shared.model.esGastoDelPeriodo
+import com.jvillada.movi.shared.model.esTuParteDeOtro
 import com.jvillada.movi.shared.model.esperaEnPorConfirmar
 import com.jvillada.movi.shared.model.marcaDe
 import com.jvillada.movi.shared.model.marcaDelTexto
 import com.jvillada.movi.shared.model.montoContado
 import com.jvillada.movi.shared.model.normalizarParaBuscar
+import com.jvillada.movi.shared.model.palabrasDeMarca
 import com.jvillada.movi.shared.model.periodoDe
 import com.jvillada.movi.shared.model.periodoSiguiente
 
@@ -32,7 +34,9 @@ import com.jvillada.movi.shared.model.periodoSiguiente
  *   ([marcaDelTexto] de lo escrito contra [marcaDe] del movimiento: «rappi» casa con «RAPPI*LAS
  *   DOCE») o, si no, lo escrito contenido en el comercio o la descripción, sin tildes ni mayúsculas
  *   ([normalizarParaBuscar], la misma comparación de `buscar_movimientos`). Ninguna normalización
- *   nueva.
+ *   nueva. **Un nombre corto** (hasta [LARGO_DE_UN_NOMBRE_CORTO] letras) tiene que ser una palabra
+ *   entera ([palabrasDeMarca], las palabras del catálogo): «zt» no casa con «PIZZTERIA», ni «d1» con
+ *   «D1SOFT» (revisión de la vuelta 142).
  * - **Qué es «el mismo comercio»** es [claveDelComercio] (la marca primero, después
  *   `claveDeComercio`): si lo escrito casa con varios, cada uno sale con su total.
  * - **Qué suma** es la regla de «Gastos»: [esGastoDelPeriodo] (un gasto en pesos que cuenta como
@@ -50,6 +54,9 @@ internal const val TOPE_DE_COMERCIOS_QUE_CASAN = 8
 /** Lo escrito tiene que tener al menos esto para buscar por texto («D1» sí, «d» no). */
 internal const val LARGO_MINIMO_DEL_COMERCIO = 2
 
+/** Hasta este largo, lo escrito casa solo como palabra entera: dos o tres letras están dentro de cualquier cosa. */
+internal const val LARGO_DE_UN_NOMBRE_CORTO = 3
+
 internal data class PagoEnElComercio(val fecha: String, val nombre: String, val monto: Long, val cuenta: String)
 
 internal data class ComercioQueCasa(
@@ -64,7 +71,7 @@ internal data class GastoEnOtraMoneda(val moneda: String, val total: Long, val p
 
 internal data class LoGastadoEnUnComercio(
     val consulta: String,
-    /** En pesos, con la regla de «Gastos». */
+    /** En pesos, con la regla de «Gastos»: la suma de todos los [comercios]. */
     val total: Long,
     val pagos: Int,
     val primerPago: String?,
@@ -73,7 +80,10 @@ internal data class LoGastadoEnUnComercio(
     /** Los comercios distintos que casan (en pesos), del que más suma al que menos. */
     val comercios: List<ComercioQueCasa>,
     val enOtraMoneda: List<GastoEnOtraMoneda>,
-    /** Los períodos del usuario del rango, del primero al último: con los que se promedia. */
+    /**
+     * Los períodos con los que se promedia: desde el del **primer pago que casa** hasta el último del
+     * rango. Los de antes no cuentan: el comercio no existía para el dueño (revisión de la vuelta 142).
+     */
     val periodos: List<PeriodoFinanciero>,
     /** [total] ÷ cuántos [periodos]; `null` sin gasto. */
     val promedioPorPeriodo: Long?,
@@ -88,7 +98,12 @@ internal fun casaConElComercio(evento: FinancialEvent, consulta: String): Boolea
     if (marcaDeLoEscrito != null && marcaDe(evento)?.id == marcaDeLoEscrito.id) return true
     val aguja = normalizarParaBuscar(consulta)
     if (aguja.length < LARGO_MINIMO_DEL_COMERCIO) return false
-    return aguja in normalizarParaBuscar(evento.merchant.orEmpty()) || aguja in normalizarParaBuscar(evento.description)
+    val textos = listOf(evento.merchant.orEmpty(), evento.description)
+    if (aguja.length <= LARGO_DE_UN_NOMBRE_CORTO) {
+        val palabras = palabrasDeMarca(consulta).joinToString(" ").takeIf { it.isNotEmpty() } ?: return false
+        return textos.any { " $palabras " in " " + palabrasDeMarca(it).joinToString(" ") + " " }
+    }
+    return textos.any { aguja in normalizarParaBuscar(it) }
 }
 
 /** El orden de «los más recientes»: la fecha, y en el mismo instante el que se anotó después. */
@@ -98,7 +113,7 @@ private val DEL_MAS_NUEVO = compareByDescending<FinancialEvent> { it.timestamp }
 
 /**
  * **Lo gastado en lo que [consulta] nombra**, entre [desde] y [hastaExclusivo] (epoch-ms). [eventos]
- * ya vienen sin anulados. Los períodos del promedio son los de [settings] que tocan el rango.
+ * ya vienen sin anulados. Los períodos del promedio son los de [settings] desde el del primer pago.
  */
 internal fun loGastadoEnUnComercio(
     eventos: List<FinancialEvent>,
@@ -142,14 +157,16 @@ internal fun loGastadoEnUnComercio(
         }
         .sortedWith(compareByDescending<ComercioQueCasa> { it.total }.thenBy { it.nombre })
 
-    val periodos = periodosEntre(desde, hastaExclusivo, settings)
+    val periodos = ordenados.lastOrNull()?.let { periodosEntre(it.timestamp, hastaExclusivo, settings) }.orEmpty()
     return LoGastadoEnUnComercio(
         consulta = consulta,
         total = total,
         pagos = enPesos.size,
         primerPago = ordenados.lastOrNull()?.let(::fecha),
         recientes = ordenados.take(RECIENTES_DE_UN_COMERCIO).map {
-            PagoEnElComercio(fecha(it), it.description, montoContado(it), nombreDeCuenta[it.accountId] ?: "otra cuenta")
+            // Tu parte de lo que pagó otro no salió de ninguna cuenta tuya: se dice así, como en los totales.
+            val cuenta = if (esTuParteDeOtro(it)) TU_PARTE_DE_UN_GASTO_COMPARTIDO else nombreDeCuenta[it.accountId] ?: "otra cuenta"
+            PagoEnElComercio(fecha(it), it.description, montoContado(it), cuenta)
         },
         comercios = comercios,
         enOtraMoneda = otraMoneda.groupBy { it.currency }.toSortedMap().map { (moneda, deEsa) ->

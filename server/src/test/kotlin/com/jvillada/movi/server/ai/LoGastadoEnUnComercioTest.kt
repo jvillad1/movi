@@ -10,6 +10,7 @@ import com.jvillada.movi.shared.model.TransactionType
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -115,10 +116,20 @@ class LoGastadoEnUnComercioTest {
         assertTrue(r.comercios.size >= 2, r.comercios.toString())
         assertEquals(r.total, r.comercios.sumOf { it.total })
         assertEquals(r.comercios.sortedByDescending { it.total }, r.comercios)
+
+        // Revisión de la vuelta 142: con varios, el total general no va primero como «la cifra», sino
+        // como la suma explícita de los de la lista; y esa suma la acepta el verificador.
+        val texto = textoDeLoGastadoEnUnComercio(r, "(mira del 2026-01-01 al 2026-11-06)", mensual)
+        assertFalse("TOTAL EN PESOS" in texto, texto)
+        assertTrue("CASA CON ${r.comercios.size} COMERCIOS DISTINTOS" in texto, texto)
+        val suma = r.comercios.joinToString(" + ") { it.total.toString() } + " = ${r.total} en 43 pagos"
+        assertTrue(suma in texto, texto)
+        assertTrue(texto.indexOf("- ${cxc.nombre}: ${cxc.total}") < texto.indexOf(suma), "cada uno antes que la suma:\n$texto")
+        assertEquals(emptyList(), cifrasSinRespaldo("Si son el mismo, llevas \$${miles(r.total)}.", listOf(texto)))
     }
 
     @Test
-    fun `una marca del catalogo casa por la marca, y lo que solo contiene el texto va aparte`() {
+    fun `una marca del catalogo casa por la marca, y un nombre corto no casa dentro de otra palabra`() {
         val eventos = listOf(
             gasto("d1a", "TIENDAS D1 CALLE 80", 45_000, "2026-10-01", categoria = "Mercado"),
             gasto("d1b", "Tiendas D1 Suba", 38_000, "2026-10-08", categoria = "Mercado"),
@@ -126,18 +137,45 @@ class LoGastadoEnUnComercioTest {
         )
         val r = sumar(eventos, "D1")
 
-        assertEquals(103_000, r.total)
-        assertEquals(listOf("D1" to 83_000L, "PAGO D1SOFT LICENCIA" to 20_000L), r.comercios.map { it.nombre to it.total })
+        assertEquals(83_000, r.total)
+        assertEquals(listOf("D1" to 83_000L), r.comercios.map { it.nombre to it.total })
+    }
+
+    /** Revisión de la vuelta 142: dos o tres letras sin marca del catálogo casan solo como palabra entera. */
+    @Test
+    fun `un nombre corto sin marca casa solo como palabra entera`() {
+        val eventos = listOf(
+            gasto("zt1", "ZT PARKING", 6_000, "2026-10-01"),
+            gasto("zt2", "Zt parking norte", 7_000, "2026-10-02"),
+            gasto("pizza", "PIZZTERIA LA 80", 40_000, "2026-10-03", categoria = "Comida"),
+            gasto("sufijo", "PAGO XZT", 9_000, "2026-10-04"),
+        )
+        val r = sumar(eventos, "ZT")
+
+        assertEquals(13_000, r.total)
+        assertEquals(2, r.pagos)
+        assertTrue(casaConElComercio(gasto("x", "Peaje FLYPASS", 1, "2026-10-01"), "flyp"), "con 4 letras o más sigue siendo por pedazo")
+    }
+
+    /** Revisión de la vuelta 142: tu parte de lo que pagó otro no salió de «otra cuenta». */
+    @Test
+    fun `tu parte de un gasto que pago otro se nombra como tal`() {
+        val tuParte = gasto("espacio:g1", "PAGO ELECTRONICO FLYPASS", 4_000, "2026-11-01", cuenta = "")
+        val r = sumar(loDelPeaje() + tuParte, "flypass")
+
+        assertEquals(TU_PARTE_DE_UN_GASTO_COMPARTIDO, r.recientes.first().cuenta)
     }
 
     @Test
-    fun `el rango manda y el promedio es por periodo, contando los que no tuvieron pagos`() {
+    fun `el rango manda y el promedio arranca en el periodo del primer pago`() {
         val eventos = listOf(
             gasto("a", "PAGO ELECTRONICO FLYPASS", 10_000, "2026-07-10"),
             gasto("b", "PAGO ELECTRONICO FLYPASS", 20_000, "2026-09-10"),
-            gasto("fuera", "PAGO ELECTRONICO FLYPASS", 99_000, "2026-06-30"),
+            gasto("fuera", "PAGO ELECTRONICO FLYPASS", 99_000, "2026-05-31"),
         )
-        val r = sumar(eventos, "flypass", desde = "2026-07-01", hasta = "2026-09-30")
+        // El rango mira desde junio, pero en junio no hubo pagos: cuentan julio, agosto (sin pagos) y
+        // septiembre. Junio no diluye el promedio (revisión de la vuelta 142).
+        val r = sumar(eventos, "flypass", desde = "2026-06-01", hasta = "2026-09-30")
 
         assertEquals(30_000, r.total)
         assertEquals(3, r.periodos.size)
@@ -153,13 +191,13 @@ class LoGastadoEnUnComercioTest {
     }
 
     @Test
-    fun `el texto dice el total arriba como la cifra de la respuesta, y lo acepta el verificador`() {
-        val pagos = loDelPeaje()
+    fun `con un solo comercio el texto dice el total arriba como la cifra, y lo acepta el verificador`() {
+        val pagos = loDelPeaje().filterNot { "CXC" in it.description }
         val r = sumar(pagos, "flypass")
         val texto = textoDeLoGastadoEnUnComercio(r, "del 2026-01-01 al 2026-11-06", mensual)
 
-        assertTrue("TOTAL EN PESOS: ${pagos.sumOf { it.amount }} en 43 pagos" in texto, texto)
-        val respuesta = "Llevas \$${miles(r.total)} en Flypass en 43 pagos, unos \$${miles(r.promedioPorPeriodo!!)} por período."
+        assertTrue("TOTAL EN PESOS: ${pagos.sumOf { it.amount }} en 42 pagos" in texto, texto)
+        val respuesta = "Llevas \$${miles(r.total)} en Flypass en 42 pagos, unos \$${miles(r.promedioPorPeriodo!!)} por período."
         assertEquals(emptyList(), cifrasSinRespaldo(respuesta, listOf(texto)), texto)
     }
 
